@@ -1461,12 +1461,15 @@
   font-family: var(--font-mono);
 }
 
-/* The highlighted palette row is marked by the chevron only: no outline or
-   wash, exactly like the composer menu. */
+/* The highlighted row, in the slash palette and on every composer menu page
+   (data-cursor), is marked by one lighter wash mixed from the menu's own
+   colours, the same as the other skins (chat-skin-palette.css). --accent is
+   not used: brand accents repoint it to a saturated colour. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-trigger-popover [data-highlighted],
-:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted] {
-  background: transparent;
-  background-color: transparent;
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .aui-composer-trigger-popover [data-highlighted],
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) .dc-composer-menu [data-cursor="true"],
+:is(html:has(.aui-theme-stage), html:has([data-thread-skin="digichat"])) .dc-composer-menu [data-cursor="true"] {
+  background: color-mix(in oklab, var(--ink) 9%, var(--bg));
   color: var(--ink);
   outline: none;
 }
@@ -1486,32 +1489,6 @@
 
 .aui-menu-mark-cell.is-on {
   background: currentColor;
-}
-
-/* Hover / arrow-key row: one chevron, rendered only on that row so its
-   label shifts right to make room for it. */
-.aui-menu-cursor {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Slash / mention palette: the chevron exists on every row but only the
-   highlighted one shows it, so that row shifts right like the menu. */
-.aui-composer-trigger-popover .aui-menu-cursor {
-  display: none;
-}
-
-.aui-composer-trigger-popover [data-highlighted] .aui-menu-cursor {
-  display: inline-flex;
-}
-
-/* The settings menu reuses the popover class for placement, so the palette's
-   "only the highlighted row" rule would hide its own cursor row. The menu
-   marks the cursor with data-cursor on every page. */
-.dc-composer-menu [data-cursor="true"] .aui-menu-cursor {
-  display: inline-flex;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-embed-settings],

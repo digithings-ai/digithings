@@ -167,9 +167,22 @@ export function embedThemePick(
 export function embedThemePrefs(opts: {
   theme: EmbedUserTheme;
   onThemePick: (next: EmbedUserTheme | null) => void;
+  /**
+   * Palette hover: paint a pick without storing it. `{ pick: null }`
+   * previews dropping the pick; `null` ends the preview.
+   */
+  onThemePreview?: (next: { pick: EmbedUserTheme | null } | null) => void;
   openTheme: () => void;
-}): Pick<EmbedChatPrefsApi, "openTheme" | "themeState" | "setTheme"> {
+}): Pick<EmbedChatPrefsApi, "openTheme" | "themeState" | "setTheme" | "previewTheme"> {
+  const onThemePreview = opts.onThemePreview;
   return {
+    ...(onThemePreview
+      ? {
+          previewTheme: (next) => {
+            onThemePreview(next ? { pick: embedThemePick(next.preference, next.palette) } : null);
+          },
+        }
+      : {}),
     openTheme: opts.openTheme,
     themeState: {
       preference: opts.theme.mode,

@@ -14,6 +14,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
+  Download,
   EllipsisVertical,
   ImageIcon,
   Lightbulb,
@@ -31,6 +32,7 @@ import {
 import { type FC, useState } from "react";
 import { useAttachmentSrc } from "../stock/use-attachment-src";
 import { MarkdownText } from "../stock/markdown-text";
+import { MessageExportMenu } from "../stock/message-export-menu";
 import { SkinCredit, useComposerCopy } from "../stock";
 import {
   DropdownMenu,
@@ -47,7 +49,7 @@ export const Gemini: FC = () => {
     "Ask Gemini",
   );
   return (
-    <ThreadPrimitive.Root className="flex h-full flex-col overflow-hidden bg-[#fdfcfc] text-[#1f1f1f] dark:bg-[#0c0c0c] dark:text-[#e3e3e3]">
+    <ThreadPrimitive.Root data-export-thread="" className="flex h-full flex-col overflow-hidden bg-[#fdfcfc] text-[#1f1f1f] dark:bg-[#0c0c0c] dark:text-[#e3e3e3]">
         <AuiIf condition={(s) => s.thread.messages.length === 0}>
           <div className="relative flex grow flex-col">
             <div className="flex grow flex-col items-center justify-center px-4">
@@ -95,7 +97,7 @@ const Composer: FC = () => {
     "Ask Gemini",
   );
   return (
-    <ComposerPrimitive.Root className="mx-auto flex w-full max-w-2xl flex-col rounded-4xl bg-white p-3 dark:bg-[#1e1f20]">
+    <ComposerPrimitive.Root data-export-chrome="" className="mx-auto flex w-full max-w-2xl flex-col rounded-4xl bg-white p-3 dark:bg-[#1e1f20]">
       <AuiIf condition={(s) => s.composer.attachments.length > 0}>
         <div className="flex flex-row gap-2.5 overflow-x-auto px-1 pt-1 pb-2.5">
           <ComposerPrimitive.Attachments
@@ -234,11 +236,12 @@ const actionBtnClass =
   "flex size-8 items-center justify-center rounded-full text-[#444746] transition-colors hover:bg-[#444746]/8 hover:text-[#1f1f1f] dark:text-[#c4c7c5] dark:hover:bg-[#c4c7c5]/10 dark:hover:text-[#e3e3e3]";
 
 const ChatMessage: FC = () => {
+  const role = useAuiState((s) => s.message.role);
   return (
-    <MessagePrimitive.Root className="group/message mx-auto mb-7 flex w-full max-w-3xl flex-col px-4">
+    <MessagePrimitive.Root data-role={role} className="group/message mx-auto mb-7 flex w-full max-w-3xl flex-col px-4">
       <AuiIf condition={(s) => s.message.role === "user"}>
         <div className="flex items-center justify-end gap-1">
-          <ActionBarPrimitive.Root className="flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
+          <ActionBarPrimitive.Root data-export-chrome="" className="flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
             <ActionBarPrimitive.Copy className={actionBtnClass}>
               <CopyIcon width={16} height={16} />
             </ActionBarPrimitive.Copy>
@@ -257,7 +260,7 @@ const ChatMessage: FC = () => {
           <div className="wrap-break-word text-[#1f1f1f] dark:text-[#e3e3e3]">
             <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
           </div>
-          <ActionBarPrimitive.Root className="mt-1.5 -ml-2 flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
+          <ActionBarPrimitive.Root data-export-chrome="" className="mt-1.5 -ml-2 flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
             <ActionBarPrimitive.FeedbackPositive className={actionBtnClass}>
               <ThumbsUp width={16} height={16} />
             </ActionBarPrimitive.FeedbackPositive>
@@ -275,9 +278,17 @@ const ChatMessage: FC = () => {
             <ActionBarPrimitive.Reload className={actionBtnClass}>
               <RefreshCwIcon width={16} height={16} />
             </ActionBarPrimitive.Reload>
-            <button type="button" aria-label="More" className={actionBtnClass}>
-              <EllipsisVertical width={16} height={16} />
-            </button>
+            <MessageExportMenu
+              trigger={
+                <button type="button" aria-label="More" className={actionBtnClass}>
+                  <EllipsisVertical width={16} height={16} />
+                </button>
+              }
+              icon={<Download className="size-4" />}
+              align="start"
+              contentClassName="bg-popover text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out z-50 min-w-40 overflow-hidden rounded-xl border p-1.5 shadow-md"
+              itemClassName="text-muted-foreground focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none select-none"
+            />
           </ActionBarPrimitive.Root>
         </div>
       </AuiIf>

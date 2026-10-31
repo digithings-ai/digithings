@@ -8,6 +8,7 @@ import {
   LAYOUT_SKINS,
   parseThreadSkin,
   skinOwnsPageChrome,
+  skinShowsSiteRails,
   THREAD_SKINS,
   threadSkinChoices,
 } from "./thread-skins";
@@ -79,5 +80,16 @@ describe("thread skins", () => {
     expect(defaultThreadSkinForTenant({ host: "datatapstream.com" })).toBe("base");
     expect(defaultThreadSkinForTenant({ slug: "datatapstream" })).toBe("base");
     expect(defaultThreadSkinForTenant({})).toBe("base");
+  });
+});
+
+describe("skinShowsSiteRails", () => {
+  it("draws the site guide lines only on the house skin", () => {
+    expect(skinShowsSiteRails("digichat")).toBe(true);
+    for (const skin of THREAD_SKINS.filter((s) => s !== "digichat")) {
+      expect(skinShowsSiteRails(skin)).toBe(false);
+    }
+    expect(skinShowsSiteRails(undefined)).toBe(false);
+    expect(skinShowsSiteRails("not-a-skin")).toBe(false);
   });
 });

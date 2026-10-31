@@ -65,7 +65,7 @@ function tryParseOrigin(raw: string): string {
  * Target origin for `{ type: "digichat:ready" }` postMessage.
  *
  * Must be the **actual parent page** origin (`ancestorOrigins[0]` / `document.referrer`),
- * not the virtual embed `?host=` tenant key. Virtual hosts such as `occ.digithings.ai`
+ * not the virtual embed `?host=` tenant key. Virtual hosts such as a tenant's embed host
  * identify the corpus/tenant registry entry but are not browsing contexts — posting
  * ready there is dropped by the browser while digithings.ai never hears the handshake.
  */

@@ -1,5 +1,9 @@
 "use client";
 
+// The boot styles (.dboot-overlay included) ship with the loader, not with one
+// skin: a host on any skin mounts this overlay, and without them it renders
+// unpositioned at the top of the page with the wordmark clipped.
+import "../../styles/digichat-boot-loader.css";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { DIGICHAT } from "@digithings/hero-banner/definitions";
 import { HeroBanner } from "@digithings/hero-banner/web";

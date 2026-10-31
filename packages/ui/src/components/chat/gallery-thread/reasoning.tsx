@@ -19,6 +19,7 @@ import {
 } from "../../../ui/collapsible";
 import { cn } from "./cn";
 import { useExportKeepMounted } from "../../../replay/export-mount";
+import { useTraceT } from "../trace-i18n";
 
 export const ANIMATION_DURATION = 200;
 
@@ -172,6 +173,7 @@ function ReasoningTrigger({
   active?: boolean;
   duration?: number;
 }) {
+  const reasoningLabel = useTraceT().t("reasoning");
   const durationText = duration ? ` (${duration}s)` : "";
 
   return (
@@ -200,7 +202,7 @@ function ReasoningTrigger({
           active && "shimmer motion-reduce:animate-none",
         )}
       >
-        Reasoning{durationText}
+        {reasoningLabel}{durationText}
       </span>
       <DisclosureChevron />
     </CollapsibleTrigger>

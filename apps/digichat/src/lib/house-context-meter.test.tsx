@@ -25,6 +25,8 @@ const thread = vi.hoisted(() => ({ messages: [] as unknown[] }));
 vi.mock("@assistant-ui/react", () => ({
   useAuiState: (selector: (state: unknown) => unknown) =>
     selector({ thread: { messages: thread.messages } }),
+  // The stock thread's trace builds its chain grouping at import time.
+  groupPartByType: () => () => [],
 }));
 
 afterEach(() => {

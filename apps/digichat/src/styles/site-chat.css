@@ -76,6 +76,25 @@
   color: var(--ink);
 }
 
+/* Stock skins sit in an embed wrapper that carries shadcn's .dark class and
+   paints bg-background, which .dark redeclares as zinc (0.141). With a named
+   palette the base skin's chat area therefore showed near-black instead of
+   the palette canvas (lucent-orng dark: #2a1a15). Point the wrapper's
+   --background at the palette's --bg for the base and chatgpt skins. No
+   palette: unchanged. */
+:root[data-palette][data-theme="dark"] .dc-embed-shell .dark:has(> [data-stock-product][data-thread-skin="base"]),
+:root[data-palette][data-theme="dark"] .dc-embed-shell .dark:has(> [data-stock-product][data-thread-skin="chatgpt"]) {
+  --background: var(--bg);
+}
+
+/* The chatgpt skin paints its own dark canvas (thread root and composer
+   footer, #000 by default) through --chat-skin-canvas. With a named palette
+   in dark it takes the palette canvas instead, as the base skin does above.
+   No palette, light, or any other skin: unchanged. */
+:root[data-palette][data-theme="dark"] .dc-embed-shell [data-stock-product][data-thread-skin="chatgpt"] {
+  --chat-skin-canvas: var(--bg);
+}
+
 /* Thread-local hexes lose to the site tokens. App mode stays transparent so
    the body canvas (and the rails) show through; a top-level embed paints --bg. */
 :root[data-theme]:is([data-site-theme="1"], :has([data-chrome-mode="app"])) .digichat-thread {

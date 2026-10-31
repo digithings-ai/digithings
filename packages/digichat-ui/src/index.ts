@@ -81,6 +81,7 @@ export {
   type SearchEngineCode,
   type ViewCode,
   type ThinkingCode,
+  EXPORT_CHOICES,
 } from "./slash-commands";
 export type {
   DigiChatActivity,

@@ -478,7 +478,7 @@ export async function siteNotFound(
 export const INVITE_ONLY_EMBED_HOSTS: ReadonlySet<string> = new Set(["occ.digithings.ai"]);
 
 /** Same normalisation as digichat `normalizeEmbedHost`. */
-function embedHostOf(raw: string | null): string | null {
+export function embedHostOf(raw: string | null): string | null {
   const v = (raw ?? "").trim().toLowerCase();
   if (!v) return null;
   if (v.includes("://")) {
@@ -501,7 +501,7 @@ function embedHostOf(raw: string | null): string | null {
  * answers the embed shell when it asks for it with ?mode=embed
  * (/chat/?mode=embed).
  */
-function isEmbedSurfacePath(url: URL): boolean {
+export function isEmbedSurfacePath(url: URL): boolean {
   const path = url.pathname;
   if (path === "/embed" || path.startsWith("/embed/")) return true;
   const embed = `${CONTAINER_BASE_PATH}/embed`;

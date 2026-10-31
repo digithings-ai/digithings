@@ -3,6 +3,7 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
+import { useStockShape } from "../stock-shape"
 
 const buttonVariants = cva(
   "group/button inline-flex shrink-0 items-center justify-center rounded-none border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-colors outline-none select-none focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-danger aria-invalid:ring-3 aria-invalid:ring-danger/20 dark:aria-invalid:border-danger/50 dark:aria-invalid:ring-danger/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -41,16 +42,37 @@ const buttonVariants = cva(
   }
 )
 
+// assistant-ui's shadcn base-nova radii, applied only inside the stock Thread
+// (see ../stock-shape.tsx). Other skins that reuse this button keep the square
+// house radius from buttonVariants above.
+const STOCK_BUTTON_RADIUS = {
+  default: "rounded-lg",
+  xs: "rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg",
+  sm: "rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
+  lg: "rounded-lg",
+  icon: "rounded-lg",
+  "icon-xs":
+    "rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg",
+  "icon-sm":
+    "rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
+  "icon-lg": "rounded-lg",
+} as const
+
 function Button({
   className,
   variant = "default",
   size = "default",
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+  const stock = useStockShape()
   return (
     <ButtonPrimitive
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(
+        buttonVariants({ variant, size }),
+        stock && STOCK_BUTTON_RADIUS[size ?? "default"],
+        className
+      )}
       {...props}
     />
   )

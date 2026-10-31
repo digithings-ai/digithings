@@ -54,3 +54,36 @@ export function useDisclosureUi(kind: "reasoning" | "toolCalls") {
     locked: false,
   };
 }
+
+/**
+ * How the /view level folds the chain in skins that render it with plain
+ * collapsibles (base, chatgpt). Collapsibles only read `defaultOpen` on mount,
+ * so `key` changes with the level and a /view switch remounts them in the new
+ * state. quiet: tool calls fold into the group's one summary line and thinking
+ * stays folded even while it streams. balanced: today's layout (folded group
+ * and cards; thinking opens while it streams). verbose: everything open.
+ */
+export type ViewDisclosure = {
+  key: string;
+  toolGroupOpen: boolean;
+  toolCardOpen: boolean;
+  reasoningOpen: (running: boolean) => boolean;
+};
+
+export function viewDisclosure(
+  ui: Pick<DeployUiValue, "view" | "toolCalls" | "reasoning">,
+): ViewDisclosure {
+  const { view, toolCalls, reasoning } = ui;
+  const verbose = toolCalls === "expanded";
+  return {
+    key: `${view}:${toolCalls}:${reasoning}`,
+    toolGroupOpen: verbose,
+    toolCardOpen: verbose,
+    reasoningOpen: (running) =>
+      reasoning === "expanded" || (running && view !== "quiet" && reasoning !== "collapsed"),
+  };
+}
+
+export function useViewDisclosure(): ViewDisclosure {
+  return viewDisclosure(useDeployUi());
+}

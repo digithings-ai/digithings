@@ -6,7 +6,7 @@
  * balanced, thinking auto. Not localStorage.
  */
 
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   matchesMobileDensityViewport,
   readStoredDensity,
@@ -204,8 +204,28 @@ export type CatalogToolRow = {
   tools?: Array<{ id: string; label?: string; group?: string }>;
 };
 
+/** A look-only overlay on the prefs while the palette hovers a visual row. */
+export type EmbedChatPrefsPreview = Partial<Pick<EmbedChatPrefs, "view" | "density" | "scrollbars">>;
+
 export type EmbedChatPrefsApi = {
+  /** What renders: the committed prefs with any live preview on top. */
   prefs: EmbedChatPrefs;
+  /**
+   * The prefs as chosen, without a preview. Menus read this for the checked
+   * row and for toggles. The provider fills it; absent means `prefs`.
+   */
+  committedPrefs?: EmbedChatPrefs;
+  /**
+   * Show a visual setting before it is chosen (palette hover / arrow keys).
+   * Never persisted; `null` drops the preview. The provider fills it.
+   */
+  previewPrefs?: (patch: EmbedChatPrefsPreview | null) => void;
+  /**
+   * Paint a theme before it is chosen, without storing it. `null` drops the
+   * preview. Hosts that own the theme (`setTheme`) provide it; the document
+   * theme previews through `applyDocumentTheme(..., { persist: false })`.
+   */
+  previewTheme?: (next: { preference: ThemePreference; palette: PaletteName } | null) => void;
   setWebSearch: (value: boolean) => void;
   setDigisearch: (value: boolean) => void;
   setVault: (value: boolean) => void;
@@ -214,6 +234,21 @@ export type EmbedChatPrefsApi = {
   setMcpConfig: (config: SkinMcpServerConfig, previousId?: string) => void;
   removeMcpConfig: (id: string) => void;
   setLanguage: (code: string) => void;
+  /**
+   * The tenant's chat languages, for the composer language chip and the
+   * `/language` page. Absent (or fewer than two) means no chip and every
+   * supported language on `/language`; set, `/language` offers only these.
+   */
+  languageOptions?: { code: string; short: string; label: string }[];
+  /**
+   * The only languages `setLanguage` accepts (a tenant's `locales.languages`,
+   * one or more). `setLanguage` ignores any other code; the menus and the
+   * session tool read this to offer or refuse. Absent means any supported
+   * language.
+   */
+  allowedLanguages?: readonly string[];
+  /** Footer credit in the session language: `${lead} digithings ${tail}`. */
+  credit?: { lead: string; tail: string };
   setView: (mode: ViewMode) => void;
   setThinking: (value: ThinkingMode) => void;
   setModel: (id: string) => void;
@@ -280,6 +315,12 @@ export type EmbedChatPrefsApi = {
    * app leaves this unset.
    */
   themeLocked?: boolean;
+  /**
+   * Model ids this chat offers (the picker's list). The model's
+   * session_set_model is checked against it, so a pick the server would
+   * refuse is reported back instead of breaking the next turn.
+   */
+  availableModels?: readonly string[];
   /** Open the mode + palette picker. No-op when the host does not provide it. */
   openTheme?: () => void;
   /**
@@ -316,6 +357,14 @@ export type EmbedChatPrefsApi = {
    */
   composerDraftBound?: boolean;
   bindComposerDraft?: (setText: (text: string) => void) => void;
+  /**
+   * Download the whole conversation (`/export`, the settings menu). The
+   * skin binds it from inside the runtime, so a host without a skin bound
+   * leaves `threadExportBound` false.
+   */
+  exportThread?: (format: "md" | "html") => void;
+  threadExportBound?: boolean;
+  bindThreadExport?: (run: (format: "md" | "html") => void) => void;
   /** One palette frame. `keep` leaves a button-opened menu alone. */
   syncPalette?: (next: {
     kind: "closed" | "commands" | "pane";
@@ -333,9 +382,38 @@ export function EmbedChatPrefsProvider({
   value: EmbedChatPrefsApi;
   children: ReactNode;
 }) {
+  // One preview overlay for every consumer below (thread, skin, toolbar), so
+  // a hovered view / density / scrollbar row renders in every host without
+  // touching the host's committed state or storage.
+  const [preview, setPreview] = useState<EmbedChatPrefsPreview | null>(null);
+  const merged = useMemo((): EmbedChatPrefsApi => {
+    // A nested provider keeps the outer overlay.
+    if (value.previewPrefs) return value;
+    const committedPrefs = value.prefs;
+    return {
+      ...value,
+      prefs: preview ? { ...committedPrefs, ...preview } : committedPrefs,
+      committedPrefs,
+      previewPrefs: setPreview,
+    };
+  }, [value, preview]);
   return (
-    <EmbedChatPrefsContext.Provider value={value}>{children}</EmbedChatPrefsContext.Provider>
+    <EmbedChatPrefsContext.Provider value={merged}>{children}</EmbedChatPrefsContext.Provider>
   );
+}
+
+/** The prefs as chosen, ignoring a live preview. */
+export function committedChatPrefs(api: Pick<EmbedChatPrefsApi, "prefs" | "committedPrefs">): EmbedChatPrefs {
+  return api.committedPrefs ?? api.prefs;
+}
+
+/**
+ * The look a main-palette row would give, for rows that flip a purely visual
+ * setting in place (`/scrollbar`). Null for everything else.
+ */
+export function slashRowPreview(id: string, prefs: EmbedChatPrefs): EmbedChatPrefsPreview | null {
+  if (id === "scrollbar") return { scrollbars: prefs.scrollbars === "always" ? "auto" : "always" };
+  return null;
 }
 
 export function useEmbedChatPrefsOptional(): EmbedChatPrefsApi | null {

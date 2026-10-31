@@ -18,6 +18,8 @@ type WorkStatusPart = {
   readonly status?: { readonly type?: string | undefined } | undefined;
 };
 
+import { EN_TRACE_T, type TraceT } from "../trace-i18n/core";
+
 export type { WorkStatusPart };
 
 export type WorkStatus = {
@@ -40,6 +42,7 @@ export type WorkStatus = {
 export function workStatusText(
   parts: readonly WorkStatusPart[],
   indices: readonly number[],
+  tr: TraceT = EN_TRACE_T,
 ): WorkStatus {
   const chain = indices
     .map((index) => parts[index])
@@ -52,12 +55,12 @@ export function workStatusText(
   );
 
   const label = running
-    ? `Working — ${running.toolName ?? "tool"}`
+    ? tr.t("workingOn", { tool: running.toolName ?? tr.t("toolFallbackName") })
     : thinking
-      ? "Thinking"
+      ? tr.t("thinking")
       : tools.length > 0
-        ? `Used ${tools.length} tool${tools.length === 1 ? "" : "s"}`
-        : "Thought";
+        ? tr.plural("usedTools", tools.length)
+        : tr.t("thought");
 
   return { label, running: running !== undefined || thinking };
 }

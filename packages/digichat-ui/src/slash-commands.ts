@@ -152,6 +152,12 @@ export const SLASH_CATEGORIES: readonly { id: SlashCategory; label: string }[] =
   { id: "setup", label: "Setup" },
 ];
 
+/** `/export` formats. Values are the typed argument. */
+export const EXPORT_CHOICES: readonly { value: string; label: string }[] = [
+  { value: "md", label: "Markdown (.md)" },
+  { value: "html", label: "HTML (.html)" },
+];
+
 export const SLASH_COMMANDS: readonly SlashDef[] = [
   {
     id: "mcp",
@@ -353,9 +359,11 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     id: "export",
     names: ["/export"],
     needsArg: false,
-    hint: "Download this chat as a file.",
+    hint: "Download this conversation as a file.",
     kind: "client",
     category: "actions",
+    // A pane: `/export ` lists the formats, `/export md|html` runs one.
+    choiceOptions: EXPORT_CHOICES,
   },
   {
     id: "help",
@@ -617,21 +625,40 @@ export type SubmenuOption = {
 /**
  * Filter a pane. An exact option token keeps the full list and highlights
  * that row, so the next arrow still moves. A partial query uses startsWith
- * on the token, id, label, and aliases.
+ * on the token, id, label, and aliases. With `contains` (model lists), a
+ * case-insensitive substring match is enough, ranked: a name (label or
+ * alias) that starts with the query, then any key that starts with it, then
+ * a match inside a key; ties keep list order.
  */
 export function submenuRows<T extends SubmenuOption>(
   rows: readonly T[],
   filter: string,
+  opts: { contains?: boolean } = {},
 ): { rows: readonly T[]; cursor: number } {
   const q = filter.trim().toLowerCase();
   if (!q) return { rows, cursor: -1 };
   const exact = rows.findIndex((row) => optionKeys(row).includes(q));
   if (exact >= 0) return { rows, cursor: exact };
-  const matched = rows.filter((row) =>
-    [row.token, row.id, row.label ?? "", ...(row.aliases ?? [])].some((value) =>
-      value.trim().toLowerCase().startsWith(q),
-    ),
-  );
+  const keys = (row: T) =>
+    [row.token, row.id, row.label ?? "", ...(row.aliases ?? [])].map((value) =>
+      value.trim().toLowerCase(),
+    );
+  if (!opts.contains) {
+    const matched = rows.filter((row) => keys(row).some((value) => value.startsWith(q)));
+    return { rows: matched, cursor: matched.length ? 0 : -1 };
+  }
+  const rank = (row: T): number => {
+    const names = [row.label ?? "", ...(row.aliases ?? [])].map((value) => value.trim().toLowerCase());
+    if (names.some((value) => value.startsWith(q))) return 0;
+    const all = keys(row);
+    if (all.some((value) => value.startsWith(q))) return 1;
+    return all.some((value) => value.includes(q)) ? 2 : -1;
+  };
+  const matched = rows
+    .map((row, index) => ({ row, index, rank: rank(row) }))
+    .filter((entry) => entry.rank >= 0)
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((entry) => entry.row);
   return { rows: matched, cursor: matched.length ? 0 : -1 };
 }
 

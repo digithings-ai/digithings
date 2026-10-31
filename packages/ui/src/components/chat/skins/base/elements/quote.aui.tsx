@@ -107,7 +107,7 @@ function SelectionToolbarQuote({
     <SelectionToolbarPrimitive.Quote
       data-slot="selection-toolbar-quote"
       className={cn(
-        "text-popover-foreground hover:bg-accent flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition-colors",
+        "text-popover-foreground hover:bg-muted flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition-colors",
         className,
       )}
       {...props}
@@ -211,7 +211,7 @@ function ComposerQuotePreviewDismiss({
   ...props
 }: ComponentProps<typeof ComposerPrimitive.QuoteDismiss>) {
   const defaultClassName =
-    "shrink-0 rounded-sm p-0.5 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground";
+    "shrink-0 rounded-sm p-0.5 text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground";
 
   return (
     <ComposerPrimitive.QuoteDismiss

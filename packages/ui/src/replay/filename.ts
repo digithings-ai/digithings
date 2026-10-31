@@ -5,6 +5,16 @@ import { redactString } from "./redact";
  * from different machines sort together. The question is the latest one asked.
  */
 export function snapshotFilename(deployment: string, exportedAt: string, question: string): string {
+  return exportFilename(deployment, exportedAt, question, "html");
+}
+
+/** Same name as the HTML snapshot, with the given extension (`md`, `html`). */
+export function exportFilename(
+  deployment: string,
+  exportedAt: string,
+  question: string,
+  ext: "md" | "html",
+): string {
   const slug = slugPart(deployment) || "digichat";
   const when = new Date(exportedAt);
   const iso = Number.isNaN(when.getTime()) ? new Date() : when;
@@ -12,7 +22,7 @@ export function snapshotFilename(deployment: string, exportedAt: string, questio
   const day = stamp.slice(0, 10);
   const hm = `${stamp.slice(11, 13)}${stamp.slice(14, 16)}`;
   const q = questionSlug(question) || "thread";
-  return `${slug}-${day}-${hm}-${q}.html`;
+  return `${slug}-${day}-${hm}-${q}.${ext}`;
 }
 
 /**
