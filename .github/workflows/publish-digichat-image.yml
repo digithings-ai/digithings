@@ -6,7 +6,7 @@
 # `azure/login`, no `az`, no `environment:` and deliberately no
 # `id-token: write` below, so this workflow holds no credential that could reach
 # a customer Container App. The DataTap ACA promotion is a human step run from
-# docs/ops/digichat-datatap-aca.md. That is the whole point of lane A — the
+# the per-client deployment runbook in the private client repo. That is the whole point of lane A — the
 # artifact is reproducible in CI, the production write stays with a person who
 # owns the Azure subscription. Adding `azure/login` here would be a different
 # lane (and a different security decision, DIG-1349) and must not be an
@@ -522,11 +522,11 @@ jobs:
             echo "| boot probe | \`/healthz\` 200 ok=true, \`/api/health\` version $VERSION |"
             echo ""
             if [ "$MODE" = "release" ]; then
-              echo "Promote it with the steps in docs/ops/digichat-datatap-aca.md."
+              echo "Promote it with the steps in the per-client deployment runbook (private client repo digithings-ai/<client-slug>)."
             else
               echo "This is a rehearsal image, not a release. It carries no \`vX.Y.Z\` name and"
               echo "does not move \`:latest\`. Promote it only as the Step 1 rehearsal, and read"
-              echo "\`docs/ops/digichat-datatap-aca.md\` §4 before any prod write."
+              echo "the secrets section of the per-client deployment runbook (private client repo) before any prod write."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
           # The checker's contract is a release tag; a `sha-` name is not one and

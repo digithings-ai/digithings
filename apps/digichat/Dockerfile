@@ -70,7 +70,7 @@ ENV DIGICHAT_VERSION=$DIGICHAT_VERSION
 # The publish lane passes DIGICHAT_REVISION=<full sha> and DIGICHAT_SOURCE_URL;
 # a local `docker build` that omits them still builds (labels come out empty),
 # which is why the binding check treats a missing revision as a failure for
-# released images rather than for any image. See docs/ops/digichat-datatap-aca.md.
+# released images rather than for any image. See the per-client deployment runbook (private client repo).
 ARG DIGICHAT_REVISION=""
 ARG DIGICHAT_SOURCE_URL="https://github.com/digithings-ai/digithings"
 # D-R5-1. Account id is supplied by the operator at push time (H3).

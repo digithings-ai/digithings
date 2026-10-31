@@ -6,7 +6,7 @@
       "ticket": "DIG-3689"
     },
     ".github/workflows/publish-digichat-image.yml": {
-      "count": 4,
+      "count": 1,
       "ticket": "DIG-3689"
     },
     ".gitignore": {
@@ -91,10 +91,6 @@
     },
     "apps/digichat/CHANGELOG.md": {
       "count": 10,
-      "ticket": "DIG-3689"
-    },
-    "apps/digichat/Dockerfile": {
-      "count": 1,
       "ticket": "DIG-3689"
     },
     "apps/digichat/scripts/trusted-proxy-server.mjs": {
@@ -637,10 +633,6 @@
       "count": 1,
       "ticket": "DIG-3689"
     },
-    "scripts/check_digichat_image_binding.py": {
-      "count": 2,
-      "ticket": "DIG-3689"
-    },
     "scripts/check_gloomberb_ci_guard.py": {
       "count": 4,
       "ticket": "DIG-3689"
@@ -654,7 +646,7 @@
       "ticket": "DIG-3689"
     },
     "scripts/digichat_aca_secret_detector.py": {
-      "count": 3,
+      "count": 2,
       "ticket": "DIG-3689"
     },
     "scripts/index_occ_tickets.py": {
