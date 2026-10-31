@@ -56,7 +56,6 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `agent-pr-finalizer.yml` | Agent: PR finalizer | dispatch (CF clock 07:11 UTC, held off — DIG-4364) | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path | Disabled on GitHub 2026-10-14 (cost lock) | none |
 | `refresh-repo-activity.yml` | Refresh: repo activity snapshot | dispatch (CF clock Mon 06:10 UTC) | Regenerates `apps/digithings-web/lib/repo-activity.json` and opens a `chore/` PR | Working | none |
 | `book-pdf.yml` | Book: print the PDF | push, dispatch | Build the digibook's printed PDF as an artifact (DIG-2821) | Working | `paths:` filter |
-| `ci-pr-title.yml` | CI: PR title | pull_request | Conventional Commit title lint with the module scope list; squash merges use the PR title | Working | none |
 | `ci-review-coverage.yml` | CI: review coverage | pull_request | Gate before production: every PR in a promotion must carry a review | Working | none |
 | `datatap-answer-check.yml` | Check: DataTap answer integrity | dispatch (manual only — the CF clock was retired 2026-10-18, DIG-4435) | Answer-integrity probe against DataTap production (DIG-306). Retired: the client manages their own infrastructure, so we do not probe them on a schedule. | Retired (manual dispatch only) | none |
 | `deploy-digiquant-runner.yml` | Deploy: digiquant-runner | push (`main`), dispatch | Deploy the private digiquant-runner Worker and container image (#4761) | Working | `paths:` filter |
