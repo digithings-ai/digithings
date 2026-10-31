@@ -262,6 +262,18 @@ export const JOBS: readonly Job[] = [
     1200,
     { inputs: { mode: "eod-macro" } },
   ),
+  // --- digiquant-runner market-data + checkpoint-archive clocks: DISABLED ---
+  // Disabled 2026-10-31. The runner fails these three jobs on a stale
+  // CORE_POSTGRES_URI (about 350 failures a day, with a digikey_app lockout
+  // risk). R2 market data has been stale since 2026-10-10, so pausing the clocks
+  // makes nothing staler. Re-enabling needs the S7 fix (CORE_POSTGRES_URI root
+  // fix) first. The rows stay, disabled, rather than being deleted or commented
+  // out: the deployed Worker still carries these three triggers until the next
+  // digithings-cron deploy, and the deployed-trigger contract
+  // (src/trigger-contract.ts) fails a deployed cron that no job row claims (see
+  // the retired answer-check row below). Their wrangler.toml cron lines are
+  // commented out, so the next deploy drops the triggers.
+  // Disabled: stale CORE_POSTGRES_URI on the runner; re-enable after S7.
   cj(
     "market-data-refresh-morning",
     "0 13 * * *",
@@ -269,9 +281,11 @@ export const JOBS: readonly Job[] = [
     "market-data-refresh",
     "market-data-refresh",
     1800,
+    { enabled: false },
   ),
   // --- digithings: checkpoint archive (container, #4761 Phase 4) ---
   // Clock is digithings-cron → digiquant-runner. GHA keeps workflow_dispatch only.
+  // Disabled: stale CORE_POSTGRES_URI on the runner; re-enable after S7.
   cj(
     "checkpoint-archive",
     "30 13 * * *",
@@ -279,7 +293,9 @@ export const JOBS: readonly Job[] = [
     "checkpoint-archive",
     "checkpoint-archive",
     3600,
+    { enabled: false },
   ),
+  // Disabled: stale CORE_POSTGRES_URI on the runner; re-enable after S7.
   cj(
     "market-data-refresh-evening",
     "30 21 * * *",
@@ -287,6 +303,7 @@ export const JOBS: readonly Job[] = [
     "market-data-refresh",
     "market-data-refresh",
     1800,
+    { enabled: false },
   ),
 
   // --- digithings: house-run (container, #4761) ---

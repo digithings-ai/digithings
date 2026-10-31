@@ -46,9 +46,16 @@ turns "port, then disable" into one invariant.
 | `secret-staleness-check.yml` | `secret-staleness` | `17 6 1 * *` |
 | `datatap-answer-check.yml` | `datatap-answer-check` (clock retired 2026-10-18, row deleted 2026-10-27) | *(no clock)* |
 | `production-deploy-gate-watchdog.yml` | `production-deploy-gate-watchdog` | `17,47 * * * *` |
-| `pipeline-checkpoint-archive.yml` | `checkpoint-archive` | `30 13 * * *` |
-| `pipeline-market-data-refresh.yml` | `market-data-refresh-morning` | `0 13 * * *` |
-| `pipeline-market-data-refresh.yml` | `market-data-refresh-evening` | `30 21 * * *` |
+| `pipeline-checkpoint-archive.yml` | `checkpoint-archive` (disabled 2026-10-31, needs S7) | *(no clock; row kept for `30 13 * * *`)* |
+| `pipeline-market-data-refresh.yml` | `market-data-refresh-morning` (disabled 2026-10-31, needs S7) | *(no clock; row kept for `0 13 * * *`)* |
+| `pipeline-market-data-refresh.yml` | `market-data-refresh-evening` (disabled 2026-10-31, needs S7) | *(no clock; row kept for `30 21 * * *`)* |
+
+The three digiquant-runner rows above were disabled on 2026-10-31: the runner
+fails them on a stale `CORE_POSTGRES_URI` (about 350 failures a day, with a
+`digikey_app` lockout risk). R2 market data has been stale since 2026-10-10, so
+the pause makes nothing staler. Re-enabling needs the S7 fix first; the rows stay
+in `src/jobs.ts` with `enabled: false` and are pinned as disabled in
+`tests/scripts/test_migrated_workflows_still_clocked.py`.
 | `pipeline-digiquant.yml` | `house-run-09` | `17 9 * * MON` |
 | `project-enforce-assignment.yml` | `project-enforce-assignment` | `23 9 * * *` |
 

@@ -80,9 +80,12 @@ crons = [
   "19 */2 * * MON-FRI", # prices-fx-refresh
   "19 22 * * SUN",     # prices-fx-refresh-sun
   "27 21 * * MON-FRI", # prices-eod-macro
-  "0 13 * * *",        # market-data-refresh-morning
-  "30 13 * * *",       # checkpoint-archive
-  "30 21 * * *",       # market-data-refresh-evening
+  # Disabled 2026-10-31: the digiquant-runner fails these three on a stale
+  # CORE_POSTGRES_URI (~350 failures/day, digikey_app lockout risk). Re-enabling
+  # needs the S7 fix. The job rows stay in src/jobs.ts with enabled: false.
+  # "0 13 * * *",      # market-data-refresh-morning (disabled, needs S7)
+  # "30 13 * * *",     # checkpoint-archive (disabled, needs S7)
+  # "30 21 * * *",     # market-data-refresh-evening (disabled, needs S7)
   "17 9 * * MON",      # house-run-09 (weekly Mon lock 2026-10-01)
   "5 22 * * *",        # research-metrics
   "12 0 * * *",        # tearsheets

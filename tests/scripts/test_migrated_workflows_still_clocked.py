@@ -47,7 +47,11 @@ JOBS_SOURCE = REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts"
 # because the house parity mirror in test_prices_cron_dst.py names them, and an
 # unused entry costs nothing: the guard fails on a builder present here and
 # absent from this tuple, never on the reverse.
-BUILDERS = ("wd", "rd", "cj", "pj", "wj", "tw")
+BUILDERS = ("wd", "rd", "cj", "pj", "wj", "tw", "tx")
+
+# tx(id, cron, route, workflow, ...) names its workflow fourth, after the
+# external runner route. Every other builder names it third.
+WORKFLOW_ARG_INDEX = {"tx": 3}
 
 # workflow file -> job id(s) in jobs.ts that must carry its clock, enabled.
 MIGRATED_CLOCKS: dict[str, tuple[str, ...]] = {
@@ -61,13 +65,20 @@ MIGRATED_CLOCKS: dict[str, tuple[str, ...]] = {
     "token-canary.yml": ("token-canary",),
     "secret-staleness-check.yml": ("secret-staleness",),
     "production-deploy-gate-watchdog.yml": ("production-deploy-gate-watchdog",),
+    "pipeline-digiquant.yml": ("house-run-09",),
+    "project-enforce-assignment.yml": ("project-enforce-assignment",),
+}
+
+# Migrated clocks that are deliberately DISABLED, row kept. Disabled 2026-10-31:
+# digiquant-runner fails these on a stale CORE_POSTGRES_URI (~350 failures a
+# day, digikey_app lockout risk). Re-enabling needs the S7 fix; when it lands,
+# move these back into MIGRATED_CLOCKS in the same commit that re-enables them.
+DISABLED_MIGRATED_CLOCKS: dict[str, tuple[str, ...]] = {
     "pipeline-checkpoint-archive.yml": ("checkpoint-archive",),
     "pipeline-market-data-refresh.yml": (
         "market-data-refresh-morning",
         "market-data-refresh-evening",
     ),
-    "pipeline-digiquant.yml": ("house-run-09",),
-    "project-enforce-assignment.yml": ("project-enforce-assignment",),
 }
 
 _CALL = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")
@@ -109,13 +120,18 @@ def _job_rows() -> tuple[list[dict[str, object]], set[str], int]:
         targets += 1
         names.add(name)
         strings = re.findall(r'"([^"]*)"', args)
-        if name not in BUILDERS or len(strings) < 3 or not strings[2].endswith(".yml"):
+        wf_index = WORKFLOW_ARG_INDEX.get(name, 2)
+        if (
+            name not in BUILDERS
+            or len(strings) <= wf_index
+            or not strings[wf_index].endswith(".yml")
+        ):
             continue
         rows.append(
             {
                 "id": strings[0],
                 "cron": strings[1],
-                "workflow": strings[2],
+                "workflow": strings[wf_index],
                 "enabled": "enabled: false" not in args,
             }
         )
@@ -167,6 +183,26 @@ def test_migrated_workflows_are_still_clocked(rows: list[dict[str, object]]) -> 
     assert disabled == [], f"migrated clocks left disabled in jobs.ts: {disabled}"
 
 
+def test_disabled_migrated_clocks_stay_documented(rows: list[dict[str, object]]) -> None:
+    """Paused clocks keep their row, disabled, so the deployed trigger keeps a claimant.
+
+    Deleting the row instead would leave the still-deployed cron unclaimed
+    (unrecognised_cron in src/trigger-contract.ts) and lose the record of what
+    to re-enable after S7. Re-enabling without moving the pin fails here too.
+    """
+    by_id = {str(r["id"]): r for r in rows}
+    problems: list[str] = []
+    for workflow, job_ids in DISABLED_MIGRATED_CLOCKS.items():
+        for job_id in job_ids:
+            row = by_id.get(job_id)
+            if row is None or row["workflow"] != workflow:
+                problems.append(f"{workflow} -> {job_id}: row missing")
+            elif row["enabled"]:
+                problems.append(f"{workflow} -> {job_id}: enabled (move it to MIGRATED_CLOCKS)")
+    assert problems == [], f"disabled clock pins drifted: {problems}"
+    assert not set(DISABLED_MIGRATED_CLOCKS) & set(MIGRATED_CLOCKS)
+
+
 def test_clock_lookup_discriminates(rows: list[dict[str, object]]) -> None:
     """A name that is not a clock must not resolve.
 
@@ -183,5 +219,5 @@ def test_migrated_workflow_files_still_exist() -> None:
     """The Worker must have something on develop to dispatch for each pin."""
     present = {p.name for p in WORKFLOW_DIR.iterdir() if p.is_file()}
     assert len(present) > 40, f"workflow directory census looks truncated: {len(present)}"
-    absent = sorted(set(MIGRATED_CLOCKS) - present)
+    absent = sorted((set(MIGRATED_CLOCKS) | set(DISABLED_MIGRATED_CLOCKS)) - present)
     assert absent == [], f"pinned workflows are gone from develop: {absent}"

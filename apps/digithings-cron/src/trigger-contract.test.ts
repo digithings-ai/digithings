@@ -156,6 +156,30 @@ describe("the repo's own deploy config satisfies the contract", () => {
   });
 });
 
+describe("disabled clocks: commented-out trigger lines and the still-deployed schedule", () => {
+  // 2026-10-31: the three digiquant-runner market-data and checkpoint-archive
+  // clocks are disabled (stale CORE_POSTGRES_URI on the runner; re-enable after
+  // S7). Their wrangler.toml lines are commented out and their job rows stay,
+  // disabled.
+  const DISABLED = ["0 13 * * *", "30 13 * * *", "30 21 * * *"];
+
+  it("does not read a commented-out cron line as a trigger", () => {
+    const crons = cronsFromWranglerToml(WRANGLER_TOML);
+    for (const cron of DISABLED) expect(crons).not.toContain(cron);
+    expect(WRANGLER_TOML).toContain('# "30 13 * * *",');
+  });
+
+  it("keeps the deployed schedule recognised until the next deploy drops it", () => {
+    // The live Worker still carries the three triggers until it is redeployed.
+    // The disabled rows still claim them, so the deployed-trigger check stays
+    // green and the merge that removes the clocks cannot deadlock itself.
+    const deployed = [...cronsFromWranglerToml(WRANGLER_TOML), ...DISABLED];
+    const verdict = checkTriggerContract(deployed);
+    expect(verdict.unrecognised).toEqual([]);
+    expect(verdict.ok).toBe(true);
+  });
+});
+
 describe("regression: the backstop deleted from the job map and from the config together", () => {
   // The exact shape of DIG-553 Finding 1. Both halves removed, so nothing in the
   // repo is inconsistent — and, before DIG-732, nothing was red.
