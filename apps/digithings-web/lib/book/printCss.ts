@@ -430,6 +430,19 @@ thead th { border-bottom-color: var(--accent) !important; }
    and the blocks at the page edges. Only the page background should paint. */
 .pagedjs_page, .pagedjs_page * { background-color: transparent !important; }
 
+/* The same clones are also empty, and here they cost more than paint: the site
+   gives body a height of 100%, so on paper an empty clone resolves against the
+   page's content box and measures a whole page tall. In the page's multi-column
+   flow that claims an entire column, which pushed the first page's cover into a
+   column parked beyond the sheet — a first sheet holding nothing but the field.
+   The pagination step removes the clones; this keeps a stray one from taking a
+   column if the cleanup ever runs late. */
+.pagedjs_page html, .pagedjs_page body {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
 /* ── Print-edition typography ─────────────────────────────────────────────
    The MDX components carry the web's utility classes, and those classes still
    exist in the paginated document. Element-level print rules are not enough:
