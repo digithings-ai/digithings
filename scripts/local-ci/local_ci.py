@@ -2838,6 +2838,10 @@ def pending_applied(prs):
     pull request that arrived first is served first. The newest-first order
     left the old pull requests waiting behind every later arrival, and a
     required context that never reports is a pull request that cannot merge.
+
+    A head nobody has reviewed yet is not queued at all (plan P1-3): there is
+    no review to have applied, so the check posts nothing rather than a red
+    row. It is queued on the first tick after a review of that head lands.
     """
     out = []
     for p in prs:
@@ -2847,14 +2851,36 @@ def pending_applied(prs):
         if st == "success":
             continue
         if st in ("pending", "failure") and desc.startswith(SKIP_PREFIX):
-            out.append(p)  # gate cleared since the skip; re-check
+            due = True  # gate cleared since the skip; re-check
         elif st is None:
-            out.append(p)
+            due = True
         elif st in ("pending", "failure") and _status_age_secs(ts) >= REVIEW_RECHECK_SECS:
+            due = True
+        else:
+            due = False
+        if due and awaiting_review(p):
+            continue
+        if due:
             out.append(p)
     out.sort(key=lambda p: (p.get("createdAt") or p.get("updatedAt") or "",
                              p.get("number") or 0))
     return out
+
+
+def awaiting_review(pr):
+    """True when no review of this head exists yet, so review-applied waits.
+
+    Cached on the PR dict for the tick, so the queue scan and the run read the
+    reviews once. An unreadable record is not "no review": the head is checked
+    as before and fails closed with the reason (``None`` -> False).
+    """
+    if "_head_reviewed" not in pr:
+        if review_applied is None or not hasattr(review_applied, "head_review_exists"):
+            pr["_head_reviewed"] = None
+        else:
+            pr["_head_reviewed"] = review_applied.head_review_exists(
+                pr["number"], pr["headRefOid"], REPO, _rest)
+    return pr["_head_reviewed"] is False
 
 
 def _gh_json(argv):
@@ -2925,6 +2951,11 @@ def run_applied(pr, out):
 def process_applied(pr, dry):
     sha = pr["headRefOid"]; n = pr["number"]
     logf = f"{LOGD}/pr{n}-applied-{sha[:12]}.log"
+    if awaiting_review(pr):
+        # Nothing to judge until someone reviews this head: post no row at all
+        # (not pending, not failure). The next tick after a review re-queues it.
+        log(f"PR #{n} review-applied {sha[:12]} skipped: no review of this head yet")
+        return "skipped"
     log(f"PR #{n} review-applied {sha[:12]} start")
     if not dry: applied_status(sha, "pending", "local-ci: checking review-applied")
     sh(["git", "fetch", "-q", "origin", pr["baseRefName"], f"pull/{n}/head"], cwd=MAIN, timeout=600)
