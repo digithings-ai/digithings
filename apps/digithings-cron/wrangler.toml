@@ -117,5 +117,5 @@ crons = [
   "23 16 * * MON-FRI",  # twelve-x-feed-confirm-watchdog (DIG-1073: detect no detection)
   "22 * * * *",        # digiquant-house-run-watch (DIG-3065; Monday confirm arm DIG-4416)
   "40 */6 * * *",      # twelve-x-session-heartbeat-watchdog (moved off GHA schedule)
-  "23 7 * * MON",      # occ-help-recrawl (OCC help-docs weekly, DIG-3576)
+  "23 7 * * MON",      # tenant-recrawl
 ]

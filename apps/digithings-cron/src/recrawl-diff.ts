@@ -1,21 +1,9 @@
 /**
- * OCC help-docs weekly recrawl (DIG-3576).
- *
- * Worker-native job: crawl `help.online-compliance-center.com` and idempotently
- * upsert into the `occ_help` store keyed by URL + content hash. Vectorize
- * upsert runs only for changed docs; docs gone from source are deleted. A run
- * with unchanged source writes no document rows, but it still records the run
- * itself - that record is what the freshness alert reads.
- *
- * The D1 + Vectorize bindings are injected as a store interface so this module
- * stays unit-testable with no Cloudflare account. Live wiring waits on the
- * Vectorize-read/write token (prerequisite on the ticket; Chris grants).
- * Freshness alert threshold ~8-9 days (Chris 14 Oct 18:26): alert when the last
- * success is older than 8 days or a run fails.
+ * Content-hash diff for a recrawl store. No tenant, url, store name, index,
+ * or schedule is named here. The scheduled job is kind "tenant-recrawl"
+ * (tenant-recrawl.ts). This module does not run on the cron tick: the shipped
+ * tick is dry-run only and does not write.
  */
-
-/** Weekly Monday clock. Must appear in wrangler.toml [triggers] crons. */
-export const OCC_HELP_RECRAWL_CRON = "23 7 * * MON";
 
 /** Alert when the last successful run is older than this. */
 export const FRESHNESS_ALERT_AFTER_DAYS = 8;

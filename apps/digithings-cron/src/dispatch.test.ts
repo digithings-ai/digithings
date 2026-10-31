@@ -706,13 +706,13 @@ describe("dispatch", () => {
     });
   });
 
-  it("occ-help-recrawl dry-run writes nothing and calls no network", async () => {
+  it("tenant-recrawl dry-run writes nothing and calls no network", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const runnerFetch = vi.fn();
-    const job = JOBS.find((row) => row.id === "occ-help-recrawl") as Job;
-    expect(job.kind).toBe("occ-recrawl");
+    const job = JOBS.find((row) => row.id === "tenant-recrawl") as Job;
+    expect(job.kind).toBe("tenant-recrawl");
     const env: Env = {
       DRY_RUN: "1",
       RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
@@ -721,15 +721,15 @@ describe("dispatch", () => {
     expect(result).toEqual({ ok: true, status: 0, dry_run: true });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(runnerFetch).not.toHaveBeenCalled();
-    expect(logSpy.mock.calls.map((call) => String(call[0])).join("\n")).toContain("occ-help-recrawl");
+    expect(logSpy.mock.calls.map((call) => String(call[0])).join("\n")).toContain("tenant-recrawl");
   });
 
-  it("occ-help-recrawl fails closed while the store is unwired", async () => {
+  it("tenant-recrawl fails closed while the store is unwired", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const runnerFetch = vi.fn();
-    const job = JOBS.find((row) => row.id === "occ-help-recrawl") as Job;
+    const job = JOBS.find((row) => row.id === "tenant-recrawl") as Job;
     const env: Env = {
       DRY_RUN: "0",
       RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
@@ -741,15 +741,15 @@ describe("dispatch", () => {
     expect(errorSpy.mock.calls.map((call) => String(call[0])).join("\n")).toContain("store_unwired");
   });
 
-  it("occ-help-recrawl ignores GITHUB_OVERRIDE_JOBS (worker-native, no workflow)", async () => {
+  it("tenant-recrawl ignores GITHUB_OVERRIDE_JOBS (worker-native, no workflow)", async () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
     const runnerFetch = vi.fn();
-    const job = JOBS.find((row) => row.id === "occ-help-recrawl") as Job;
+    const job = JOBS.find((row) => row.id === "tenant-recrawl") as Job;
     const env: Env = {
       DRY_RUN: "0",
       GH_DISPATCH_TOKEN: "token",
-      GITHUB_OVERRIDE_JOBS: "occ-help-recrawl",
+      GITHUB_OVERRIDE_JOBS: "tenant-recrawl",
       RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
     };
     await dispatch(env, job, job.cron);

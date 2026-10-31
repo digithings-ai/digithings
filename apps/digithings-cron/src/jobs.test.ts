@@ -82,7 +82,7 @@ const TWELVE_X_ENABLED_IDS = [
   "twelve-x-feed-confirm-watchdog",
 ] as const;
 
-const OCC_ENABLED_IDS = ["occ-help-recrawl"] as const;
+const TENANT_RECRAWL_IDS = ["tenant-recrawl"] as const;
 
 // The 40-expression list this file used to hardcode is gone. A copied list is a
 // second source of truth that drifts silently, and a copied list was the only
@@ -272,7 +272,7 @@ describe("jobsForCron", () => {
         .map((job) => job.id)
         .sort(),
     ).toEqual(
-      [...RESUMED_PIPELINE_IDS, ...PATH_A_ENABLED_IDS, ...TWELVE_X_ENABLED_IDS, ...OCC_ENABLED_IDS].sort(),
+      [...RESUMED_PIPELINE_IDS, ...PATH_A_ENABLED_IDS, ...TWELVE_X_ENABLED_IDS, ...TENANT_RECRAWL_IDS].sort(),
     );
     // The full cron set this file used to hardcode is asserted against
     // wrangler.toml in src/trigger-contract.test.ts, alongside the required FX
@@ -341,17 +341,16 @@ describe("jobsForCron", () => {
         enabled: true,
       });
     }
-    const occHelp = JOBS.find((job) => job.id === "occ-help-recrawl");
-    expect(occHelp).toMatchObject({
-      kind: "occ-recrawl",
+    const tenantRecrawl = JOBS.find((job) => job.id === "tenant-recrawl");
+    expect(tenantRecrawl).toMatchObject({
+      kind: "tenant-recrawl",
       cron: "23 7 * * MON",
-      occRecrawl: "help-docs",
       enabled: true,
       repo: "digithings-ai/digithings",
       ref: "develop",
     });
-    expect(occHelp?.workflow).toBeUndefined();
-    expect(jobsForCron("23 7 * * MON").map((job) => job.id)).toEqual(["occ-help-recrawl"]);
+    expect(tenantRecrawl?.workflow).toBeUndefined();
+    expect(jobsForCron("23 7 * * MON").map((job) => job.id)).toEqual(["tenant-recrawl"]);
     expect(uniqueEnabledCrons()).toContain("23 7 * * MON");
   });
 
