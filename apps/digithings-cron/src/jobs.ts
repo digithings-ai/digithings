@@ -439,18 +439,13 @@ export const JOBS: readonly Job[] = [
   // we do not probe them on a schedule. The workflow file stays, dispatchable
   // by hand; no clock dispatches it any more (DIG-4435).
   //
-  // The row stays, disabled, rather than being deleted. The deployed Worker
-  // still carries the "17 * * * *" trigger until the next digithings-cron
-  // deploy, and the deployed-trigger contract (src/trigger-contract.ts) fails
-  // a deployed cron that no job row claims - not even a disabled one. Deleting
-  // the row would red local-ci with unrecognised_cron "17 * * * *" and
-  // deadlock the very merge that has to remove the clock. A disabled row still
-  // claims its cron (the contract agrees with the quiet tick in src/index.ts),
-  // so the contract stays green and the next deploy drops the trigger. Do not
-  // re-enable this row without a new order from Chris.
-  wd("datatap-answer-check", "17 * * * *", MONOREPO, "datatap-answer-check.yml", {
-    enabled: false,
-  }),
+  // The row is deleted, not merely disabled. It stayed as a disabled tombstone
+  // only while the deployed Worker still carried its trigger, because the
+  // deployed-trigger contract (src/trigger-contract.ts) fails a deployed cron
+  // that no row claims, and the row had to hold the claim until a deploy could
+  // drop it. The digithings-cron deploy of 2026-10-27T01:26:47Z dropped the
+  // trigger, no :17 dispatch has fired since, so nothing deployed needs a
+  // claimant. Do not add this row back without a new order from Chris.
 
   // --- twelve-x (FX Hub) — resumed 2026-10-01 (Human Gate unlock) ---
   // digisearch_parity is not a digithings workflow (leftover sweep after #4970).
