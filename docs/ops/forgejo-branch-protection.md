@@ -34,11 +34,22 @@ client name, and this tree is public (the R0 client-literals guard in
 `scripts/check_r0_no_client_literals.py`). It is read from
 `FORGEJO_PROTECTED_REPOS` in the local forge env file
 (`$LOCAL_FORGE_ENV`, default `~/Code/source-control/deploy/local-forge/local-forge.env`),
-as a comma-separated list of `repo:branch:profile` with `strict` or `light` as
-the profile:
+as a comma-separated list of `repo:branch:profile`. The profile is one of:
+
+| Profile | Meaning |
+| --- | --- |
+| `strict` | the `main` profile, `require_signed_commits` expected **false** |
+| `light` | the integration-branch profile, `require_signed_commits` expected **false** |
+| `strict-signed` | `strict` with `require_signed_commits` expected **true** |
+| `light-signed` | `light` with `require_signed_commits` expected **true** |
+
+`strict` and `light` are unchanged and stay on the branches exempt from signed
+commits (the GitHub-mirrored `digithings` `main`/`develop`). Switch a rule to a
+`-signed` profile in the same step that turns `require_signed_commits` on for
+it, then run the verifier; it must exit 0.
 
 ```bash
-FORGEJO_PROTECTED_REPOS="digithings:main:strict,digithings:develop:light,<client-web>:main:light"
+FORGEJO_PROTECTED_REPOS="digithings:main:strict,digithings:develop:light,digiforge:main:strict-signed,digiforge:develop:light-signed,<client-web>:main:light"
 ```
 
 The token is exported, never passed as an argument, so it does not appear in

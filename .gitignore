@@ -247,3 +247,6 @@ docs/superpowers/specs/review-*
 
 # Agent scratch — temporary artifacts, screenshots, logs (never commit)
 .agent-tmp/
+
+# Stray Python wheels (e.g. tool installs)
+*.whl
