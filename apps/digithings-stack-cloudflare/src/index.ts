@@ -43,7 +43,7 @@
  * container network address for its public route; in-container callers keep
  * using DIGISEARCH_URL=http://127.0.0.1:8002 (0.0.0.0 includes loopback).
  */
-import { Container, getContainer, switchPort } from "@cloudflare/containers";
+import { Container, getContainer, switchPort, type StopParams } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
 import {
   CONTAINER_RETRY_AFTER_SECONDS,
@@ -227,11 +227,13 @@ export class DigiStackContainer extends Container {
    * being killed outright. `rollout_active_grace_period` in wrangler.toml keeps
    * freshly-started instances out of the rollout window in the first place.
    */
-  override async onStop(): Promise<void> {
+  override async onStop(params: StopParams): Promise<void> {
     console.error(
       "digithings-stack: container draining gracefully on stop/rollout",
+      params.reason,
+      params.exitCode,
     );
-    await super.onStop();
+    await super.onStop(params);
   }
 
   /**
@@ -342,10 +344,12 @@ export class DigiStackContainer extends Container {
         return containerFailedResponse("stack", failure.message);
       }
       // DIG-5945: alert on capacity exhaustion at the hop boundary too.
-      if (isContainerCapacityError(failure.kind === "unavailable" ? failure.description : failure.message ?? "")) {
+      // unavailable, evicted, and failed have already returned. `unknown`
+      // carries no message, so match the thrown value itself.
+      if (isContainerCapacityError(err)) {
         console.error(
           "digithings-stack: container capacity exhausted (hop):",
-          failure.kind === "unavailable" ? failure.description : failure.message,
+          safeErrorMessage(err),
         );
       }
       throw err;
