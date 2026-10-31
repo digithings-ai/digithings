@@ -9,8 +9,12 @@
 # some of those repos carry a client name, and this tree is public (the R0
 # client-literals guard). It comes from FORGEJO_PROTECTED_REPOS in the local
 # forge env file as a comma-separated list of `repo:branch:profile`, where the
-# profile is `strict` or `light`. An unset or empty inventory is a failure, not
-# an empty pass: a verifier that checks nothing must not report OK.
+# profile is `strict`, `light`, `strict-signed` or `light-signed`. The two
+# `-signed` profiles are `strict` and `light` with `require_signed_commits`
+# expected true, for branches switched to signed commits; `strict` and `light`
+# stay as they were (signed false) for the exempt mirrored branches. An unset or
+# empty inventory is a failure, not an empty pass: a verifier that checks
+# nothing must not report OK.
 #
 # The token is never an argument: this script exports it and the Python reads
 # os.environ["FORGEJO_TOKEN"], so no token value reaches process argv.
@@ -22,7 +26,11 @@ if [ ! -f "$ENV_FILE" ]; then
   echo "Set LOCAL_FORGE_ENV to the Forgejo env file." >&2
   exit 1
 fi
-set -a; . "$ENV_FILE"; set +a
+# The env file is local and never committed, so shellcheck cannot follow it.
+set -a
+# shellcheck source=/dev/null
+. "$ENV_FILE"
+set +a
 
 BASE="${FORGEJO_URL:-http://localhost:3000}"
 OWNER="${FORGEJO_REPO_ORG:-digithings-ai}"
@@ -49,13 +57,6 @@ base, owner = sys.argv[1:3]
 token = os.environ["FORGEJO_TOKEN"]
 headers = {"Authorization": "token " + token}
 
-# The two documented profiles, in FIELDS order. The repo/branch pairs they
-# apply to live in FORGEJO_PROTECTED_REPOS (local env file), not here.
-PROFILES = {
-    "strict": (False, 1, True, False, True, True, True, True),
-    "light": (False, 1, False, False, True, True, False, False),
-}
-
 FIELDS = (
     "enable_push",
     "required_approvals",
@@ -66,6 +67,27 @@ FIELDS = (
     "dismiss_stale_approvals",
     "block_on_outdated_branch",
 )
+
+# The two documented base profiles, in FIELDS order. The repo/branch pairs they
+# apply to live in FORGEJO_PROTECTED_REPOS (local env file), not here.
+BASE_PROFILES = {
+    "strict": (False, 1, True, False, True, True, True, True),
+    "light": (False, 1, False, False, True, True, False, False),
+}
+SIGNED = FIELDS.index("require_signed_commits")
+
+
+def signed(profile: tuple) -> tuple:
+    """The same profile with require_signed_commits expected true."""
+    return profile[:SIGNED] + (True,) + profile[SIGNED + 1 :]
+
+
+# `strict`/`light` are unchanged (signed false: the exempt mirrored branches).
+# `strict-signed`/`light-signed` differ from them in the signed field only.
+PROFILES = {
+    **BASE_PROFILES,
+    **{f"{name}-signed": signed(values) for name, values in BASE_PROFILES.items()},
+}
 
 
 def inventory() -> list[tuple[str, str, str]]:
