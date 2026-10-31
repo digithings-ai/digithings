@@ -866,6 +866,43 @@ method, the review basis and the checks that were green. That comment is the ans
 
 Exit 2 and 3 are refusals with a reason. They are not failures to retry.
 
+### The local hold list (`HOLD-PRS`)
+
+A human can hold a pull request by name, and the queue will not merge it. The list is
+local to the host that runs the queue — `~/.config/digithings/merge-queue/HOLD-PRS`
+next to the driver's other state — and it is read by `dt-merge-queue` **before** it
+judges anything, not by this script:
+
+```
+# one hold per line: owner/repo#N, then why
+digithings-ai/digithings#6558 second review in flight
+digithings-ai/twelve-x#412 client-visible, waiting for the window
+```
+
+A line that starts with `#` is a comment. The repository has to be named: a bare
+number is skipped, because both repositories are drained from the same host and `#412`
+means two different pull requests. A held PR costs no control-plane read, gets no
+handback and is never branch-updated; the tick logs `HOLD skip #N in <repo>` every tick
+it reads the list, so a list nobody is reading is visible in the log.
+
+A missing list is the normal state — nothing is held — and is logged as such. An
+unreadable list is a `WARN` and never fails the tick: a list this daemon cannot read
+must not stop it merging what nobody has held. Lifting a hold is deleting its line;
+there is no gate to clear and no comment to post.
+
+The same file is the mechanism the verdict rule points at when a seat needs a second
+sign-off: the hold is the board's, the verdict gate is the queue's.
+
+### The guard's verdict entry point
+
+The board's `mq-cr-hold.py` guard imports this script and holds a PR while its newest
+posted verdict is a block. It calls `_latest_readable_verdict(pr)`, which answers
+`(comment, verdict, sha) | None`; since DIG-5812 that name is a compatibility alias over
+`_readable_verdicts` / `_latest_posted_verdict`, so the guard and the queue read the same
+verdict in the same order. Renaming or removing it breaks every guard pass with an
+`AttributeError`, which is silent in the queue and stops the holds — keep the name, or
+change the guard in the same PR.
+
 ## What this does not do
 
 **It cannot stop a direct push to `develop`.** The queue governs the merge path; it does

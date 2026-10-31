@@ -8577,3 +8577,61 @@ def test_a_build_that_reports_no_commit_is_measured_not_refused(
     assert verdict.eligible, verdict.reasons
     written = log.read_text(encoding="utf-8")
     assert "reports no commit" in written, written
+
+
+# --- the verdict alias the board's guard imports (DIG-5812) -------------------
+#
+# `mq-cr-hold.py` imports this runner and calls `_latest_readable_verdict(pr)`;
+# #6177 (DIG-4878) replaced that name with `_readable_verdicts` /
+# `_latest_posted_verdict` and every guard pass since its restart died with
+# `module 'merge_queue' has no attribute '_latest_readable_verdict'`. The alias
+# keeps the name and the shape the guard was written against, over the new rule.
+# A rename is invisible to the queue's own tests, so the name is pinned here.
+
+
+def test_the_latest_readable_verdict_alias_keeps_the_guard_contract() -> None:
+    """`(comment, verdict, sha)`, newest readable verdict first, or `None`.
+
+    The old function returned the newest *marker* verdict on the PR. The alias
+    reads the current rule's order (`_latest_posted_verdict`) and reshapes the
+    answer, so the guard holds on the same verdict the queue would merge on.
+    """
+    sha = "b" * 40
+    block = _review_comment(
+        verdict="changes_requested", head_sha=sha, created="2026-10-07T22:07:11Z"
+    )
+    block["id"] = "IC_kwDOold_1"
+    approve = _review_comment(verdict="approved", head_sha=sha, created="2026-10-07T22:20:00Z")
+    approve["id"] = "IC_kwDOnew_2"
+    latest = mq._latest_readable_verdict(_pr(347, comments=[block, approve]))
+    assert latest is not None
+    comment, verdict, named_head = latest
+    assert verdict == "approved"
+    assert named_head == sha
+    # The newest comment record itself, not a stub: a caller that quotes the body
+    # quotes the verdict it acted on.
+    assert comment["id"] == "IC_kwDOnew_2"
+    assert "verdict=approved" in comment["body"]
+
+
+def test_the_latest_readable_verdict_alias_is_none_without_a_verdict() -> None:
+    """No readable verdict is `None`, not a tuple of placeholders."""
+    pr = _pr(347, comments=[{"id": "IC_plain", "body": "looks fine to me"}])
+    assert mq._latest_readable_verdict(pr) is None
+
+
+def test_the_latest_readable_verdict_alias_survives_a_trimmed_comment_list() -> None:
+    """The guard builds its own rows, so a comment can be there with no id.
+
+    The contract is the tuple, not the record: a row whose comments carry no ids
+    still answers with the verdict and the head it names, so the guard can hold
+    the PR instead of raising.
+    """
+    sha = "c" * 40
+    comment = _review_comment(verdict="changes_requested", head_sha=sha)
+    comment.pop("id")
+    latest = mq._latest_readable_verdict(_pr(347, comments=[comment]))
+    assert latest is not None
+    _, verdict, named_head = latest
+    assert verdict == "changes_requested"
+    assert named_head == sha

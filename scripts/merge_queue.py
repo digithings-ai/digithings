@@ -2808,6 +2808,51 @@ def _latest_posted_verdict(pr: dict[str, Any]) -> PostedVerdict | None:
     return verdicts[-1] if verdicts else None
 
 
+def _latest_readable_verdict(
+    pr: dict[str, Any],
+) -> tuple[dict[str, Any], str, str] | None:
+    """The newest readable verdict as `(comment, verdict, sha)`, or None — DIG-5812.
+
+    This is the contract the board's `mq-cr-hold.py` guard has called since before
+    DIG-4878: it imports this runner and asks for the newest posted verdict on a
+    PR, then holds that PR while the verdict is a block. #6177 replaced the
+    function with `_readable_verdicts` / `_latest_posted_verdict` and the guard
+    died with `module 'merge_queue' has no attribute '_latest_readable_verdict'`
+    on every pass, because it imports whatever `develop` holds on the tick that
+    started it.
+
+    So this is a compatibility alias, not a second rule: it reads the same order
+    `_latest_posted_verdict` reads and reshapes the answer to the tuple the guard
+    unpacks. `sha` is the head the verdict names — the marker's `scope=` first,
+    then the first binding a prose verdict carries — and `""` when it names none.
+    `comment` is the PR's own comment record when the row still carries it, so a
+    caller that quotes the body quotes the real thing.
+    """
+    latest = _latest_posted_verdict(pr)
+    if latest is None:
+        return None
+    comment: dict[str, Any] | None = None
+    if latest.comment_id:
+        for candidate in pr.get("comments") or []:
+            if not isinstance(candidate, Mapping):
+                continue
+            if str(candidate.get("id") or "") != latest.comment_id:
+                continue
+            comment = dict(candidate)
+            break
+    if comment is None:
+        # A row whose comment list has been trimmed, or a fixture with no ids: the
+        # caller still gets the verdict, with the shape it reads.
+        comment = {
+            "id": latest.comment_id,
+            "author": {"login": latest.author},
+            "createdAt": latest.at,
+            "body": "",
+        }
+    sha = latest.scope or (latest.bindings[0] if latest.bindings else "")
+    return comment, latest.verdict, sha
+
+
 def _sha_text(sha: str) -> str:
     """A sha as the queue names it in a refusal."""
     return f"`{sha[:12]}`" if sha else "no commit"
