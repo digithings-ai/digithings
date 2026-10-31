@@ -290,6 +290,18 @@ deleted_classes = ["DigiQuantMcpContainer"]
 binding = "TENANT_CONFIG"
 id = "361b710bee56466097053275404535ba"
 
+# The stack's own small KV (cleanup item 3). TENANT_CONFIG above is the chat
+# Worker's tenant namespace; today the stack also writes its digikey JWKS cache
+# there. The code already prefers STACK_CACHE when it is bound
+# (src/mcp-edge-auth.ts jwksCacheKv), so the switch is: create the namespace
+# (`wrangler kv namespace create digithings-stack-cache`), uncomment the block
+# below with its id, deploy, then drop the TENANT_CONFIG binding while
+# readTenantConfig() is still unwired. Left commented so a deploy from this file
+# never binds a placeholder id.
+# [[kv_namespaces]]
+# binding = "STACK_CACHE"
+# id = "<digithings-stack-cache namespace id>"
+
 # Service binding to this same Worker. The digikey JWKS lives on
 # key.digithings.ai, which this Worker itself serves, so a plain fetch from
 # inside the Worker re-enters its own public route and does not complete —

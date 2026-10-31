@@ -405,6 +405,12 @@ export interface Env {
    */
   DIGIKEY_SELF?: { fetch(input: string, init?: RequestInit): Promise<Response> };
   /**
+   * The stack's own small KV (cleanup item 3). Holds the digikey JWKS cache
+   * once bound; until then that cache stays in TENANT_CONFIG (see
+   * mcp-edge-auth `jwksCacheKv`).
+   */
+  STACK_CACHE?: KVNamespace;
+  /**
    * Worker-native digiquant market-data MCP (DIG-2913). One pinned id
    * (`MCP_CONTAINER_ID`) owns the 900s read cache; no container involved.
    */

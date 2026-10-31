@@ -118,11 +118,26 @@ export type McpEdgeAuthEnv = {
    * first response took 43 s against a 5 s fetch cap — long enough that the
    * verifier gave up before the container answered.
    */
-  TENANT_CONFIG?: {
-    get(key: string): Promise<string | null>;
-    put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
-  };
+  TENANT_CONFIG?: JwksCacheKv;
+  /**
+   * The stack's own small KV (cleanup item 3). When bound it replaces
+   * TENANT_CONFIG for the JWKS cache, so the stack stops writing into the
+   * namespace that holds the chat tenants' configuration. Unbound, the cache
+   * stays where it is today.
+   */
+  STACK_CACHE?: JwksCacheKv;
 };
+
+/** The two KV calls the JWKS cache makes. */
+export type JwksCacheKv = {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
+};
+
+/** STACK_CACHE wins when bound; TENANT_CONFIG is the fallback until it is. */
+export function jwksCacheKv(env: McpEdgeAuthEnv): JwksCacheKv | undefined {
+  return env.STACK_CACHE ?? env.TENANT_CONFIG;
+}
 
 export type McpEdgeAuthResult =
   | { ok: true; via: "key" | "jwt"; scope?: string }
@@ -255,7 +270,7 @@ type JwksBody = { keys?: unknown };
 
 /** Read the cached JWKS body, or null when absent/unusable. */
 async function readCachedJwks(env: McpEdgeAuthEnv): Promise<JwksBody | null> {
-  const kv = env.TENANT_CONFIG;
+  const kv = jwksCacheKv(env);
   if (!kv) return null;
   try {
     const raw = await kv.get(MCP_EDGE_JWKS_KV_KEY);
@@ -269,7 +284,7 @@ async function readCachedJwks(env: McpEdgeAuthEnv): Promise<JwksBody | null> {
 
 /** Best-effort cache write. A failure here must not fail verification. */
 async function writeCachedJwks(env: McpEdgeAuthEnv, body: JwksBody): Promise<void> {
-  const kv = env.TENANT_CONFIG;
+  const kv = jwksCacheKv(env);
   if (!kv) return;
   try {
     await kv.put(MCP_EDGE_JWKS_KV_KEY, JSON.stringify(body));
