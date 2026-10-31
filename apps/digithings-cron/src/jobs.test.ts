@@ -24,10 +24,10 @@ const DISABLED_HOUSE_RETRY_IDS = ["house-run-10", "house-run-11", "house-run-12"
 
 // Manual-only rows: no Cloudflare clock by design, kick-addressed by cron.
 // DIG-1335: twelve-x-backfill is on-demand (one missed date per kick).
-// DIG-4435: datatap-answer-check was retired on 2026-10-18; the row stays
-// disabled so the deployed trigger that still carries "17 * * * *" keeps a
-// claimant until the next digithings-cron deploy drops it.
-const MANUAL_ONLY_IDS = ["twelve-x-backfill", "datatap-answer-check"] as const;
+// DIG-4435: datatap-answer-check is gone entirely — the 2026-10-27T01:26:47Z
+// digithings-cron deploy dropped its trigger, so the retired row was deleted
+// rather than left as a disabled claimant.
+const MANUAL_ONLY_IDS = ["twelve-x-backfill"] as const;
 
 const PATH_A_TRAP_IDS = [
   "agent-pr-finalizer",
