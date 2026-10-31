@@ -282,7 +282,6 @@ RULES: list[tuple[str, str, str]] = [
     ("docs/ops/credential-ownership.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/*-az-guard.md", "R5", "vendor guard runbook (r5.paths; DIG-3518 (a)); was falling into a broad catch-all; name withheld from this public file"),
     ("docs/ops/digichat-aca-secret-fingerprints.json", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
-    ("docs/ops/*-aca.md", "R5", "vendor ACA runbook (r5.paths; DIG-3518 (a)); was falling into a broad catch-all; name withheld from this public file"),
     ("docs/ops/digifetch-post-deploy-verification.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/digiquant-digikey-service-key.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
     ("docs/ops/digitrace-langfuse.md", "R5", "move-list entry (DIG-3518 (a)); was falling into a broad catch-all"),
