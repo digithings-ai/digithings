@@ -68,11 +68,18 @@ if grep -R -n --include='*.yml' -e 'buildkite' scripts/deploy >/dev/null 2>&1; t
 fi
 ok "deploy jobs are not a Buildkite pipeline"
 
-# The committed signers file is comments only, so production refuses.
-if grep -Eq '^[^#[:space:]]' scripts/deploy/allowed_signers; then
-  fail "allowed_signers shipped with a key line"
+# The committed signers file holds exactly one key: the promotion identity.
+PROMOTION_FP="SHA256:6HnR7+xRV94jInnNFcC3fgcrHlWSSgHiYMoYqkcNF8U"
+keylines="$(grep -Ec '^[^#[:space:]]' scripts/deploy/allowed_signers || true)"
+[ "$keylines" = "1" ] || fail "allowed_signers must hold exactly 1 key line, has $keylines"
+if grep -q 'PRIVATE KEY' scripts/deploy/allowed_signers; then
+  fail "allowed_signers contains private key material"
 fi
-ok "allowed_signers ships with no keys"
+grep -Eq '^promotion@[^ ]+ namespaces="git" ssh-ed25519 ' scripts/deploy/allowed_signers \
+  || fail "allowed_signers key line is not the promotion principal"
+got_fp="$(grep -E '^[^#[:space:]]' scripts/deploy/allowed_signers | awk '{print $3" "$4}' | ssh-keygen -lf - | awk '{print $2}')"
+[ "$got_fp" = "$PROMOTION_FP" ] || fail "allowed_signers key is not the promotion key ($got_fp)"
+ok "allowed_signers ships only the promotion key"
 
 # --- fixture repo ------------------------------------------------------------
 
@@ -120,7 +127,9 @@ run_job() {
 
 # empty signers: refuse before "Good signature"
 : > "$LOG"
-out="$(run_job --job stack --tag stack-v1.2.3 --repo "$REPO" --allowed-signers "$ROOT/scripts/deploy/allowed_signers" 2>&1)" && rc=0 || rc=$?
+EMPTY="$TMP/empty_signers"
+printf '# comments only\n' > "$EMPTY"
+out="$(run_job --job stack --tag stack-v1.2.3 --repo "$REPO" --allowed-signers "$EMPTY" 2>&1)" && rc=0 || rc=$?
 if [ "$rc" -eq 0 ]; then fail "empty signers file was accepted"; else
   case "$out" in
     *"no keys"*) ;;
@@ -132,6 +141,13 @@ if [ "$rc" -eq 0 ]; then fail "empty signers file was accepted"; else
   [ ! -s "$LOG" ] || fail "empty signers called wrangler"
 fi
 ok "empty allowed_signers refuses before verify-tag"
+
+# the committed file trusts only promotion: a tag signed by any other key is refused
+: > "$LOG"
+out="$(run_job --job stack --tag stack-v1.2.3 --repo "$REPO" --allowed-signers "$ROOT/scripts/deploy/allowed_signers" 2>&1)" && rc=0 || rc=$?
+if [ "$rc" -eq 0 ]; then fail "committed signers accepted a non-promotion tag"; fi
+[ ! -s "$LOG" ] || fail "non-promotion tag called wrangler"
+ok "committed allowed_signers refuses a tag not signed by promotion"
 
 # unsigned annotated tag
 : > "$LOG"
