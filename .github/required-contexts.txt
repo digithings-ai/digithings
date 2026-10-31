@@ -35,4 +35,3 @@
 
 Required checks passed
 doc-links + agents-init
-mypy — digibase + digikey

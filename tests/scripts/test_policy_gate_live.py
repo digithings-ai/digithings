@@ -39,9 +39,9 @@ SCRIPT = REPO_ROOT / "scripts" / "policy_gate_live.py"
 GUARD = REPO_ROOT / "scripts" / "check_required_policy_checks.py"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "policy-gate-live.yml"
 
-#: The three contexts the committed snapshot names. A "green" fake `gh` returns
+#: The contexts the committed snapshot names. A "green" fake `gh` returns
 #: exactly these, so the green run is the repository's own expected state.
-LIVE_CONTEXTS = ["Required checks passed", "doc-links + agents-init", "mypy — digibase + digikey"]
+LIVE_CONTEXTS = ["Required checks passed", "doc-links + agents-init"]
 
 
 def _load() -> Any:
@@ -202,7 +202,7 @@ def test_drift_is_red_and_keeps_the_guards_evidence(capsys: pytest.CaptureFixtur
         1,
         stdout=(
             "1 policy-gate disagreement(s):\n"
-            "  ::error::[policy.missing-required] mypy — digibase + digikey: is missing\n"
+            "  ::error::[policy.missing-required] doc-links + agents-init: is missing\n"
             + _verdict("drift")
         ),
     )
@@ -358,17 +358,18 @@ def test_end_to_end_drift_when_the_live_set_loses_a_required_context(
 ) -> None:
     """The DoD mutation: live is missing one snapshot context, so the gate is red.
 
-    `mypy — digibase + digikey` is the one dropped, because it is `required` in
+    `doc-links + agents-init` is the one dropped, because it is `required` in
     the inventory; dropping an advisory context would be a different finding.
+    (It was `mypy — digibase + digikey` until ci-type-check.yml was deleted.)
     """
     pytest.importorskip("yaml")
-    mutated = [c for c in LIVE_CONTEXTS if not c.startswith("mypy")]
+    mutated = [c for c in LIVE_CONTEXTS if not c.startswith("doc-links")]
     code = pgl.main([], env=_integration_env(tmp_path, mutated))
 
     captured = capsys.readouterr()
     assert code == 1, captured.out + captured.err
     assert "policy.missing-required" in captured.out
-    assert "mypy — digibase + digikey" in captured.out
+    assert "doc-links + agents-init" in captured.out
     assert "policy-gate-verdict: drift" in captured.out
     assert "DRIFT at" in captured.err
     assert "GREEN" not in captured.err

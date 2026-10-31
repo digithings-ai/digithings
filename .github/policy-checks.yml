@@ -83,7 +83,6 @@ tracked_workflows:
   - ci-pr-title.yml
   - ci-review-coverage.yml
   - ci-docs.yml
-  - ci-type-check.yml
   - security-gitleaks.yml
   - security-workflow-secret-refs.yml
 
@@ -110,15 +109,6 @@ checks:
       Internal markdown link validation plus `agents-init --check`. Its
       `pull_request:` trigger is deliberately unfiltered so the check posts on
       every PR; see the comment in ci-docs.yml.
-
-  - context: mypy — digibase + digikey
-    workflow: ci-type-check.yml
-    job: mypy
-    enforcement: required
-    owner: DevOps
-    reason: >-
-      Type checking for digibase/digikey. Same unfiltered `pull_request:`
-      trigger, for the same reason as ci-docs.yml.
 
   # ── PR-triggered, run and report, gate nothing ──────────────────────────────
   #
