@@ -189,18 +189,19 @@ def test_declaring_a_check_required_that_the_gate_does_not_hold_fails() -> None:
 
 
 def test_every_ungated_policy_check_is_reported() -> None:
-    """The four drift checks DIG-1952 names must all be visible. (DCO sign-off
-    was a fifth until Chris dropped it entirely on 2026-10-15, DIG-3845.)"""
+    """The drift checks DIG-1952 names must all be visible. (DCO sign-off
+    was a fifth until Chris dropped it entirely on 2026-10-15, DIG-3845, and the
+    project-field coverage check went with ci-pr-hygiene.yml in the GHA exit.)"""
     inventory, _tracked = guard.load_inventory(INVENTORY)
     declared = {c.context: c for c in inventory}
     expected = {
         "gitleaks-scan",
-        "All agent-task issues in TSV with real phase and valid model",
         "Validate PR title",
         "Every commit reaching main was reviewed",
     }
     assert expected <= set(declared)
     assert "All commits signed off" not in declared
+    assert "All agent-task issues in TSV with real phase and valid model" not in declared
     for context in expected:
         assert not declared[context].is_required, context
         assert declared[context].reason, f"{context} needs a reason"
@@ -788,10 +789,10 @@ def test_only_the_dispatch_only_workflow_reads_the_live_gate() -> None:
     )
 
     cron = (REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts").read_text(encoding="utf-8")
-    assert 'wd("ci-pr-hygiene"' in cron, "the dispatch row itself must still be there"
-    assert "ci-pr-hygiene" in cron and "enabled: false" in cron, (
-        "the ci-pr-hygiene clock is held off; a job added to it would never run"
-    )
+    # ci-pr-hygiene.yml and its held-off clock were deleted (GHA exit ledger), so
+    # there is no other lane the live read could ride.
+    assert not (WORKFLOWS_DIR / "ci-pr-hygiene.yml").exists()
+    assert 'wd("ci-pr-hygiene"' not in cron, "the deleted workflow's clock must stay gone"
 
 
 def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() -> None:
@@ -812,12 +813,6 @@ def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() ->
         ("doc-links + agents-init", "ci-docs.yml", "docs-and-agents-init", "required"),
         ("mypy — digibase + digikey", "ci-type-check.yml", "mypy", "required"),
         ("gitleaks-scan", "security-gitleaks.yml", "scan", "advisory"),
-        (
-            "All agent-task issues in TSV with real phase and valid model",
-            "ci-pr-hygiene.yml",
-            "coverage",
-            "advisory",
-        ),
         ("Validate PR title", "ci-pr-title.yml", "lint-pr-title", "advisory"),
         (
             "Every commit reaching main was reviewed",
@@ -855,7 +850,6 @@ def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() ->
     ]
     assert sorted(tracked) == [
         "ci-docs.yml",
-        "ci-pr-hygiene.yml",
         "ci-pr-title.yml",
         "ci-review-coverage.yml",
         "ci-type-check.yml",
@@ -1121,21 +1115,21 @@ def test_the_cli_fails_when_the_writer_and_snapshot_drift(tmp_path: Path) -> Non
 
 # ── DIG-2237 C-1: review horizons on the issue-alone advisories ───────────────
 
-#: The three advisory entries whose only support is `issue:` (DIG-2098 rev 8,
-#: correction 1). The ci.yml lanes carry `gated_by:` and the PR reporter
+#: The advisory entries whose only support is `issue:` (DIG-2098 rev 8,
+#: correction 1). There were three until the project-field coverage entry went
+#: with ci-pr-hygiene.yml (GHA exit ledger). The ci.yml lanes carry `gated_by:` and the PR reporter
 #: carries `known_gap:`, so neither class takes a date. `gitleaks-scan` used to
 #: carry a `known_gap:` too, and stopped when the workflow-level
 #: `paths-ignore` was removed upstream (#5318) — the gap went with the filter,
 #: so the entry is issue-alone now and takes a date like the others.
 REVIEW_BY_CONTEXTS = [
     "gitleaks-scan",
-    "All agent-task issues in TSV with real phase and valid model",
     "Validate PR title",
 ]
 
 
-def test_exactly_three_issue_alone_advisories_carry_review_by() -> None:
-    """Correction 1 as a pin: the dates land on exactly these three entries."""
+def test_exactly_the_issue_alone_advisories_carry_review_by() -> None:
+    """Correction 1 as a pin: the dates land on exactly these entries."""
     inventory, _tracked = guard.load_inventory(INVENTORY)
     dated = {c.context: c.review_by for c in inventory if c.review_by}
     assert sorted(dated) == sorted(REVIEW_BY_CONTEXTS), dated

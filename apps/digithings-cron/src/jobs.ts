@@ -384,9 +384,8 @@ export const JOBS: readonly Job[] = [
     enabled: false,
   }),
   wd("agent-backlog-snapshot", "13 6 * * MON", MONOREPO, "agent-backlog-snapshot.yml"),
-  // DIG-4364: disabled_manually on GitHub since the 2026-10-14 cost lock; the
-  // daily 06:21 tick answered 422 every day. See agent-pr-finalizer above.
-  wd("ci-pr-hygiene", "21 6 * * *", MONOREPO, "ci-pr-hygiene.yml", { enabled: false }),
+  // ci-pr-hygiene.yml (disabled since the 2026-10-14 cost lock, DIG-4364) was
+  // deleted with the GHA exit ledger, and its disabled row went with it.
   // DIG-1578: daily census of remote branches carrying no open PR whose head is
   // over 10 days old (docs/ops/branch-hygiene-policy.md §6.2 item 2). Report only —
   // it never deletes and never gates CI; deletion is the tiered run on DIG-1575 and

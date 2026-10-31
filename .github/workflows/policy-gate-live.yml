@@ -10,10 +10,9 @@
 # front of every merge (docs/ops/policy-check-credential.md §1), so it does not
 # go there.
 #
-# It cannot ride `ci-pr-hygiene.yml` either: that workflow is
-# `disabled_manually` since the 2026-10-14 GitHub cost lock (DIG-4364), and its
-# digithings-cron row is `enabled: false`. A job on that lane would be a job
-# that never runs and reports nothing.
+# It cannot ride `ci-pr-hygiene.yml` either: that workflow was disabled by the
+# 2026-10-14 GitHub cost lock (DIG-4364) and has since been deleted with its
+# digithings-cron row (GHA exit ledger).
 #
 # `on.schedule` is not available here at all: tests/scripts/test_no_gha_schedules.py
 # fails CI on any workflow under this directory carrying a schedule, because

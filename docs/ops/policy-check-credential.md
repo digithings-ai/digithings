@@ -422,8 +422,8 @@ Re-measured on 2026-10-07 at 20:03 UTC with the quota freshly reset to 60/60, no
 So the branch-protection read genuinely needs a credential, and `GITHUB_TOKEN`
 cannot be it: `administration` is **not** among the permission keys a workflow
 token can be granted, so no amount of workflow permission configuration reaches
-this endpoint. The check does already run in GitHub Actions
-([`ci-pr-hygiene.yml`](../../.github/workflows/ci-pr-hygiene.yml)); it is the
+this endpoint. The check did already run in GitHub Actions
+(`ci-pr-hygiene.yml`, since deleted with the GHA exit ledger); it is the
 *API read* inside it that needs a credential, and no anonymous substitute exists
 for that.
 

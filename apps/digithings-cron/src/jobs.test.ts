@@ -51,7 +51,7 @@ const PATH_A_ENABLED_IDS = [
   "digiquant-house-run-watch",
 ] as const;
 
-// DIG-4364: four clocks whose workflow the 2026-10-14 GitHub-exit cost lock set
+// DIG-4364: clocks whose workflow the 2026-10-14 GitHub-exit cost lock set
 // to `disabled_manually`. A dispatch to a disabled workflow is a 422 that
 // `isBenign422` does not match, so each tick surfaced as a `scheduled`
 // exception. The rows stay (cron, workflow, inputs) so lifting the lock is one
@@ -60,7 +60,6 @@ const PATH_A_ENABLED_IDS = [
 // asks for.
 const GITHUB_LOCK_DISABLED_IDS = [
   "agent-pr-finalizer",
-  "ci-pr-hygiene",
   "security-pip-audit",
   "security-npm-audit",
 ] as const;
@@ -355,9 +354,9 @@ describe("jobsForCron", () => {
     expect(uniqueEnabledCrons()).toContain("23 7 * * MON");
   });
 
-  it("keeps the four GitHub-lock clocks disabled until the lock lifts (DIG-4364)", () => {
+  it("keeps the GitHub-lock clocks disabled until the lock lifts (DIG-4364)", () => {
     // 2026-10-14 cost lock: `gh api .../actions/workflows/<file>` answers
-    // `disabled_manually` for all four, so each scheduled dispatch is a 422
+    // `disabled_manually` for each, so each scheduled dispatch is a 422
     // (`Cannot trigger a 'workflow_dispatch' on a disabled workflow`) that
     // `isBenign422` deliberately does not match — the tick surfaces as a
     // `scheduled` exception and the job never runs.
@@ -366,7 +365,6 @@ describe("jobsForCron", () => {
     // the workflows are re-enabled on GitHub; it is not this seat's call.
     const expected = [
       ["agent-pr-finalizer", "11 7 * * *", "agent-pr-finalizer.yml"],
-      ["ci-pr-hygiene", "21 6 * * *", "ci-pr-hygiene.yml"],
       ["security-pip-audit", "33 6 * * MON", "security-pip-audit.yml"],
       ["security-npm-audit", "37 6 * * MON", "security-npm-audit.yml"],
     ] as const;

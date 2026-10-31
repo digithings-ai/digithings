@@ -7,7 +7,7 @@ or add a line below like:  Fixes #123   (also accepts Closes / Resolves).
 A PR that traces to a Paperclip issue and has no GitHub issue writes
 Fixes DIG-1234 instead: the pr-template gate accepts that form, and the bare
 `Fixes #` this template starts with fails it ("names no issue number").
-CI check: .github/workflows/ci-pr-hygiene.yml
+CI check: the local-ci `pr-template` gate (scripts/local-ci/local_ci.py)
 -->
 
 Fixes #

@@ -10,8 +10,9 @@
 # push can only fail. Same shape as pipeline-provider-review.yml, which pushes a
 # branch and then opens a PR for exactly this reason.
 #
-# Branch name is `chore/…` on purpose: ci-pr-hygiene.yml's linkage gate bypasses
-# `chore/*` outright, so a generated-data refresh needs no backlog issue to point at.
+# Branch name is `chore/…` on purpose: the PR linkage convention (the gate that
+# lived in the now-deleted ci-pr-hygiene.yml) bypasses `chore/*` outright, so a
+# generated-data refresh needs no backlog issue to point at.
 # The commit is authored by github-actions[bot], which check_review_coverage.py lists
 # in BOT_AUTHORS — so the snapshot commit cannot wedge a later promotion into main on
 # the "every commit was reviewed" gate.
