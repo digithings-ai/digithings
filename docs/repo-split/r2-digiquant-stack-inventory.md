@@ -218,7 +218,8 @@ classify each file before moving anything.
 
 The plan carried a whitelist file, `overlaps-known.txt`, for paths belonging to more than one
 repository. **The whitelist is removed.** Every path gets exactly one owner, measured at the
-anchored tip:
+anchored tip (R6 is superseded by the client repos `digithings-ai/<client-slug>`, D-C2; read an R6 owner
+below as the owning client repo):
 
 | path | owner | note |
 |---|---|---|

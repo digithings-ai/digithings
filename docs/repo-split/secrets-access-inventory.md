@@ -141,6 +141,10 @@ deploy/cron workflows. Moves to: tag-driven deploy from the Mac agent
 
 ## R6 — `digichat-tenants` (private, Origin)
 
+> Superseded 2026-10-29 (D-C2, D-C4): one private `digithings-ai/<client-slug>` repo per
+> client on Forgejo, from `digithings-ai/client-template`. Read R6 below as those repos;
+> `kv-sync` becomes each repo's `deploy/deploy.sh`.
+
 Tenant-data repo: schema + sources only, **no live keys in the repo**.
 `CLOUDFLARE_API_TOKEN` (KV + R2 write scoped, held on the Mac, used by the
 `kv-sync` script), `DIGICHAT_EMBED_TENANTS` content (pushed to KV namespace

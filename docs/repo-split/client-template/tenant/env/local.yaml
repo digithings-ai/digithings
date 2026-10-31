@@ -1,0 +1,10 @@
+# Environment overlay for 'local': host, gate and secret NAMES only (never values).
+environment: local
+host: 127.0.0.1:3471
+gate:
+  mode: ungated
+secrets:
+  # name of the variable or keychain item that holds the value
+  embedToken: EXAMPLE_EMBED_TOKEN
+kv:
+  key: none  # local runs read the file directly; no KV write
