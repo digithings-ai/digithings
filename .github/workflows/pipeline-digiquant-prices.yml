@@ -21,7 +21,7 @@ name: "Pipeline: digiquant prices"
 #   * at-open execution job — reads only (sealed R2 + live same-day opens), not
 #     a market writer.
 #   * fedprob ingest (pipeline-digiquant.yml) + bitview ingest
-#     (pipeline-digiquant-onchain.yml) — untouched; FEDPROB/* + bitview rows
+#     (digithings-cron container row `onchain`) — untouched; FEDPROB/* + bitview rows
 #     have no R2 home and the daily pipeline still reads them from Supabase.
 #   * fx-candles → 1h (730d) + 5m (60d) intraday FX candles every 2h
 #     (fx_intraday_observations is the twelve-x trade-grading feed and has no

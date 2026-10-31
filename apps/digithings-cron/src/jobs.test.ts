@@ -181,7 +181,10 @@ describe("jobsForCron", () => {
       expect(job?.cron).toBe(cron);
       expect(job?.timeoutSeconds).toBe(timeout);
       expect(job?.codeRef).toBe("main");
-      expect(job?.workflow).toBeTruthy();
+      // GHA exit ledger: a row whose fallback workflow file was deleted keeps
+      // its live container clock and carries no workflow.
+      if (id === "onchain") expect(job?.workflow).toBeUndefined();
+      else expect(job?.workflow).toBeTruthy();
       expect(job?.ref).toBe("develop");
       expect(job?.enabled).toBe(true);
     }

@@ -67,7 +67,6 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `pipeline-checkpoint-archive.yml` | Pipeline: checkpoint archive | dispatch (manual override; clock is digithings-cron → digiquant-runner) | Move checkpoint payloads to R2 (#3761) | Working | none |
 | `pipeline-dependency-freshness.yml` | Pipeline: dependency freshness radar | dispatch (CF clock) | Compare `uv.lock` against PyPI latest (DIG-2277) | Working | none |
 | `pipeline-digiquant-allocation-shadow.yml` | Pipeline: allocation shadow | workflow_run, dispatch | Write-denied shadow evaluation of allocation artifacts (#2762) | Working | none |
-| `pipeline-digiquant-onchain.yml` | Pipeline: digiquant on-chain | dispatch (CF clock) | On-chain valuation ingest (#1086) | Working | none |
 | `pipeline-market-data-refresh.yml` | market-data-refresh | dispatch (manual override; clock is digithings-cron → digiquant-runner) | Daily R2 market-data refresh (#3780) | Working | none |
 | `production-deploy-gate-watchdog.yml` | Watch: production deploy gate latency | dispatch (CF clock) | Watch how long production deploys wait in the environment gate (DIG-1569) | Working | none |
 | `publish-digillm-image.yml` | Publish: digillm image | pull_request, push, dispatch | Build, smoke-test and publish the digillm LiteLLM proxy image (DIG-1780) | Working | `paths:` filter |

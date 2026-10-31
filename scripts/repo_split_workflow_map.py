@@ -96,12 +96,6 @@ ROWS: tuple[Row, ...] = (
     ),
     Row(
         "R2",
-        ".github/workflows/pipeline-digiquant-onchain.yml",
-        "cloudflare-cron",
-        clock_ids=("onchain",),
-    ),
-    Row(
-        "R2",
         ".github/workflows/pipeline-digiquant-tearsheets.yml",
         "cloudflare-cron",
         clock_ids=("tearsheets",),

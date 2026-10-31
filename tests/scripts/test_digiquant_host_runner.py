@@ -76,7 +76,8 @@ _exec_spec.loader.exec_module(exec_job)
 # no parentheses in this file; a comment inside a cj call would fail the parse loudly
 # rather than match the wrong row.
 _CJ = re.compile(
-    r'cj\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"[^"]+"\s*,\s*"([^"]+)"\s*,'
+    # The workflow argument is `undefined` once its GHA fallback file is deleted.
+    r'cj\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*(?:"[^"]+"|undefined)\s*,\s*"([^"]+)"\s*,'
     r'\s*"[^"]+"\s*,\s*\d+\s*(?:,\s*(\{[^()]*\}))?\s*,?\s*\)',
     re.S,
 )

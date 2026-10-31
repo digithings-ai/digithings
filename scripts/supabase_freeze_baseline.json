@@ -5,7 +5,6 @@
     ".github/workflows/ci.yml": 1,
     ".github/workflows/execution-cron-check.yml": 8,
     ".github/workflows/pipeline-checkpoint-archive.yml": 8,
-    ".github/workflows/pipeline-digiquant-onchain.yml": 8,
     ".github/workflows/pipeline-digiquant-prices.yml": 24,
     ".github/workflows/pipeline-digiquant-tearsheets.yml": 8,
     ".github/workflows/pipeline-digiquant.yml": 24,

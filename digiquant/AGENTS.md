@@ -291,8 +291,8 @@ On-chain extras (#1086): Bitview/BRK is the free ingest source (`mvrv`,
 fail-soft). MCP `digiquant_fetch_bitview_series` and CLI
 `digiquant onchain fetch-bitview` write parquet under `data/onchain/bitview/`
 and optionally upsert `macro_series_observations` (`source=bitview`). Scheduled
-job: `.github/workflows/pipeline-digiquant-onchain.yml` (persistent failure
-tracker). Local **MVRV-Z** + companion z-series live in
+job: the digithings-cron container row `onchain` (`onchain-bitview` on
+digiquant-runner). Local **MVRV-Z** + companion z-series live in
 `strategies/sdca/onchain_valuation.py` (`OnChainValuationProvider`) and are
 consumable by `compute_composite_risk` — **not published composite votes yet**
 (null-rule would halt SDCA on a Bitview gap). Coverage is BTC-rich; ETH/SOL

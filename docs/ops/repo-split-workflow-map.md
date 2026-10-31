@@ -22,7 +22,6 @@ files stay until DIG-3608. DIG-3697 owns `scripts/deploy/runner.sh` and
 | R2 | `.github/workflows/pipeline-market-data-refresh.yml` | cloudflare-cron | `market-data-refresh-morning`, `market-data-refresh-evening`. |
 | R2 | `.github/workflows/pipeline-research-metrics.yml` | cloudflare-cron | `research-metrics`. |
 | R2 | `.github/workflows/pipeline-digiquant-prices.yml` | cloudflare-cron | `prices-at-open-13`, `prices-at-open-14`, `prices-fx-refresh`, `prices-fx-refresh-sun`, `prices-eod-macro`. |
-| R2 | `.github/workflows/pipeline-digiquant-onchain.yml` | cloudflare-cron | `onchain`. |
 | R2 | `.github/workflows/pipeline-digiquant-tearsheets.yml` | cloudflare-cron | `tearsheets`. |
 | R2 | `.github/workflows/pipeline-digiquant-allocation-shadow.yml` | deletion | Producer workflow is absent. Isolation script stays. DIG-3608 removes the file. |
 | R2 | `.github/workflows/sync-digiquant-runner-digikey-secret.yml` | local-ci | Manual and disarmed. Writes Worker secrets. No API call in this change. |
