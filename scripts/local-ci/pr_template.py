@@ -17,7 +17,15 @@ Checked sections:
 - Change Type: at least one checked box.
 - Summary: non-placeholder prose (HTML comments stripped, >= 20 chars).
 - Testing Evidence: fenced block with content beyond the placeholder.
-- Human Gate: ``Is human review required?`` answered Yes or No.
+- Human Gate: ``Is human review required?`` answered Yes or No, and not
+  answered No while a Human Gate box is checked.
+
+Only the Human Gate findings block a merge. Every other finding is paperwork:
+it is reported as a warning and the gate stays green (dev-flow plan P1-2,
+29 Oct 2026). Template paperwork was 44% of local-ci reds (150 of 342), and a
+red row for a missing summary sentence throws away a CI run without making the
+change any safer. The Human Gate is the one section a merge decision depends
+on, so it stays blocking: ``split_findings`` draws that line.
 """
 
 from __future__ import annotations
@@ -29,8 +37,13 @@ _DIG_LINK_RE = re.compile(r"(?i)\b(?:fixes|closes|resolves)\s+DIG-\d+")
 _BARE_LINK_RE = re.compile(r"(?i)\b(?:fixes|closes|resolves)\s+#\s*(?:\D|$)")
 _CHECKED_RE = re.compile(r"^\s*-\s*\[[xX]\]", re.M)
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
-_HUMAN_GATE_RE = re.compile(r"(?im)^.*is human review required\?\W*(yes|no)\b")
+# One answer, alone on the line: the template's untouched "Yes / No" is not
+# an answer (it used to read as "Yes", so the bare template passed this gate).
+_HUMAN_GATE_RE = re.compile(
+    r"(?im)^.*is human review required\?\W*(yes|no)\b(?![^\n]*\b(?:yes|no)\b)")
 _SUMMARY_MIN = 20
+# Finding prefixes that still fail the gate. Everything else is a warning.
+BLOCKING_PREFIXES = ("human-gate",)
 
 
 def _section(body, heading):
@@ -55,10 +68,13 @@ def check_template(body):
     """
     body = body or ""
     failures = []
+    # The template's own comment shows "Fixes #123" as an example; read the
+    # body without comments so the example cannot count as a link.
+    visible = _stripped(body)
 
-    if _LINK_RE.search(body) or _DIG_LINK_RE.search(body):
+    if _LINK_RE.search(visible) or _DIG_LINK_RE.search(visible):
         pass
-    elif _BARE_LINK_RE.search(body):
+    elif _BARE_LINK_RE.search(visible):
         failures.append("linked-issue: 'Fixes #' names no issue number")
     else:
         failures.append("linked-issue: no 'Fixes|Closes|Resolves #<number>' line")
@@ -87,7 +103,23 @@ def check_template(body):
             failures.append("testing-evidence: fenced block is empty")
 
     gate = _section(body, "Human Gate")
-    if gate is None or not _HUMAN_GATE_RE.search(_stripped(gate)):
+    answer = _HUMAN_GATE_RE.search(_stripped(gate)) if gate is not None else None
+    if answer is None:
         failures.append("human-gate: 'Is human review required?' unanswered (Yes/No)")
+    elif answer.group(1).lower() == "no" and _CHECKED_RE.search(_stripped(gate)):
+        # #6603 and #6601 shipped with a Human Gate box that nothing enforced.
+        # A checked box answered "No" is a contradiction, not paperwork.
+        failures.append("human-gate: a Human Gate box is checked but the answer is No")
 
     return (not failures, failures)
+
+
+def split_findings(failures):
+    """Split ``check_template`` findings into (blocking, warnings).
+
+    Blocking findings start with one of BLOCKING_PREFIXES (the Human Gate);
+    the rest are warnings that local-ci logs and counts but does not fail on.
+    """
+    blocking = [f for f in failures or [] if f.startswith(BLOCKING_PREFIXES)]
+    warnings = [f for f in failures or [] if not f.startswith(BLOCKING_PREFIXES)]
+    return blocking, warnings

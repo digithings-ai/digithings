@@ -42,10 +42,12 @@ encoding that here is how the gate started blocking already-reviewed work).
      findings comment, or check ``success``), Claude ``/code-review`` check
      ``success``, or a submitted review from another bot in ``REVIEW_BOTS``.
      A skip, rate-limit, failure, or "PR is closed" notice is NOT a review;
-  4. the label ``reviewed:agent`` PLUS a comment carrying ``AGENT_REVIEW_MARKER`` —
-     an in-session review ran against the diff and posted its findings. The
-     label without the comment is REFUSED;
-  5. the label ``reviewed:owner`` — "I read this myself." The verdict names who
+  4. a comment carrying ``AGENT_REVIEW_MARKER`` — an in-session review ran
+     against the diff and posted its findings. No ``reviewed:*`` label is
+     needed (Chris, 2026-10-29); the merge queue additionally requires the
+     comment to come from a session that did not write the PR;
+  5. the label ``reviewed:owner`` — read only as legacy evidence, so commits
+     already on history that carried it stay reviewed. The verdict names who
      applied it and when.
 
 All five hang off a pull request, so a commit pushed **straight to a branch** can
@@ -489,8 +491,10 @@ def _apply_reviews_checks_comments(
         if login in CODERABBIT_LOGINS and coderabbit_comment_is_completed_review(body):
             agent_tool.append({"bot": "coderabbitai", "via": "comment"})
     state["agent_tool"] = agent_tool
-    if AGENT_REVIEW_LABEL in state["labels"]:
-        state["agent_review"] = _agent_review_from_comments(comments)
+    # The in-session findings comment is the evidence on its own; the
+    # `reviewed:agent` label that used to accept it was retired (Chris,
+    # 2026-10-29: attribution is by platform, no `reviewed:*` labels).
+    state["agent_review"] = _agent_review_from_comments(comments)
     return state
 
 
@@ -886,7 +890,7 @@ def _pr_review_state(number: int) -> dict:
     # Extra REST only when the hatch is claimed and the first page did not prove it.
     if OWNER_REVIEW_LABEL in labels and not state.get("owner_review"):
         state["owner_review"] = label_provenance(number, OWNER_REVIEW_LABEL)
-    if AGENT_REVIEW_LABEL in labels and not state.get("agent_review"):
+    if not state.get("agent_review"):
         state["agent_review"] = agent_review_comment(number)
     return state
 
@@ -963,8 +967,8 @@ def direct_push_review(sha: str) -> dict | None:
 
     So this demands the same artifact the `reviewed:agent` hatch does, addressed
     to the *commit* rather than to the branch: a comment carrying
-    `AGENT_REVIEW_MARKER` **and** the commit's short sha, on an issue or PR that
-    is itself labelled `reviewed:agent`.
+    `AGENT_REVIEW_MARKER` **and** the commit's short sha, on any issue or PR (the
+    `reviewed:agent` label it once also required was retired on 2026-10-29).
 
     Both halves are load-bearing. The marker alone would let one in-session review
     clear every direct push in the range; the sha alone would let any prose that
@@ -986,8 +990,6 @@ def direct_push_review(sha: str) -> dict | None:
     """
     short = sha[:AGENT_REVIEW_SHA_LEN]
     for number in _sha_mentioned_in(short):
-        if AGENT_REVIEW_LABEL not in _issue_labels(number):
-            continue
         found = agent_review_comment(number, naming=short)
         if found:
             return {**found, "on": number}
@@ -1039,17 +1041,16 @@ def verdict_for(state: dict) -> tuple[bool, str]:
         bots = list(dict.fromkeys(item["bot"] for item in agent_tool))
         return True, f"agent review by {', '.join(bots)}"
     agent = state.get("agent_review")
-    if AGENT_REVIEW_LABEL in state["labels"]:
-        if agent:
-            return True, (
-                f"{AGENT_REVIEW_LABEL}: in-session review by {agent['actor']} "
-                f"at {agent['at']} — {agent['url']}"
-            )
-        return False, (
-            f"{AGENT_REVIEW_LABEL} is set but no comment carries "
-            f"{AGENT_REVIEW_MARKER!r} — the label claims a review ran, so the "
-            "findings have to be posted"
+    # No label is needed: the findings comment is the review (Chris, 2026-10-29
+    # retired the `reviewed:*` labels). The merge queue additionally drops a
+    # comment whose provenance names a session that wrote the PR before it
+    # reaches this function.
+    if agent:
+        return True, (
+            f"in-session review by {agent['actor']} at {agent['at']} — {agent['url']}"
         )
+    # Legacy evidence only: `reviewed:owner` is no longer applied, but commits
+    # promoted under it before 2026-10-29 must keep reading as reviewed.
     if OWNER_REVIEW_LABEL in state["labels"]:
         who = state.get("owner_review") or {}
         if who.get("actor"):
@@ -1061,22 +1062,9 @@ def verdict_for(state: dict) -> tuple[bool, str]:
         )
     if state["bugbot"]:
         return False, f"{BUGBOT_CHECK} reported {state['bugbot'].lower()}"
-    # A near miss is not the same as no evidence, and reporting it as the latter
-    # is actively misleading: on 2026-10-27 the promotion gate said "no completed
-    # agent review (… in-session)" about two PRs that *did* carry an in-session
-    # review comment and were missing only the label that accepts it. The
-    # operator read that as a broken detector, not as a missing label, and went
-    # looking for a bug that was not there. Name the gap.
-    if agent:
-        return False, (
-            f"an in-session review comment exists ({agent['url']}) but the PR is "
-            f"not labelled {AGENT_REVIEW_LABEL!r} — the label is what accepts it. "
-            f"Apply {AGENT_REVIEW_LABEL}, or {OWNER_REVIEW_LABEL} if you read the "
-            "diff yourself"
-        )
     return False, (
-        "no completed agent review (Bugbot, CodeRabbit, Claude, in-session), "
-        f"no approval, and no {OWNER_REVIEW_LABEL}"
+        "no completed agent review (Bugbot, CodeRabbit, Claude, or an in-session "
+        f"findings comment carrying {AGENT_REVIEW_MARKER!r}) and no approval"
     )
 
 
@@ -1211,8 +1199,7 @@ def main() -> int:
                 reviewed=False,
                 why=(
                     "has no merged source pull request — pushed straight to the branch? "
-                    f"Post an in-session review quoting {short} on an issue or PR "
-                    f"labelled {AGENT_REVIEW_LABEL}"
+                    f"Post an in-session review quoting {short} on an issue or PR"
                 ),
             )
             unreviewed.append(row)
@@ -1251,20 +1238,18 @@ def main() -> int:
             f"  • it needs a machine review → comment `bugbot run` or `@coderabbitai "
             f"review` on its PR, or wait for the {BUGBOT_CHECK} check to conclude "
             "success\n"
-            f"  • an agent can review it    → run `/review <N>`; it posts findings and "
-            f"applies `{AGENT_REVIEW_LABEL}`\n"
-            f"  • you read it yourself      → label the PR `{OWNER_REVIEW_LABEL}`; the "
-            "actor and timestamp are recorded in the verdict\n"
-            "  • someone else read it      → approve the PR\n"
+            "  • an agent can review it    → run `/review <N>` in a session that did "
+            "not write the PR (any platform); it posts the findings comment\n"
+            "  • someone read it           → approve the PR\n"
             "  • it has no PR at all       → review it, then post the findings with "
             f"`{AGENT_REVIEW_MARKER}` and the commit's {AGENT_REVIEW_SHA_LEN}-char sha "
-            f"on an issue or PR labelled `{AGENT_REVIEW_LABEL}`\n"
+            "on an issue or PR\n"
             "Address the findings on the same branch before merge. A large follow-up "
             "fix is a new review loop, not a reason to skip this one.\n"
-            "\nThe label hatches are accountability records: "
-            f"`{OWNER_REVIEW_LABEL}` means you read it, with actor and timestamp recorded.\n"
-            "This gate never fails because an external service is unavailable — a "
-            "label or an approval always clears it.",
+            "\nNo `reviewed:*` label is needed or accepted as new evidence "
+            f"(`{OWNER_REVIEW_LABEL}` is read only on history from before 2026-10-29).\n"
+            "This gate never fails because an external service is unavailable — an "
+            "approval always clears it.",
             file=sys.stderr,
         )
         return 1

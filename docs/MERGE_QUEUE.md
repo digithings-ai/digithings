@@ -70,12 +70,14 @@ without QA doing anything. PRs #5489 and #5277 had already shown the cost (merge
 with zero reviews and zero comments). The review that counts is an artifact on the PR: a
 review pass by the board's reviewer seats that left its findings there, with those comments
 resolved or addressed (Chris's 2026-10-15 definition). No formal approval is required
-— but the pass must come from a seat that did not write the code, and the authoring
+— but the pass must come from a session that did not write the code, and the authoring
 lane's own write-up does not stand in for it. Since DIG-5220 (22 Oct 2026) the queue
-enforces that: a `reviewed:agent` label counts only when the findings comment carries a
-`digithings-review` marker that resolves against the Paperclip record to another seat and
-names the current head. A marker naming the author seat, a placeholder marker, or no
-marker at all is dropped, and the PR waits for another seat's pass. QA is
+enforces that, and since 2026-10-29 it does so by platform and session, with no
+`reviewed:*` label: a findings comment counts only when its `digithings-review` marker
+names the current head and a session that did not write the PR (see
+[Reviewer independence](#reviewer-independence)). A marker from an authoring session, a
+placeholder marker, or no marker at all is dropped, and the PR waits for another
+session's pass. QA is
 not in the review path, and a `qa/gate` commit status is ignored in both directions.
 
 ## What may be merged
@@ -92,8 +94,8 @@ not in the review path, and a `qa/gate` commit status is ignored in both directi
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. `BEHIND` is the one stale state a `run` clears by itself — see the stale-branch rule below — so it is not left for a human. |
 | Review | No outstanding `CHANGES_REQUESTED` review, and no review verdict blocks the head the PR stands at. A verdict is read from the `opencode-power-pack:code-review` marker or from a `Review verdict:` line, whichever is newer; the marker wins inside one comment. The ordering rule is [The verdict rule](#the-verdict-rule). Review *evidence* is the row below: the formal non-author approval demand was **retired on 2026-10-18** (every seat pushes under one GitHub login, so GitHub refuses a self-approval), and `--attest-review` is **removed** — the queue no longer reads an attestation in place of evidence. A marker-verified pass from a seat that did not write the code is still required, and since DIG-5220 it is enforced. |
-| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review with its findings comment (`reviewed:agent` plus the marker comment), an approval, or `reviewed:owner`. An in-session review counts only when the reviewer-independence gate accepts its marker as another seat's: the authoring lane's own write-up is not review coverage, and neither is a write-up whose marker is missing, placeholder, or names an older head. |
-| Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a seat that did not write the PR's code. The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from an authoring seat, or that seat's own marker posted while its own run was still active, is dropped — the PR then waits for a review from another seat. The gate is **enforced** in the shipped policy since DIG-5220 (22 Oct 2026). See [Reviewer independence](#reviewer-independence). |
+| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bugbot run, a reviewer bot (CodeRabbit, Copilot, Claude, …), an in-session review findings comment (no label needed since 2026-10-29), or an approval; `reviewed:owner` is still read on history only. An in-session review counts only when the reviewer-independence gate accepts its marker as another session's: the authoring lane's own write-up is not review coverage, and neither is a write-up whose marker is missing, placeholder, or names an older head. |
+| Reviewer independence | A review marker counts only if it names the head the PR stands at now **and** comes from a session that did not write the PR — on any platform, the author's own included (Chris, 2026-10-29). The last marker on the PR is the one judged: an earlier marker does not rescue a failing one. A marker from an authoring session, or from the author's seat or platform when the authoring session is unknown, is dropped — the PR then waits for a review from another session. The gate is **enforced** in the shipped policy since DIG-5220 (22 Oct 2026). See [Reviewer independence](#reviewer-independence). |
 | Review comments addressed | No review thread on the current code may be open: each must be resolved, or outdated by a later commit. An unreadable thread list holds the PR. |
 | Change requests | A `CHANGES_REQUESTED` review decision, or a posted code-review verdict of `changes_requested`, blocks **only the head it was made against**. A verdict naming another commit — a head the PR has since left — neither holds the current head nor asks the seat that posted it to re-review one it never read (#6263). A block on the current head still blocks exactly as before, and it belongs to the seat that posted it: that seat's later approve clears it, and only when the approve names the head the PR stands at — another seat's approve clears nothing, and an approve on an old head does not vouch for new code. **An approve on the same, unchanged head the block names clears it only when it also carries a `Withdraws:` line naming that block (DIG-5246)**: an approve says the code is good, not that the finding was dealt with. A marker verdict names that head by its own `scope=`; the provenance marker's `head=` is the fallback for a marker with no `scope=` and never a second binding for one that has it. See [The verdict rule](#the-verdict-rule). |
 | Ignored | `qa/gate` commit statuses: neither a pass nor a block. |
@@ -113,26 +115,30 @@ marker it cannot parse, one level up: *a missing signal, not a clearance.* `#590
 its row arrived without comments — the coverage gate authorised the merge, and the queue's
 own audit comment names that gate.
 
-**A verdict is scoped to the head it was made against.** A review verdict is a
-statement about one commit. A block naming a commit the PR has left says nothing
-about the head it stands at: it does not hold the PR, and it does not ask the
-seat that posted it to review a head it never read. `#6263` was approved at 01:01
-on `177278b680f4` and handed back at 01:05 because a `changes_requested` against
-`a87fc55760e9` still stood — 13 PRs were stuck that way, each waiting for the
-same seat to re-approve code it had not seen. A block on the current head still
-blocks exactly as before, and an approve on an old head still clears nothing: the
-scope cuts both ways, so it cannot be used to let an old verdict vouch for new
-code.
+**A push does not spend a block.** A review verdict is a statement about one commit, so
+an approve counts only on the head it names. A block is different: it is answered by a
+reviewer, never by the branch moving. `#6399` (2026-10-24) scoped blocks to the head they
+named, so any push — a one-line commit, a rebase, a merge from develop — retired a standing
+`changes_requested`, the security desk's included, and the PR merged on coverage evidence
+alone (an in-session marker plus a `reviewed:*` label). Every seat pushes under one GitHub
+login, so the author could retire a block it never answered. That reversed the DIG-4878 and
+DIG-4911 protections the `#6071` and `#6170` incidents produced, and the security desk filed
+it as T4. Since T4 a block on an older commit stands until:
 
-This replaces the DIG-4878 rule ("a verdict is not spent by the branch moving"),
-which counted a block on any ancestor of the head. The finding that produced it —
-six `digithings` PRs merged between 2026-10-20 and 2026-10-21 with a
-`changes_requested` still on the branch (`#6115`, `#6074`, `#6071`, `#6019`,
-`#5968`, `#5761`) — is now answered by the coverage gate instead: review evidence
-must still exist on the head. What a stale block did not buy was a second review
-of the current head; it bought an indefinite hold cleared only by the seat that
-posted it. The full ordering rule is [The verdict rule](#the-verdict-rule) below
-— one place, so no two seats read it differently.
+- **the seat that posted it posts a verdict on the current head** — its approve naming the
+  head clears it with no `Withdraws:` line, which is how the `#6263` handback (approved at
+  01:01 on `177278b680f4`, handed back at 01:05 for a `changes_requested` against
+  `a87fc55760e9`) is answered now: by the seat re-reviewing, not by the push; or
+- **for a block whose seat cannot be read, a newer verdict names the current head** (clause 2
+  below); or
+- **for a native GitHub `CHANGES_REQUESTED`, the review is dismissed or its reviewer reviews
+  again.** GitHub keeps `reviewDecision` after a push and records who dismissed a review and
+  why; that dismissal is the audited override. The queue adds no override label of its own:
+  every seat can apply labels under the shared login, so a label is not an audited human act.
+
+Another seat's approve never clears a seat's block, with or without a `Withdraws:` line. The
+full ordering rule is [The verdict rule](#the-verdict-rule) below — one place, so no two
+seats read it differently.
 
 **`NEUTRAL` and `SKIPPED` fail a required check.** A required check that reports nothing
 is indistinguishable from a check that was never asked to run — which is exactly the hole
@@ -163,14 +169,13 @@ The verdict gate asks one question: **does any verdict on this PR block the head
 stands at?** The rule is one scoping step and two clauses, in this order. It is written
 here and nowhere else, so no two seats read it differently (#6263, DIG-4878, DIG-4911).
 
-0. **Every verdict is scoped to the head it names.** This is the question both clauses
-   ask, settled first: a verdict naming another commit is a statement about code the PR
-   has left. It does not block the current head and it clears nothing on it. A verdict
-   that names no head at all — no `scope=`, no provenance `head=`, no sha in the prose —
-   is not stale, because there is nothing to be stale against, so it blocks as it always
-   did; reading it as a clearance would soften the gate, which this rule does not do.
-1. **A seat's own block stands until that seat clears it.** A blocking verdict on the
-   current head belongs to the seat that posted it. That seat's later approve clears it,
+0. **A push spends nothing.** An approve counts only when it names the head the PR stands
+   at; an approve naming another commit clears nothing. A block counts whatever head it
+   names (T4, from `#6399`): the branch moving is the author's act, not an answer to the
+   block. A verdict that names no head at all — no `scope=`, no provenance `head=`, no sha
+   in the prose — blocks as it always did.
+1. **A seat's own block stands until that seat clears it.** A blocking verdict belongs to
+   the seat that posted it, whichever head it names. That seat's later approve clears it,
    and only when the approve names the head the PR stands at. An approve naming another
    head clears nothing, and **another seat's approve clears nothing either**. **When the
    approve names the same, unchanged head the block names, it must also carry a
@@ -179,24 +184,35 @@ here and nowhere else, so no two seats read it differently (#6263, DIG-4878, DIG
    `#6280` merged on 2026-10-22 because the code reviewer's 12:04 approve on the same
    head `b1c5fde73ef8` silently cleared its own 10:21 `changes requested`; the two
    blockers were still open and landed in `develop` (fix routed as DIG-5245). Going the
-   other way needs no line: **a new head with a fresh approve** clears, because the old
-   block named a commit the PR has left. That is not true of a block that names no head
+   other way needs no line: **a new head with a fresh approve from the seat that blocked**
+   clears, because that seat has now posted a verdict on the head the PR stands at. That is not true of a block that names no head
    (its `scope=` did not parse, DIG-5630): it is spent only by the seat's approve naming
    the current head plus a `Withdraws:` line with no sha on it, and the queue's handback
    for it says so. `#6170` (DIG-4911) merged into `develop` on
    2026-10-21 with the security desk's `changes requested` still on the branch: the code
    reviewer's later approve on the head was the newest readable verdict, and nothing had
-   ever asked the queue to wait for the second sign-off. (The block in that timeline named
-   `fb309e6458`, a commit the merged head had left, so under the rule above it no longer
-   holds a later head — the seat rule is unchanged for a block that names the head.)
+   ever asked the queue to wait for the second sign-off. The block in that timeline named
+   `fb309e6458`, a commit the merged head had left; between `#6399` and T4 that was enough
+   to spend it, and since T4 it holds `cd17d6539b` until the security desk approves it.
 2. **Everything else is judged by the newest readable verdict.** The newest readable
-   verdict is the one that counts: a blocking verdict blocks when it names the head the PR
-   stands at (or names no head at all, which cannot be stale); an approve clears only when
-   it names the head the PR stands at; a verdict the queue cannot read is skipped, not
+   verdict is the one that counts: a blocking verdict blocks whatever head it names (T4);
+   an approve clears only when it names the head the PR stands at; a verdict the queue cannot read is skipped, not
    read as a clearance.
 
-**A clearance names a seat that did not write the PR.** When a `changes_requested` on the
-current head would be cleared by the newest approve, that approve must carry the
+**Identity and independence compose (#6665 with #6667).** Clause 1's "seat" is the
+verdict's identity: its Paperclip seat (`agent=`), or, for a verdict from outside
+Paperclip, the platform its provenance marker names (`platform=claude|cursor|grokbot`;
+attribution is by platform, Chris 2026-10-29). A Cursor session's block is cleared only by a
+Cursor verdict on the current head. The clearing approve, whichever clause accepted it, must
+also come from a session that did not write the PR, judged as in [Reviewer
+independence](#reviewer-independence): another seat clears; an author seat clears only from a
+fresh run; a `platform=`/`session=` approve clears only from a session no commit names (and
+not at all on the author's platform when its authoring session is unknown); an approve that
+names no seat or session clears nothing once anything says who wrote the PR. So a stale
+block needs the **same identity** and an **independent session**.
+
+**A clearance names a seat that did not write the PR.** When a `changes_requested` (on the
+current head or, since T4, an older one) would be cleared by the newest approve, that approve must carry the
 provenance marker's `agent=`, and that seat must not be one of the seats that wrote the
 PR (#4990, item 3). A comment that says "approve" with no marker, or one from an
 authoring seat, clears nothing while the block stands: `#6197` merged on the author's own
@@ -579,10 +595,15 @@ gate (`scripts/merge_queue.py`, `_review_coverage`):
    the head as 7, 8, 12 and 40 characters, and a check that wanted exactly 12
    would read a valid 7-character marker as naming nothing at all. Fewer than
    7 characters binds no head.
-2. **The marker comes from another seat.** The seat that *wrote the PR's code*
-   cannot be the seat whose review counts: not through its own comment, and not
-   through a subagent or same-session review it posted while its own run on that
-   ticket was still active. **Ownership is not authorship.** The seat a ticket is
+2. **The marker comes from another session.** Attribution is by **platform** —
+   Claude, Cursor, Grok Bot, the Paperclip board — with no per-seat breakdown,
+   and independence is by **session** (Chris, 2026-10-29): a fresh session on
+   the author's own platform, or a fresh Paperclip run of the author's own seat,
+   is an independent reviewer. The session that *wrote the PR's code* cannot be
+   the one whose review counts, including a subagent review posted under its run
+   id. The gate stays fail-closed: when the author's platform or seat is known
+   but the session that wrote the PR is not, a review from that platform or seat
+   cannot be shown to be fresh and is dropped. **Ownership is not authorship.** The seat a ticket is
    assigned to is the seat asked to move the ticket along, not the seat that
    wrote the code, and a reviewer that owns the ticket still reviews — reading
    the assignee as the author refused the review of the very seat that owns the
@@ -594,8 +615,25 @@ question (`_verdict_value_reason`), and it runs first: PR #5994 above is refused
 verdict gate before this gate is reached (DIG-4878). The two gates stay apart on purpose —
 this one is about provenance, that one about the verdict.
 
+**Platforms, sessions and markers.** `review_independence.platforms` in
+`scripts/merge_queue_policy.json` maps identities to platforms: GitHub logins,
+the Forgejo users `claude`, `cursor`, `grokbot`, `paperclip`, and Paperclip seats
+(`*` = every seat is the board's platform). The shared org login maps to none. A
+Paperclip review writes `<!-- digithings-review agent=<seat> run=<run> head=<sha> -->`
+and the run is checked through the Paperclip API; any other platform writes
+`<!-- digithings-review platform=<claude|cursor|grokbot> session=<id> head=<sha> -->`.
+A commit written outside Paperclip names its author with `Source-Platform:` and
+`Source-Session:` trailers; a trailer naming an unknown platform or a placeholder
+session makes the author unidentifiable, and the PR waits. A marker whose
+platform disagrees with the mapped platform of the identity that posted it is
+dropped. An approve that clears a `changes_requested` block follows the same
+rule: a fresh run of an author seat may clear it, the authoring run may not.
+
 **Who wrote the code.** The author is read from the branch, not from the ticket
-header:
+header. The sessions that wrote it are the `Paperclip-Run-Id:` and
+`Source-Session:` trailers plus every run of an author seat whose window covers
+a commit's author date; a later run of the same seat that covers no commit is a
+fresh session. The seats:
 
 * the seat the commits declare — `Paperclip-Agent-Id: <uuid>` in a commit body,
   and `Paperclip-Run-Id: <uuid>` resolved through the Paperclip API to the seat

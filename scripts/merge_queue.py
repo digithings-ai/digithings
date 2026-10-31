@@ -300,6 +300,24 @@ class Authority:
 #: non-author review, because shadow merged what it had just measured.
 REVIEW_INDEPENDENCE_MODES = ("off", "shadow", "enforce")
 
+#: The platforms work is attributed to (Chris, 2026-10-29): attribution is by
+#: platform only, with no per-seat breakdown. Every Paperclip seat is the one
+#: `paperclip` platform (the Paperclip board).
+PLATFORMS = ("claude", "cursor", "grokbot", "paperclip")
+
+#: The identity kinds a platform entry in the policy may list.
+PLATFORM_IDENTITY_KINDS = ("github_logins", "forgejo_users", "paperclip_seats")
+
+#: The mapping the gate uses when the policy names none. `paperclip_seats`
+#: `*` means every Paperclip seat; a review whose run resolves to any seat is a
+#: `paperclip` review.
+DEFAULT_PLATFORM_IDENTITIES: Mapping[str, Mapping[str, tuple[str, ...]]] = {
+    "claude": {"github_logins": ("claude[bot]",), "forgejo_users": ("claude",)},
+    "cursor": {"github_logins": ("cursor[bot]",), "forgejo_users": ("cursor",)},
+    "grokbot": {"forgejo_users": ("grokbot",)},
+    "paperclip": {"forgejo_users": ("paperclip",), "paperclip_seats": ("*",)},
+}
+
 
 @dataclass(frozen=True)
 class ReviewIndependence:
@@ -322,6 +340,34 @@ class ReviewIndependence:
     #: a test must not write the live queue's cache. The policy loader fills
     #: this in with `PROVENANCE_CACHE_PATH_DEFAULT`.
     cache_path: str = ""
+    #: Which identities belong to which platform: platform -> identity kind ->
+    #: identities (see `PLATFORM_IDENTITY_KINDS`). Used to name the reviewing
+    #: and authoring platform; independence itself is decided by session.
+    platforms: Mapping[str, Mapping[str, tuple[str, ...]]] = field(
+        default_factory=lambda: DEFAULT_PLATFORM_IDENTITIES
+    )
+
+
+def platform_for(cfg: ReviewIndependence | None, kind: str, identity: str) -> str:
+    """The platform an identity belongs to, or "" when the mapping names none.
+
+    `kind` is one of `PLATFORM_IDENTITY_KINDS`. GitHub logins are compared
+    case-insensitively. The shared org login every seat pushes under maps to no
+    platform on purpose: it cannot say which platform wrote anything.
+    """
+    platforms = cfg.platforms if cfg is not None else DEFAULT_PLATFORM_IDENTITIES
+    wanted = str(identity or "").strip().lower()
+    if not wanted:
+        return ""
+    wildcard = ""
+    for platform, kinds in platforms.items():
+        names = [str(n).strip().lower() for n in (kinds.get(kind) or ())]
+        if wanted in names:
+            return platform
+        if kind == "paperclip_seats" and "*" in names and not wildcard:
+            wildcard = platform
+    # An exact listing wins over `*`, whatever order the policy file uses.
+    return wildcard
 
 
 def _effective_mode(cfg: ReviewIndependence) -> str:
@@ -718,7 +764,65 @@ def _load_review_independence(raw: Mapping[str, Any], path: Path) -> ReviewIndep
             or "~/.config/digithings/merge-queue/reviewer-independence.log"
         ),
         cache_path=str(block.get("cache_path") or PROVENANCE_CACHE_PATH_DEFAULT),
+        platforms=_load_platforms(block.get("platforms"), path),
     )
+
+
+def _load_platforms(
+    raw: Any, path: Path
+) -> Mapping[str, Mapping[str, tuple[str, ...]]]:
+    """The `review_independence.platforms` block: platform -> identities.
+
+    No block means the shipped mapping. A block that names a platform outside
+    `PLATFORMS`, an identity kind outside `PLATFORM_IDENTITY_KINDS`, or a value
+    that is not a list of non-empty strings is a broken policy file, and the
+    queue refuses to start on it rather than guess. One identity may not belong
+    to two platforms: attribution is by platform, so it has to be one.
+    """
+    if raw is None:
+        return DEFAULT_PLATFORM_IDENTITIES
+    if not isinstance(raw, Mapping):
+        raise QueueError(f"{path}: review_independence.platforms must be an object")
+    loaded: dict[str, dict[str, tuple[str, ...]]] = {}
+    seen: dict[tuple[str, str], str] = {}
+    for platform, kinds in raw.items():
+        name = str(platform)
+        if name.endswith("_note"):
+            continue
+        if name not in PLATFORMS:
+            raise QueueError(
+                f"{path}: review_independence.platforms names {name!r}, which is "
+                f"not one of {', '.join(PLATFORMS)}"
+            )
+        if not isinstance(kinds, Mapping):
+            raise QueueError(
+                f"{path}: review_independence.platforms.{name} must be an object"
+            )
+        entry: dict[str, tuple[str, ...]] = {}
+        for kind, names in kinds.items():
+            if kind not in PLATFORM_IDENTITY_KINDS:
+                raise QueueError(
+                    f"{path}: review_independence.platforms.{name}.{kind} is not one "
+                    f"of {', '.join(PLATFORM_IDENTITY_KINDS)}"
+                )
+            if not isinstance(names, list) or not all(
+                isinstance(n, str) and n.strip() for n in names
+            ):
+                raise QueueError(
+                    f"{path}: review_independence.platforms.{name}.{kind} must be a "
+                    "JSON array of non-empty strings"
+                )
+            for n in names:
+                key = (kind, n.strip().lower())
+                if key in seen and seen[key] != name:
+                    raise QueueError(
+                        f"{path}: {kind} {n!r} is listed under both {seen[key]!r} "
+                        f"and {name!r}"
+                    )
+                seen[key] = name
+            entry[kind] = tuple(n.strip() for n in names)
+        loaded[name] = entry
+    return loaded
 
 
 def _gh_json(*args: str, timeout: float | None = None) -> Any:
@@ -2577,6 +2681,14 @@ class PostedVerdict:
     # comment carries no readable seat: every seat shares one GitHub login, so
     # there is nothing else to tell them apart by.
     seat: str = ""
+    # The Paperclip run (the session) the provenance marker names, when it is a
+    # run id. Read so a fresh run of the author's own seat can clear a block.
+    run: str = ""
+    # The platform and session a non-Paperclip verdict names
+    # (`platform=<p> session=<id>`). The platform is the verdict's identity
+    # when it carries no seat: attribution is by platform (Chris, 2026-10-29).
+    platform: str = ""
+    session: str = ""
     # A `Withdraws:` line in this comment, and the heads it names. Read only on
     # an approve, and only against the seat's own standing block (DIG-5246).
     withdrawal: bool = False
@@ -2592,6 +2704,35 @@ def _comment_seat(provenance: Mapping[str, str]) -> str:
     """
     agent = str(provenance.get("agent") or "").strip().lower()
     return agent if agent and _UUID_RE.match(agent) else ""
+
+
+def _comment_run(provenance: Mapping[str, str]) -> str:
+    """The Paperclip run this comment names, or "" when it names none."""
+    run = str(provenance.get("run") or "").strip().lower()
+    return run if run and _UUID_RE.match(run) else ""
+
+
+def _verdict_identity(verdict: PostedVerdict) -> str:
+    """Who a verdict belongs to, for the sticky-block rule, or "".
+
+    A Paperclip verdict belongs to its seat. A verdict from outside Paperclip
+    belongs to the platform its `platform=` marker names: attribution is by
+    platform with no per-seat breakdown (Chris, 2026-10-29), so a block a
+    Cursor session posted is Cursor's, and only Cursor clears it. A verdict
+    that names neither is judged by the newest-verdict rule.
+    """
+    if verdict.seat:
+        return verdict.seat
+    if verdict.platform in PLATFORMS and verdict.platform != "paperclip":
+        return f"platform:{verdict.platform}"
+    return ""
+
+
+def _identity_text(verdict: PostedVerdict) -> str:
+    """The identity a refusal names: `seat <uuid>` or `platform `<p>``."""
+    if verdict.seat:
+        return f"seat {verdict.seat}"
+    return f"platform `{verdict.platform}`"
 
 
 def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
@@ -2657,6 +2798,9 @@ def _comment_verdict(comment: Mapping[str, Any]) -> PostedVerdict | None:
         author=login,
         at=str(comment.get("createdAt") or ""),
         seat=_comment_seat(provenance),
+        run=_comment_run(provenance),
+        platform=str(provenance.get("platform") or "").strip().lower(),
+        session=str(provenance.get("session") or "").strip(),
         withdrawal=withdrawal,
         withdrawn_heads=withdrawn_heads,
     )
@@ -2701,18 +2845,22 @@ def _covers_head(verdict: PostedVerdict, head: str) -> bool:
 def verdict_applies_to_head(verdict: PostedVerdict, head: str) -> bool:
     """True when a verdict is a statement about the head the PR stands at.
 
-    A review verdict is a statement about one commit. A verdict naming another
-    commit is a statement about code the PR has left: it must not hold this
-    head, and it must not clear a block on it either. That is the #6263
-    handback — approved at 01:01 on `177278b680f4`, handed back at 01:05
-    because a `changes_requested` against `a87fc55760e9` still stood — and it
-    is a staleness bug, not a reason to ask the same seat to review a head it
-    never read.
+    A review verdict is a statement about one commit. This answers which commit
+    that is; it does not decide whether a block is spent. An approve naming
+    another commit still clears nothing on this head. A block naming another
+    commit is NOT spent by the branch moving (T4, from #6399): a push, a
+    rebase or a merge from develop is something the author does, and every seat
+    pushes under one GitHub login, so letting the push retire the block let the
+    author retire a security block without answering it. The block stands
+    until the seat that posted it posts a verdict on the current head
+    (`_standing_seat_blocks`), or — for a block whose seat cannot be read — a
+    newer verdict naming the current head replaces it (clause 2 of
+    `_verdict_value_reason`). The #6263 handback is answered by the same seat
+    re-reviewing the head, which clears its own older block with no
+    `Withdraws:` line.
 
     A verdict that names no head at all is not stale: there is nothing to be
-    stale against, so it keeps the treatment it had before this rule and
-    counts. Refusing to read it would be a review-softening change, not this
-    one.
+    stale against, so it counts.
     """
     if not verdict.bindings:
         return True
@@ -2731,9 +2879,10 @@ def _withdraws(approve: PostedVerdict, block: PostedVerdict | None) -> bool:
 
     The line names the block by the head it names, or — for a block that names
     no head — by naming none itself. A line naming a head that is not the
-    block's spends nothing. A block on a head the PR has left is already spent
-    by the branch moving (`verdict_applies_to_head`), so "a new head and a fresh
-    approve" needs no withdrawal.
+    block's spends nothing. A block on a head the PR has left is not spent by
+    the branch moving (T4); the same seat's approve naming the new head clears
+    it with no withdrawal line (`_seat_clears`), so "a new head and a fresh
+    approve from the seat that blocked" is still a way out.
     """
     if block is None:
         return True
@@ -2750,6 +2899,29 @@ def _withdraws(approve: PostedVerdict, block: PostedVerdict | None) -> bool:
     )
 
 
+def _seat_clears(approve: PostedVerdict, block: PostedVerdict | None, head: str) -> bool:
+    """True when the blocking seat's own `approve` clears its `block` at `head`.
+
+    The approve has to name the head the PR stands at: an approve on any other
+    commit says nothing about this one. Then:
+
+    * a block naming another commit is cleared — the seat has posted a verdict
+      on the current head, which is the #6263 handback answered by the seat
+      that blocked rather than by the push;
+    * a block naming this same head is cleared only by a `Withdraws:` line
+      naming it (`_withdraws`, DIG-5246);
+    * a block naming no head is cleared only by a bare `Withdraws:` line
+      (DIG-5630), because no head can be "another commit" for it.
+    """
+    if block is None:
+        return True
+    if not _covers_head(approve, head):
+        return False
+    if block.bindings and not _covers_head(block, head):
+        return True
+    return _withdraws(approve, block)
+
+
 def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     """The blocks the seats who posted them have not cleared, oldest first.
 
@@ -2761,12 +2933,13 @@ def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     security desk's `changes requested` on the branch, because the code
     reviewer's later approve on the head was the newest readable verdict.
 
-    An approve on the same, unchanged head as the seat's own block clears it
-    only when the approve carries a `Withdraws:` line naming that block
-    (`_withdraws`, DIG-5246). The head moving does the clearing on its own:
-    every verdict is first scoped to the head it names
-    (`verdict_applies_to_head`), and a seat that blocked a commit the PR has
-    left has not asked for changes to the head it stands at now.
+    The head moving clears nothing (T4, from #6399). A block on a commit the PR
+    has left still stands, because the push that left it is the author's act,
+    not the reviewer's. The blocking seat clears it by approving the head the
+    PR stands at now, with no `Withdraws:` line needed (`_seat_clears`). An
+    approve on the same, unchanged head as the seat's own block clears it only
+    when the approve carries a `Withdraws:` line naming that block
+    (`_withdraws`, DIG-5246).
 
     A verdict whose seat cannot be read is not judged here: the seat is
     unknown, so the newest-verdict rule (`_latest_posted_verdict`) judges it.
@@ -2775,8 +2948,10 @@ def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     """
     by_seat: dict[str, list[PostedVerdict]] = {}
     for verdict in _readable_verdicts(pr):
-        if verdict.seat:
-            by_seat.setdefault(verdict.seat, []).append(verdict)
+        # The seat, or outside Paperclip the platform (`_verdict_identity`).
+        identity = _verdict_identity(verdict)
+        if identity:
+            by_seat.setdefault(identity, []).append(verdict)
     standing: list[PostedVerdict] = []
     for verdicts in by_seat.values():
         block: PostedVerdict | None = None
@@ -2786,9 +2961,11 @@ def _standing_seat_blocks(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
                 # unchanged head only one that withdraws it. An approve naming
                 # another head says nothing about this one and leaves the block
                 # alone.
-                if _covers_head(verdict, head) and _withdraws(verdict, block):
+                if _seat_clears(verdict, block, head):
                     block = None
-            elif verdict_applies_to_head(verdict, head):
+            else:
+                # A block stands whatever head it names: the branch moving does
+                # not spend it (T4).
                 block = verdict
         if block is not None:
             standing.append(block)
@@ -2836,16 +3013,16 @@ def _unbound_block_clearance(head_text: str) -> str:
 def _blocks_on_head(pr: dict[str, Any], head: str) -> list[PostedVerdict]:
     """The blocking verdicts that still speak for the head the PR stands at.
 
-    A block naming another commit is spent by the branch moving
-    (`verdict_applies_to_head`): it is not a `changes_requested` this gate can
-    clear, and it asks no seat for anything. A block that names no head is not
-    stale, so it is counted.
+    Every readable block counts, whatever head it names: the branch moving does
+    not spend a block (T4, from #6399), so an approve that clears one has to
+    pass the same non-author check whether the block named this head or an
+    older one. `head` is kept for the callers' signature.
     """
+    del head
     return [
         verdict
         for verdict in _readable_verdicts(pr)
         if verdict.verdict in BLOCKING_VERDICTS
-        and verdict_applies_to_head(verdict, head)
     ]
 
 
@@ -2872,6 +3049,14 @@ def _clearance_seat_reason(
     reading it as the author refused the ticket owner's review on #6145
     (DIG-4809).
 
+    Since #6667 the question is the session, not the seat (Chris,
+    2026-10-29): another seat's approve clears; an author seat's approve
+    clears only from a fresh run (`_fresh_author_session`); an approve that
+    names `platform=` and `session=` is judged exactly as a review marker is
+    (`_marker_problems`); an approve that names neither clears nothing once
+    anything says who wrote the PR. This runs after the sticky rule, so a
+    clearing approve has to be the blocker's own identity AND independent.
+
     "" is the answer whenever the gate cannot ask the question: `off` reads no
     provenance at all, and `shadow` measures the reviewer gate without refusing;
     a Paperclip read that failed says nothing about the branch either. The
@@ -2881,32 +3066,92 @@ def _clearance_seat_reason(
     """
     if cfg is None or _effective_mode(cfg) != "enforce":
         return ""
+    reader = prov or _provenance_for(cfg)
     try:
-        authors, _ = _author_context(pr, prov or _provenance_for(cfg))
+        ctx = _author_context(pr, reader)
     except (_PaperclipUnavailable, _AuthorUnidentified):
         return ""
-    if not authors:
+    if not ctx.identified():
+        # Nothing says who wrote the PR; the reviewer-independence gate refuses
+        # that, so this gate does not add a second reason.
         return ""
+    authors = ctx.seats
     head = str(pr.get("headRefOid") or "")
     head_text = f"`{head[:12]}`" if head else "an unknown head"
     where = f"comment {approve.comment_id}" if approve.comment_id else "a comment"
-    if not approve.seat:
-        return (
-            f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
-            f"'changes_requested' verdict on it, and the newest approve "
-            f"({approve.source}, posted by {approve.author} in {where}) names no "
-            "reviewer seat, so it cannot clear the block: a clearance needs the "
-            "provenance marker's `agent=` to name a seat that did not write the PR"
-        )
-    if approve.seat in authors:
+    if approve.seat:
+        if approve.seat not in authors:
+            # Another seat: another run, so another session.
+            return ""
+        if _fresh_author_session(approve, ctx, reader):
+            # Chris, 2026-10-29: a fresh session of the author's own seat is an
+            # independent reviewer, so its approve clears the block like any
+            # other.
+            return ""
         return (
             f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
             f"'changes_requested' verdict on it, and the newest approve "
             f"({approve.source}, posted by {approve.author} in {where}) comes from "
             f"the PR's authoring seat `{approve.seat[:8]}`, so it cannot clear the "
-            "block: only a seat that did not write the PR can"
+            "block: only a session that did not write the PR can (a fresh run of "
+            "that seat, named by the marker's `run=`, counts)"
         )
-    return ""
+    if approve.platform or approve.session:
+        # A non-Paperclip approve is judged exactly as a review marker is: it
+        # clears only from a session that did not write the PR (#6667). The
+        # sticky rule (#6665) has already asked whether it is the blocker's
+        # own platform.
+        marker = ReviewMarker(
+            comment_id=approve.comment_id,
+            at=approve.at,
+            agent="",
+            run="",
+            head=head,
+            platform=approve.platform,
+            session=approve.session,
+            login=approve.author if approve.author != "?" else "",
+        )
+        problems, _reviewer = _marker_problems(
+            marker, head=head, ctx=ctx, prov=reader, cfg=cfg
+        )
+        if not problems:
+            return ""
+        return (
+            f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
+            f"'changes_requested' verdict on it, and the newest approve "
+            f"({approve.source}, posted by {approve.author} in {where}) names "
+            f"platform `{approve.platform[:16] or '?'}` session "
+            f"`{approve.session[:24] or '?'}`, so it cannot clear the block: it "
+            + "; ".join(problems)
+        )
+    return (
+        f"PR #{pr.get('number')}: the PR stands at {head_text} with a "
+        f"'changes_requested' verdict on it, and the newest approve "
+        f"({approve.source}, posted by {approve.author} in {where}) names no "
+        "reviewer seat or session, so it cannot clear the block: a clearance "
+        "needs the provenance marker to name a session that did not write the "
+        "PR (`agent=` and `run=`, or `platform=` and `session=`)"
+    )
+
+
+def _fresh_author_session(
+    approve: PostedVerdict, ctx: AuthorContext, prov: ReviewerProvenance
+) -> bool:
+    """Whether an author seat's approve came from a run that wrote no commit.
+
+    Fails closed: no run named, a run that wrote the PR, a seat whose authoring
+    run is unknown, or a run the API cannot confirm belongs to that seat all
+    answer False.
+    """
+    if not approve.run or approve.run in ctx.sessions:
+        return False
+    if not ctx.seat_sessions.get(approve.seat):
+        return False
+    try:
+        run = prov.run(approve.run)
+    except _PaperclipUnavailable:
+        return False
+    return str((run or {}).get("agentId") or "").lower() == approve.seat
 
 
 def _verdict_value_reason(
@@ -2926,25 +3171,31 @@ def _verdict_value_reason(
     answer then was to count a block on any ancestor of the head; #6263 showed
     what that costs — a block on a head the PR has left holds it indefinitely,
     and only the posting seat can clear it, by re-reviewing code it never read.
-    A verdict is now scoped to the head it names (`verdict_applies_to_head`), so
-    the branch list still does not decide this gate and neither does an old
-    verdict: a block on the current head stands, an old one does not hold it, and
-    an old approve clears nothing.
+    #6399 then scoped every verdict to the head it names, which let any push
+    retire a standing block — the security desk's included — and the PR merged
+    on coverage evidence alone (T4). The branch list still does not decide this
+    gate, but a push no longer does either: a block stands until the seat that
+    posted it posts a verdict on the current head, and an old approve clears
+    nothing.
 
     The rule reads the verdict now, not the branch, and it is one scoping step
     and two clauses, in this order. It is written down once, in
     `docs/MERGE_QUEUE.md` ("The verdict rule"), so no two seats read it
     differently:
 
-    0. **Every verdict is scoped to the head it names.** A verdict naming another
-       commit is about code the PR has left: it does not block the current head
-       and it clears nothing on it. One that names no head at all cannot be
-       stale, so it blocks as before.
+    0. **A push spends nothing.** An approve counts only when it names the head
+       the PR stands at. A block counts whatever head it names (T4): it is
+       answered by a reviewer, never by the branch moving.
 
     1. **A seat's own block stands until that seat clears it.** A blocking
-       verdict belongs to the seat that posted it. That seat's later approve
+       verdict belongs to the seat that posted it — or, for a verdict from
+       outside Paperclip, to the platform its `platform=` names
+       (`_verdict_identity`; attribution is by platform, Chris 2026-10-29). That seat's later approve
        naming the head the PR stands at clears it; an approve naming another
-       head does not, and no other seat's approve does either. When the approve
+       head does not, and no other seat's approve does either. A block on an
+       older commit is cleared by that seat's approve naming the current head
+       with no `Withdraws:` line — the #6263 handback, answered by the seat that
+       blocked rather than by the push. When the approve
        names the same, unchanged head the block names, it clears the block only
        when it carries a `Withdraws:` line naming it (DIG-5246, `#6280`): an
        approve is a statement about the code, and the queue does not read it as
@@ -2957,14 +3208,15 @@ def _verdict_value_reason(
        moving leaves nothing behind, so the clearing comment is the seat's
        approve naming the current head plus a `Withdraws:` line with no sha.
     2. **Everything else is judged by the newest readable verdict.** The newest
-       readable verdict is the one that counts: a blocking verdict blocks when
-       it names the head the PR stands at (or names no head at all, which
-       cannot be stale); an approve clears only when it names the head the PR
+       readable verdict is the one that counts: a blocking verdict blocks
+       whatever head it names (T4); an approve clears only when it names the head the PR
        stands at; a verdict the queue cannot read is skipped, not read as a
        clearance. A clearance of a `changes_requested` on the current head must
-       also name a non-author seat: an approve with no provenance seat, or one
-       from a seat that wrote the PR, clears nothing (`_clearance_seat_reason`,
-       item 3 of DIG-4990).
+       also come from a session that did not write the PR: an approve that
+       names no seat or session, the authoring run of an author seat, or a
+       session that wrote a commit clears nothing (`_clearance_seat_reason`,
+       item 3 of DIG-4990; session-level since #6667). The same check runs on
+       the approve that clause 1 accepted, so the two rules compose.
 
     Clause 1 needs the seat, and the seat is written only in the provenance
     marker (`agent=`): every seat pushes under one GitHub login, so a comment's
@@ -2990,11 +3242,17 @@ def _verdict_value_reason(
     where = f"comment {latest.comment_id}" if latest.comment_id else "a comment"
     if latest.verdict in BLOCKING_VERDICTS:
         if not verdict_applies_to_head(latest, head):
-            # A block written against another head is not a statement about this
-            # one (#6263): it neither holds this head nor asks for a fresh review
-            # of it. The coverage gate still decides whether this PR has review
-            # evidence on the head it stands at.
-            return []
+            # T4 (from #6399): a block written against another head is not
+            # spent by the push that left it. It is the newest readable verdict,
+            # so nothing has answered it; it holds until a newer verdict names
+            # the head the PR stands at.
+            return [
+                f"PR #{pr.get('number')}: the latest review verdict is "
+                f"'{latest.verdict}' ({latest.source}, posted by {latest.author} "
+                f"in {where}), naming `{latest.bindings[0][:12]}`, and the PR "
+                f"now stands at {head_text}. A push does not spend a block: it "
+                f"stands until a later verdict names {head_text}"
+            ]
         if latest.scope:
             scope_text = f", scoped to `{latest.scope[:12]}`"
         elif latest.bindings:
@@ -3045,7 +3303,8 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
     later = [
         verdict
         for verdict in _readable_verdicts(pr)
-        if verdict.seat == block.seat and verdict.at > block.at
+        if _verdict_identity(verdict) == _verdict_identity(block)
+        and verdict.at > block.at
     ]
     approve = later[-1] if later else None
     if (
@@ -3060,7 +3319,7 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
         if block.bindings:
             withdraw = f"`Withdraws:` line naming `{block.bindings[0][:12]}`"
             return (
-                f"PR #{pr.get('number')}: seat {block.seat} posted "
+                f"PR #{pr.get('number')}: {_identity_text(block)} posted "
                 f"'{block.verdict}' ({block.source}, in {where}){scope_text} and "
                 f"then approved the same head {head_text} (comment "
                 f"{approve.comment_id or 'a comment'}); an approve on an unchanged "
@@ -3072,7 +3331,7 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
         # remedy — every head is outside it, and only the bare withdrawal spends
         # it. A line naming a sha spends nothing here (`_withdraws`).
         return (
-            f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+            f"PR #{pr.get('number')}: {_identity_text(block)} posted '{block.verdict}' "
             f"({block.source}, in {where}){scope_text}, and that seat's later "
             f"approve of {head_text} (comment "
             f"{approve.comment_id or 'a comment'}) does not clear the block it "
@@ -3080,13 +3339,21 @@ def _standing_seat_reason(pr: dict[str, Any], block: PostedVerdict, head: str) -
         )
     if not block.bindings:
         return (
-            f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+            f"PR #{pr.get('number')}: {_identity_text(block)} posted '{block.verdict}' "
             f"({block.source}, in {where}){scope_text}, and the PR now stands at "
             f"{head_text}; a blocking verdict stands until that seat clears it. "
             f"{_unbound_block_clearance(head_text)}"
         )
+    if not _covers_head(block, head):
+        return (
+            f"PR #{pr.get('number')}: {_identity_text(block)} posted '{block.verdict}' "
+            f"({block.source}, in {where}){scope_text}, and the PR now stands at "
+            f"{head_text}. A push does not spend a block (T4): it stands until "
+            f"{_identity_text(block)} posts a verdict naming {head_text}; "
+            "another seat's or platform's approve does not clear it"
+        )
     return (
-        f"PR #{pr.get('number')}: seat {block.seat} posted '{block.verdict}' "
+        f"PR #{pr.get('number')}: {_identity_text(block)} posted '{block.verdict}' "
         f"({block.source}, in {where}){scope_text}, and the PR now stands at "
         f"{head_text}; a blocking verdict stands until that seat posts a later "
         f"approve naming the head it covers"
@@ -3188,21 +3455,27 @@ def _ensure_comments(pr: dict[str, Any], repo: str | None) -> str | None:
 
 
 def _native_block_on_head(pr: dict[str, Any], head: str) -> bool:
-    """True when a native `CHANGES_REQUESTED` review names the head, or no head.
+    """True when GitHub reports a native `CHANGES_REQUESTED` that still stands.
 
-    GitHub's `reviewDecision` is not scoped to a commit: it keeps saying
-    `CHANGES_REQUESTED` after the branch moves, and every seat here pushes under
-    one login, so the login that posted the block is also the only login that
-    could approve — a stale native block is permanent. The review itself does
-    name its head, in `commit.oid`, so the gate reads that.
-
-    A review with no readable commit cannot be shown stale, and a payload with
-    no review list at all is a missing signal, not a clearance: both keep the
-    block, exactly as `reviewDecision` did before this rule.
+    T4 (from #6399). `reviewDecision` keeps saying `CHANGES_REQUESTED` after the
+    branch moves, and that is the behaviour the queue wants: a native change
+    request is answered by the reviewer (a new review on the head) or by a
+    dismissal, which GitHub records with who dismissed it and why. A push is
+    neither. So the review's `commit.oid` no longer decides whether the block
+    stands; it only shapes the refusal (`_native_block_reason`). `head` is kept
+    for the callers' signature.
     """
+    del head
+    return str(pr.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED"
+
+
+def _native_block_reason(pr: dict[str, Any], head: str) -> str:
+    """The refusal for a native change request, naming a stale commit if any."""
+    base = "review has outstanding change requests"
     reviews = pr.get("reviews")
     if not head or not isinstance(reviews, list):
-        return True
+        return base
+    stale: list[str] = []
     for review in reviews:
         if not isinstance(review, Mapping):
             continue
@@ -3211,8 +3484,15 @@ def _native_block_on_head(pr: dict[str, Any], head: str) -> bool:
         commit = review.get("commit")
         oid = str(commit.get("oid") or "") if isinstance(commit, Mapping) else ""
         if not oid or _binds_head(oid, head):
-            return True
-    return False
+            return base
+        stale.append(oid)
+    if not stale:
+        return base
+    return (
+        f"{base}: a native CHANGES_REQUESTED review on `{stale[0][:12]}` still "
+        f"stands at `{head[:12]}`; a push does not dismiss it, so it needs a "
+        "dismissal or a new review on the head"
+    )
 
 
 def _gate_review(
@@ -3234,19 +3514,21 @@ def _gate_review(
     `_verdict_value_reason` is the value gate, and it runs here, before the
     coverage gate: a PR whose newest verdict blocks must not be carried to a
     merge by a `reviewed:agent` label (DIG-4878). A clearance of a block also
-    needs a non-author seat, so the value gate is handed the same reviewer
+    needs a session that did not write the PR (a non-author seat, or a fresh run
+    of an author seat since 2026-10-29), so the value gate is handed the same reviewer
     configuration and provenance reader the coverage gate uses (item 3 of
     DIG-4990).
 
-    Both arms are scoped to the head the PR stands at. `reviewDecision` is an
-    aggregate GitHub keeps after the branch moves, and a posted verdict keeps
-    its own scope; neither may hold a head it was not made against (#6263).
+    Neither arm is spent by the branch moving (T4, from #6399).
+    `reviewDecision` is an aggregate GitHub keeps after a push until the
+    review is dismissed or the reviewer reviews again, and a posted block
+    stands until the seat that posted it (or, unseated, a newer verdict) names
+    the head the PR stands at.
     """
     reasons: list[str] = []
     head = str(pr.get("headRefOid") or "")
-    if str(pr.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED":
-        if _native_block_on_head(pr, head):
-            reasons.append("review has outstanding change requests")
+    if _native_block_on_head(pr, head):
+        reasons.append(_native_block_reason(pr, head))
     # twelve-x PR #347 merged on an attestation 6m37s after a posted "changes
     # requested". A posted blocking verdict stays a block until a newer one clears it.
     reasons.extend(_verdict_value_reason(pr, cfg, prov))
@@ -3473,6 +3755,43 @@ _AGENT_TRAILER_RE = re.compile(
 _RUN_TRAILER_RE = re.compile(
     r"^Paperclip-Run-Id:\s*(?P<run>[0-9a-fA-F-]{36})\s*$", re.MULTILINE
 )
+#: The platform that wrote the commit (docs/ops/ATTRIBUTION.md), and the
+#: session on that platform. Paperclip commits name their session with
+#: `Paperclip-Run-Id:`; every other platform names it with `Source-Session:`.
+_PLATFORM_TRAILER_RE = re.compile(
+    r"^Source-Platform:[ \t]*(?P<platform>\S+)[ \t]*$", re.MULTILINE
+)
+_SESSION_TRAILER_RE = re.compile(
+    r"^Source-Session:[ \t]*(?P<session>\S+)[ \t]*$", re.MULTILINE
+)
+#: A session id outside Paperclip: an opaque id at least 8 characters long,
+#: made of the characters session and run ids use. A placeholder written the
+#: way the docs write one (`<session-id>`, `…`) does not have this shape.
+_SESSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
+#: Words that make a well-shaped value a placeholder rather than an id.
+_SESSION_PLACEHOLDER_WORDS = (
+    "your-",
+    "your_",
+    "placeholder",
+    "session-id",
+    "session_id",
+    "sessionid",
+    "example",
+    "xxxxxxxx",
+    "changeme",
+)
+
+
+def _is_session_id(value: str) -> bool:
+    """Whether `value` can be a session id rather than a placeholder or typo."""
+    text = str(value or "").strip()
+    if not _SESSION_RE.match(text):
+        return False
+    lowered = text.lower()
+    if any(word in lowered for word in _SESSION_PLACEHOLDER_WORDS):
+        return False
+    # One character repeated (`00000000`, `aaaaaaaa`) is filler, not an id.
+    return len(set(lowered.replace("-", ""))) > 1
 
 
 class _PaperclipUnavailable(RuntimeError):
@@ -3510,6 +3829,43 @@ class ReviewMarker:
     agent: str
     run: str
     head: str
+    #: The platform and session a non-Paperclip review names
+    #: (`platform=<p> session=<id>`). Empty on a Paperclip marker, whose
+    #: session is its `run`.
+    platform: str = ""
+    session: str = ""
+    #: The comment's author login, used only to name the platform.
+    login: str = ""
+
+
+@dataclass
+class AuthorContext:
+    """Who wrote a PR, read from its code: seats, platforms and sessions.
+
+    Independence is decided by session (Chris, 2026-10-29): a review counts
+    when it comes from a session that did not write the PR, even on the same
+    platform or the same Paperclip seat. So the gate needs the sessions that
+    wrote the commits, and — to fail closed — to know when it cannot name them.
+    """
+
+    #: Paperclip seats that wrote commits on the PR.
+    seats: set[str] = field(default_factory=set)
+    #: The author seats' runs on the PR's ticket, as (run, started, finished).
+    runs: list[tuple[str, str, str]] = field(default_factory=list)
+    #: Every session that wrote a commit: Paperclip run ids and
+    #: `Source-Session:` ids, lower-cased.
+    sessions: set[str] = field(default_factory=set)
+    #: Paperclip seat -> the runs of that seat that wrote commits.
+    seat_sessions: dict[str, set[str]] = field(default_factory=dict)
+    #: Platforms that wrote commits. "" stands for a `Source-Session:` with no
+    #: `Source-Platform:` beside it: a session whose platform is unknown.
+    platforms: set[str] = field(default_factory=set)
+    #: Platform -> the `Source-Session:` ids its commits name.
+    platform_sessions: dict[str, set[str]] = field(default_factory=dict)
+
+    def identified(self) -> bool:
+        """Whether anything at all says who wrote the PR."""
+        return bool(self.seats or self.platforms)
 
 
 @dataclass(frozen=True)
@@ -4144,9 +4500,20 @@ def _review_markers(comments: list[Any]) -> list[ReviewMarker]:
                 agent=str(fields.get("agent") or "").lower(),
                 run=str(fields.get("run") or "").lower(),
                 head=str(fields.get("head") or _scope_head(body)),
+                platform=str(fields.get("platform") or "").strip().lower(),
+                session=str(fields.get("session") or "").strip(),
+                login=_login_of(comment),
             )
         )
     return markers
+
+
+def _login_of(comment: Mapping[str, Any]) -> str:
+    """The login a comment row names as its author, or ""."""
+    author = comment.get("author") or comment.get("user")
+    if isinstance(author, Mapping):
+        return str(author.get("login") or "")
+    return ""
 
 
 def _ticket_key(pr: dict[str, Any]) -> str:
@@ -4203,10 +4570,8 @@ def _author_dates(pr: dict[str, Any]) -> list[str]:
     return stamps
 
 
-def _author_context(
-    pr: dict[str, Any], prov: ReviewerProvenance
-) -> tuple[set[str], list[tuple[str, str, str]]]:
-    """The seats that wrote this PR, and their runs on this PR's ticket.
+def _author_context(pr: dict[str, Any], prov: ReviewerProvenance) -> AuthorContext:
+    """The seats, platforms and sessions that wrote this PR.
 
     Ownership is not authorship. The seat a ticket is assigned to is the seat
     that is asked to move the ticket along; the seat that wrote the code is
@@ -4238,13 +4603,46 @@ def _author_context(
     ambiguous, and there the count breaks the tie. Marking a seat as an author
     costs that seat its own review coverage and nobody else's, so where the
     evidence cannot separate two seats, both are treated as authors.
+
+    The sessions (Chris, 2026-10-29: independence is by session, not by seat):
+
+    * a `Paperclip-Run-Id:` trailer is the run that wrote the commit;
+    * an author seat's run on the ticket whose window covers a commit's author
+      date wrote that commit — a later run of the same seat that covers no
+      commit is a fresh session;
+    * `Source-Platform:` and `Source-Session:` name the platform and session
+      of a commit written outside Paperclip (docs/MERGE_QUEUE.md, Reviewer
+      independence).
+
+    A trailer whose value cannot be what it claims (a platform that is not one
+    of `PLATFORMS`, a session that is a placeholder) makes the author unknown,
+    and the gate refuses rather than guesses.
     """
-    authors: set[str] = set()
+    ctx = AuthorContext()
+    authors = ctx.seats
     windows: dict[str, list[tuple[str, str, str]]] = {}
     for commit in pr.get("commits") or []:
         if not isinstance(commit, Mapping):
             continue
         body = str(commit.get("messageBody") or commit.get("message") or "")
+        commit_platforms: list[str] = []
+        for match in _PLATFORM_TRAILER_RE.finditer(body):
+            platform = match.group("platform").strip().lower()
+            if platform not in PLATFORMS:
+                raise _AuthorUnidentified(
+                    f"a commit names platform {platform[:16]!r}, which is not one of "
+                    f"{', '.join(PLATFORMS)}"
+                )
+            commit_platforms.append(platform)
+            ctx.platforms.add(platform)
+        for match in _SESSION_TRAILER_RE.finditer(body):
+            session = match.group("session").strip()
+            if not _is_session_id(session):
+                raise _AuthorUnidentified("a commit names a session id that is not one")
+            for platform in commit_platforms or [""]:
+                ctx.platforms.add(platform)
+                ctx.platform_sessions.setdefault(platform, set()).add(session.lower())
+            ctx.sessions.add(session.lower())
         for match in _AGENT_TRAILER_RE.finditer(body):
             agent = match.group("agent")
             if not _UUID_RE.match(agent):
@@ -4261,9 +4659,12 @@ def _author_context(
                 raise _AuthorUnidentified("a commit names a run id that is not one")
             run = prov.run(run_id.lower())
             seat = str((run or {}).get("agentId") or "").lower()
+            ctx.sessions.add(run_id.lower())
             if seat:
                 authors.add(seat)
+                ctx.seat_sessions.setdefault(seat, set()).add(run_id.lower())
     key = _ticket_key(pr)
+    stamps: list[str] = []
     ticket = prov.ticket(key) if key else None
     if ticket:
         issue_id = str(ticket.get("id") or "")
@@ -4317,10 +4718,18 @@ def _author_context(
             for seat in candidates:
                 if counts.get(seat, 0) == best:
                     authors.add(seat)
-    author_runs: list[tuple[str, str, str]] = []
     for seat in sorted(authors):
-        author_runs.extend(windows.get(seat, []))
-    return authors, author_runs
+        for window in windows.get(seat, []):
+            ctx.runs.append(window)
+            run_id = window[0].lower()
+            if run_id and any(_within_window(stamp, window[1], window[2]) for stamp in stamps):
+                # This run of an author seat was open when a commit was
+                # written: it is a session that wrote the PR.
+                ctx.sessions.add(run_id)
+                ctx.seat_sessions.setdefault(seat, set()).add(run_id)
+    if authors:
+        ctx.platforms.add("paperclip")
+    return ctx
 
 
 def _parse_ts(value: str) -> float | None:
@@ -4376,14 +4785,16 @@ def _marker_problems(
     marker: ReviewMarker,
     *,
     head: str,
-    authors: set[str],
-    author_runs: list[tuple[str, str, str]],
+    ctx: AuthorContext,
     prov: ReviewerProvenance,
+    cfg: ReviewIndependence | None = None,
 ) -> tuple[list[str], str]:
-    """What is wrong with one review marker, and the seat that made it.
+    """What is wrong with one review marker, and who made it.
 
     An empty problem list means the marker counts: it names the head the PR
-    stands at, and it came from a seat that is not the author.
+    stands at, and it came from a session that did not write the PR — on any
+    platform, the author's own included (Chris, 2026-10-29). The second value
+    names the reviewer for the audit note: its platform and session.
 
     A value that cannot be a record — a placeholder, a typo, a quoted example —
     is judged by name and never sent to the API. The API answers questions
@@ -4416,62 +4827,138 @@ def _marker_problems(
                 f"names run `{marker.run[:12]}`, which is not a run id, "
                 "so no run was checked"
             )
-        else:
-            run = prov.run(marker.run)
-            if run is None:
-                problems.append(
-                    f"names run `{marker.run[:8]}`, which the Paperclip API does not know"
-                )
-            else:
-                reviewer = str(run.get("agentId") or "").lower()
-                if not reviewer:
-                    # The run is known, but it names no seat. The marker claims
-                    # a seat and a run, and neither of them can be checked, so
-                    # the gate cannot say who reviewed: that is a missing
-                    # signal, not a clearance.
+            return problems, reviewer
+        if marker.platform and marker.platform != "paperclip":
+            problems.append(
+                f"names platform `{marker.platform[:16]}` but a Paperclip run, so "
+                "it is not clear which platform reviewed"
+            )
+        run = prov.run(marker.run)
+        if run is None:
+            problems.append(
+                f"names run `{marker.run[:8]}`, which the Paperclip API does not know"
+            )
+            return problems, reviewer
+        seat = str(run.get("agentId") or "").lower()
+        if not seat:
+            # The run is known, but it names no seat. The marker claims a seat
+            # and a run, and neither of them can be checked, so the gate cannot
+            # say who reviewed: that is a missing signal, not a clearance.
+            problems.append(
+                "names a run that carries no seat, so the queue cannot say "
+                "who reviewed"
+            )
+            return problems, reviewer
+        if marker.agent and not _UUID_RE.match(marker.agent):
+            problems.append(
+                f"names seat `{marker.agent[:12]}`, which is not a seat id, "
+                f"so it cannot be checked against run `{marker.run[:8]}`"
+            )
+            return problems, reviewer
+        if marker.agent and marker.agent != seat:
+            problems.append(
+                f"names seat `{marker.agent[:8]}` while run `{marker.run[:8]}` "
+                f"belongs to seat `{seat[:8]}`"
+            )
+            return problems, reviewer
+        platform = platform_for(cfg, "paperclip_seats", seat) or "paperclip"
+        reviewer = f"platform `{platform}`, session `{marker.run[:8]}`"
+        if marker.run in ctx.sessions:
+            problems.append(
+                f"came from the author's own session: run `{marker.run[:8]}` of seat "
+                f"`{seat[:8]}` (platform `{platform}`) wrote this PR"
+            )
+            # The seat's subagents share its run id, so the run says which
+            # session spoke. Say so when the review landed while it was open.
+            for run_id, started, finished in ctx.runs:
+                if run_id.lower() == marker.run and _within_window(
+                    marker.at, started, finished
+                ):
                     problems.append(
-                        "names a run that carries no seat, so the queue cannot say "
-                        "who reviewed"
+                        f"was posted while that run `{run_id[:8]}` on this PR's "
+                        "ticket was still active"
                     )
-                elif marker.agent and not _UUID_RE.match(marker.agent):
-                    problems.append(
-                        f"names seat `{marker.agent[:12]}`, which is not a seat id, "
-                        f"so it cannot be checked against run `{marker.run[:8]}`"
-                    )
-                elif marker.agent and marker.agent != reviewer:
-                    problems.append(
-                        f"names seat `{marker.agent[:8]}` while run `{marker.run[:8]}` "
-                        f"belongs to seat `{reviewer[:8]}`"
-                    )
-    elif marker.agent:
+                    break
+        elif seat in ctx.seats and not ctx.seat_sessions.get(seat):
+            # The seat wrote the PR, and nothing says in which run. The review
+            # may be from that very run, so it cannot be shown to be a fresh
+            # session: fail closed.
+            problems.append(
+                f"came from seat `{seat[:8]}` (platform `{platform}`), which wrote "
+                "this PR, and the session that wrote it could not be identified, "
+                "so the review cannot be shown to come from a fresh session"
+            )
+        return problems, reviewer
+    if marker.session or marker.platform:
+        platform = marker.platform
+        if not platform:
+            problems.append(
+                f"names session `{marker.session[:12]}` but no platform"
+            )
+            return problems, reviewer
+        if platform not in PLATFORMS:
+            problems.append(
+                f"names platform `{platform[:16]}`, which is not one of "
+                f"{', '.join(PLATFORMS)}"
+            )
+            return problems, reviewer
+        if platform == "paperclip":
+            # A Paperclip review can be checked: its run resolves through the
+            # API to a seat. A bare session claim cannot, so it is not taken.
+            problems.append(
+                "names platform `paperclip` with a session instead of a run; a "
+                "Paperclip review names its `agent=` and `run=` so the queue can "
+                "check them"
+            )
+            return problems, reviewer
+        if not marker.session:
+            problems.append(
+                f"names platform `{platform}` but no session, so it cannot be "
+                "shown to come from a session that did not write the PR"
+            )
+            return problems, reviewer
+        if not _is_session_id(marker.session):
+            problems.append(
+                f"names session `{marker.session[:12]}`, which is not a session id"
+            )
+            return problems, reviewer
+        session = marker.session.lower()
+        reviewer = f"platform `{platform}`, session `{marker.session[:12]}`"
+        login_platform = platform_for(cfg, "forgejo_users", marker.login) or platform_for(
+            cfg, "github_logins", marker.login
+        )
+        if login_platform and login_platform != platform:
+            problems.append(
+                f"names platform `{platform}` but was posted by `{marker.login}`, "
+                f"which is platform `{login_platform}`"
+            )
+            return problems, reviewer
+        if session in ctx.sessions:
+            problems.append(
+                f"came from the author's own session `{marker.session[:12]}` "
+                f"(platform `{platform}`)"
+            )
+        elif (platform in ctx.platforms or "" in ctx.platforms) and not (
+            ctx.platform_sessions.get(platform) or ctx.platform_sessions.get("")
+        ):
+            problems.append(
+                f"came from platform `{platform}`, which wrote this PR, and no "
+                "`Source-Session:` trailer names the session that wrote it, so the "
+                "review cannot be shown to come from a fresh session"
+            )
+        return problems, reviewer
+    if marker.agent:
         if not _UUID_RE.match(marker.agent):
             problems.append(
                 f"names seat `{marker.agent[:12]}`, which is not a seat id, "
                 "so it names no seat the queue could check"
             )
         else:
-            reviewer = marker.agent
             problems.append(
                 f"names seat `{marker.agent[:8]}` but no run to check that seat against"
             )
-    else:
-        problems.append("carries neither a seat nor a run")
-    if reviewer and reviewer in authors:
-        problems.append(f"came from the PR author's own seat (`{reviewer[:8]}`)")
-        # The authoring seat's own run window. A marker of the author's own
-        # seat that lands inside that window is the author's review, and the
-        # seat's subagents share its run id, so the window says which run
-        # spoke. It is not a veto on other seats: a review from another seat
-        # posted while the author was still working is that seat's review
-        # (the QA Lead's finding on #6145, 21 Oct — a gate that refuses other
-        # seats inside the author's window refuses every honest review).
-        for run_id, started, finished in author_runs:
-            if _within_window(marker.at, started, finished):
-                problems.append(
-                    f"was posted while the authoring seat's run `{run_id[:8]}` on this "
-                    "PR's ticket was still active"
-                )
-                break
+        return problems, reviewer
+    problems.append("carries neither a session nor a run")
     return problems, reviewer
 
 
@@ -4506,8 +4993,10 @@ def _reviewer_independence(
     """Judge the review marker that speaks for this PR.
 
     The newest review marker governs, and it is judged on two counts: it must
-    name the head the PR stands at now, and it must come from a seat that is
-    not one of the seats that wrote the PR. A marker that fails is dropped
+    name the head the PR stands at now, and it must come from a session that
+    did not write the PR. The platform does not matter: a fresh session on the
+    author's own platform — or a fresh run of the author's own Paperclip seat —
+    is an independent review (Chris, 2026-10-29). A marker that fails is dropped
     from the coverage evidence, and every other marker goes with it, so that
     no older review is used in its place.
     """
@@ -4522,7 +5011,7 @@ def _reviewer_independence(
     # dropped from the evidence, exactly like a judged-and-refused one.
     every_marker = frozenset(m.comment_id for m in markers if m.comment_id)
     try:
-        authors, author_runs = _author_context(pr, prov)
+        ctx = _author_context(pr, prov)
     except _PaperclipUnavailable as exc:
         return Independence(
             disqualified=every_marker,
@@ -4536,26 +5025,28 @@ def _reviewer_independence(
         return Independence(
             disqualified=every_marker,
             unverifiable=(
-                f"the PR's authoring seat could not be identified: {exc}, so no "
-                "review on it can be shown to come from a different seat"
+                f"the PR's author could not be identified: {exc}, so no "
+                "review on it can be shown to come from a different session"
             ),
         )
-    if not authors:
+    if not ctx.identified():
         return Independence(
             disqualified=every_marker,
             unverifiable=(
-                "the PR's authoring seat could not be identified, so no review on "
-                "it can be shown to come from a different seat"
-            )
+                "the PR's author could not be identified (no Paperclip run covers "
+                "its commits, and no commit carries a `Paperclip-Run-Id:`, "
+                "`Source-Platform:` or `Source-Session:` trailer), so no review on "
+                "it can be shown to come from a different session"
+            ),
         )
     governing = _governing_marker(markers)
     try:
         found, reviewer = _marker_problems(
             governing,
             head=head,
-            authors=authors,
-            author_runs=author_runs,
+            ctx=ctx,
             prov=prov,
+            cfg=cfg,
         )
     except _PaperclipUnavailable as exc:
         # The API went away mid-judgement. Nothing is concluded about any
@@ -4575,12 +5066,7 @@ def _reviewer_independence(
                 f"{governing.at or 'an unknown time'} " + "; ".join(found),
             ),
         )
-    seat = reviewer or governing.agent
-    note = (
-        f"reviewer seat `{seat[:8]}`"
-        + (f" (run `{governing.run[:8]}`)" if governing.run else "")
-        + f" on head `{head[:12]}`"
-    )
+    note = f"reviewer {reviewer} on head `{head[:12]}`"
     return Independence(
         # The older markers are dropped too, so the coverage evidence carries
         # the governing marker and nothing else.
@@ -4712,9 +5198,11 @@ def _review_coverage(
       assertion with no artifact is exactly what the promotion gate refuses.
       `--attest-review` is gone (2026-10-17), and no separate formal approval is
       demanded on top of the evidence (Chris's 2026-10-15 definition). But an
-      in-session pass is only evidence when another seat wrote it: the reviewer
-      independence gate (DIG-4795) drops a comment whose provenance marker names
-      the PR's author seat or cannot be checked at all, and DIG-5220 shipped that
+      in-session pass is only evidence when another session wrote it: the
+      reviewer independence gate (DIG-4795) drops a comment whose provenance
+      marker names a session that wrote the PR or cannot be checked at all
+      (platform-level, session-independent since Chris's 2026-10-29 call; a
+      fresh session on the author's platform counts), and DIG-5220 shipped that
       gate in `enforce` mode after #6277 and #6197 merged on the authoring lane's
       own write-up.
     * The comments this gate scores are supplied by `fetch_queue` and, when the
@@ -4734,11 +5222,15 @@ def _review_coverage(
     crc = _coverage_module()
     labels = _label_names(pr)
     comments = pr.get("comments")
-    if crc.AGENT_REVIEW_LABEL in labels and comments is None:
+    # The findings comment is the evidence; no `reviewed:*` label is needed to
+    # look for it (the labels were retired by Chris on 2026-10-29). A row that
+    # arrives without its comments has them read here, and an unreadable read
+    # fails closed.
+    if comments is None:
         if repo is None:
             return [
-                "review coverage: `reviewed:agent` is set but the findings "
-                "comment cannot be verified without a repo to read it from"
+                "review coverage: the PR's comments were not supplied, so its "
+                "findings comment cannot be verified without a repo to read it from"
             ], "", ""
         try:
             data = _gh_json(
@@ -4752,8 +5244,7 @@ def _review_coverage(
             )
         except QueueError:
             return [
-                "review coverage: `reviewed:agent` is set but its findings "
-                "comment could not be read"
+                "review coverage: the PR's findings comments could not be read"
             ], "", ""
         comments = (data or {}).get("comments") or []
     counted = list(comments) if isinstance(comments, list) else []
@@ -4833,15 +5324,16 @@ def _review_coverage(
         return [
             "reviewer independence: "
             + "; ".join(independence.problems[:3])
-            + " — the queue needs a review from a different seat, on the head "
+            + " — the queue needs a review from a different session (any platform), "
+            "on the head "
             f"this PR stands at (`{head}`)"
         ], "", ""
     return [
         f"review coverage: {why} — the queue needs a review pass that left its "
         "findings on the PR, the same evidence scripts/check_review_coverage.py "
         "enforces at promotion (completed Bot run, a reviewer bot such as "
-        "CodeRabbit or Copilot, an in-session review with its findings comment, "
-        "an approval, or reviewed:owner)"
+        "CodeRabbit or Copilot, an in-session review findings comment from a "
+        "session that did not write the PR, or an approval; no label is needed)"
     ], "", ""
 
 

@@ -6,13 +6,16 @@ memory is critically low or the disk guard pauses worktrees. Logs: ~/.config/dig
 Never prints secrets.
 A swap/disk-guard skip posts `failure` on the queued PRs, never silence, so merges block
 loudly (DIG-3660 must-fix 5). Fork code never executes on this Mac: fork PRs get a `failure`
-naming the maintainer re-push path. Static gates only, plus two path-gated lanes:
+naming the maintainer re-push path. Static gates, plus four path-gated lanes:
 PR title, PR template,
 gitleaks, PII scan, R0 client-literal scan,
-guard scripts, actionlint, uv sync, ruff, mypy, doc checks, worker dry-run build (path-gated)
-and the bun suites under `bun_suites` in scripts/ci_paths.yaml (path-gated, DIG-5203).
+guard scripts, actionlint, uv sync, ruff, mypy, doc checks, worker dry-run build (path-gated),
+the bun suites under `bun_suites` in scripts/ci_paths.yaml (path-gated, DIG-5203)
+and the pytest suite of every Python module the PR touches (path-gated, DIG-3605),
+and the npm workspace suites (`npm run test --workspace <ws>`) for every root npm
+workspace the PR touches or that depends on one it touches (path-gated).
 NOT gated (DIG-3605 owns the
-rest): per-package pytest suites, compose-validate, npm/pip audit, token-canary,
+rest): compose-validate, npm/pip audit, token-canary,
 secret-staleness, invite-key rollout, answer-check, cron dispatch, secret sync.
 Also judges same-repo develop->main promotion PRs with the same logic
 ci-review-coverage.yml runs via scripts/check_review_coverage.py (DIG-3743),
@@ -31,6 +34,7 @@ the launchd daemon or the CI container only (launch_guard.py, DIG-4796).
 Usage: local_ci.py [--pr N] [--dry-run]"""
 import ast
 import concurrent.futures
+import glob
 import hashlib
 import io
 import json
@@ -227,7 +231,7 @@ METADATA_GATES = frozenset({"pr-title", "pr-template"})
 # undocumented (web unreachable to verify), so it is logged for tuning, never
 # gated on.
 FORK_DESC = "fork code never runs on this Mac; maintainer: re-push to a same-repo branch"
-GATED_NOTE = "static gates passed (pytest/audits not gated, see DIG-3605)"
+GATED_NOTE = "static gates passed (audits not gated, see DIG-3605)"
 TYPES = "feat|fix|docs|chore|refactor|perf|test|ci|build|revert|style"
 
 # Ruff path list used by the lint gate. The gate reads the list from the tree
@@ -282,6 +286,87 @@ BUN_SUITE_DIRS = ("clients/digichat-tui", "clients/digiquant-tui", "clients/digi
 BUN_PIN = "1.4.2"
 BUN_INSTALL_TIMEOUT = 600
 BUN_TEST_TIMEOUT = 300
+# --- scoped pytest (DIG-3605) ------------------------------------------------
+# The required `local-ci` check ran no Python test at all: the per-module
+# GitHub lanes (test-<module>.yml) stopped with Actions, so a PR could change
+# digigraph and merge green without tests/dg ever running. The gate below runs
+# the suite of every module whose paths the PR touches, and only those, so a
+# docs-only PR pays nothing and a one-module PR pays for one module.
+#
+# Trigger paths come from the module's own block in scripts/ci_paths.yaml (the
+# same block the retired lane was filtered on), with `<module>/**` as the
+# fallback. The pytest arguments mirror each retired workflow's test step,
+# marker included: digillm and digifetch run unfiltered because their suites
+# carry no `unit` marker (see test-digillm.yml), and `-m unit` everywhere else
+# keeps network, Docker and paid-provider tests out of the gate.
+PYTEST_SUITES = {
+    "digibase": ["tests/db", "tests/integration/test_request_id_hops.py", "-m", "unit"],
+    "digikey": ["tests/dk", "-m", "unit"],
+    "digitrace": ["tests/dsm", "-m", "unit"],
+    "digivault": ["tests/dv", "-m", "unit"],
+    "digibot": ["tests/dc", "-m", "unit"],
+    "digivoice": ["tests/dvo", "-m", "unit"],
+    "digiquant": ["tests/dq", "-m", "unit"],
+    "digisearch": ["tests/ds", "-m", "unit"],
+    "digigraph": ["tests/dg", "tests/contracts", "-m", "unit"],
+    "digillm": ["digillm/tests"],
+    "digifetch": ["digifetch/tests"],
+    # The repo's own tooling, including this runner and the merge queue: the
+    # gate code is the code most often merged without a test run (P0-5). Same
+    # selection as ci.yml's scripts step.
+    "scripts": ["tests/scripts", "tests/config", "tests/agents",
+                "tests/integration/test_request_id_hops.py", "tests/baseline",
+                "-m", "unit or baseline", "--ignore=tests/baseline/test_cli.py"],
+}
+# `scripts` has no ci_paths.yaml block (adding one would change ci.yml's
+# generated filter block), so its triggers live here.
+PYTEST_EXTRA_PATTERNS = {
+    "scripts": ["scripts/**", "tests/scripts/**", "tests/config/**",
+                "tests/agents/**", "tests/baseline/**", "config/**"],
+}
+# A change to one of these changes how every suite collects or what it
+# imports, so it runs every suite.
+PYTEST_ALL_PATTERNS = ("pytest.ini", "conftest.py", "tests/conftest.py",
+                       "pyproject.toml", "uv.lock", "*/pyproject.toml")
+# Paid inference must never be reachable from a gate run. Unit suites mock
+# every provider, and the environment is scrubbed as well, so a test that
+# forgot its mock fails on a missing key instead of spending money.
+PYTEST_SCRUB_SUBSTRINGS = ("API_KEY", "CHEAPERINFERENCE", "_TOKEN", "SECRET")
+# --- npm workspace suites (changed workspaces) --------------------------------
+# develop's green came from this runner alone, and this runner ran no npm test:
+# the vitest suites lived in test-digichat.yml, test-dashboard.yml and
+# test-web.yml, which ci.yml calls and which have not run on develop since
+# 14 Oct. Three digichat tests went red on develop with every check green.
+# The gate below runs `npm run test --workspace <ws>` for every root npm
+# workspace a PR touches, plus every workspace that depends on one it touches.
+#
+# What a path maps to:
+# - a file under a workspace directory (`apps/<x>/`, `packages/<x>/`) is that
+#   workspace, and every workspace that depends on it (dependencies,
+#   devDependencies, peer and optional, transitively) is touched too;
+# - a root install input (NPM_ROOT_INPUTS) touches every workspace;
+# - any other path that one of the NPM_LANES blocks in scripts/ci_paths.yaml
+#   lists (a lane's own workflow file, a Dockerfile a test re-reads, a Python
+#   file a pin reads) touches every workspace that lane lists, which is what
+#   the retired lane ran for the same change.
+# A workspace whose test script is `bun test` is left to the bun lane, and one
+# with no test script has nothing to run. When the mapping itself cannot be
+# computed (unreadable manifest, missing ci_paths.yaml block) every workspace
+# runs: the gate fails closed, never open.
+NPM_LANES = ("digichat", "dashboard", "web")
+NPM_ROOT_INPUTS = ("package.json", "package-lock.json", ".npmrc", ".nvmrc",
+                   "eslint.base.mjs")
+NPM_DEP_FIELDS = ("dependencies", "devDependencies", "peerDependencies",
+                  "optionalDependencies")
+NPM_TEST_TIMEOUT = 600
+# One suite at a time: each vitest run already uses one worker per core, and
+# two at once oversubscribed the CPU until 5s test timeouts fired (digichat
+# product-shell.suggestions, 3 of 3 pooled runs). Serial was green and faster.
+NPM_POOL = 1
+# Paid inference must never be reachable from a gate run. Same rule, and the
+# same list, as the pytest lane: a test that lost its mock fails on a missing
+# key instead of spending money.
+NPM_SCRUB_SUBSTRINGS = PYTEST_SCRUB_SUBSTRINGS
 # --- how many independent gates run at once --------------------------------
 # Every gate below is its own process with its own temp paths, its own cwd and
 # its own report file, so nothing about them needs the others to have finished.
@@ -364,6 +449,12 @@ STEP_BUDGETS = {
     # Bun suites (DIG-5203): install from the committed lockfile, then run.
     "bun-install:*": 600,
     "bun:*": 300,
+    # Scoped pytest (DIG-3605): one run per touched module. digiquant's unit
+    # suite is the largest (~1,000 tests), so the family gets 15 minutes.
+    "pytest:*": 900,
+    # npm workspace suites: one root install, then one vitest run per workspace.
+    "npm-ci": 600,
+    "npm-test:*": 600,
 }
 # A step is attempted at most this many times, and the attempts share the one
 # budget: a timeout kill spends it, so a stalled step is not retried into a
@@ -1103,6 +1194,92 @@ def bun_gate(pr, wt):
     return len(files), path_gate_hit(files, bun_suite_patterns(wt))
 
 
+def pytest_env(base=None):
+    """The gate environment for pytest: ENV without any credential-looking key.
+
+    Removes every variable whose name contains one of PYTEST_SCRUB_SUBSTRINGS
+    (provider keys, the paid inference base, tokens, secrets), so a unit test
+    that lost its mock cannot reach a paid API from the Mac (DIG-3605).
+    """
+    env = dict(ENV if base is None else base)
+    for k in list(env):
+        if any(sub in k.upper() for sub in PYTEST_SCRUB_SUBSTRINGS):
+            env.pop(k, None)
+    return env
+
+
+def pytest_suite_patterns(wt, module):
+    """Trigger globs for one module's suite: its ci_paths.yaml block (or
+    `<module>/**`), plus PYTEST_EXTRA_PATTERNS for modules with no block."""
+    try:
+        with open(os.path.join(wt, "scripts", "ci_paths.yaml")) as f:
+            pats = parse_ci_paths_block(f.read(), module)
+    except OSError:
+        pats = []
+    extra = PYTEST_EXTRA_PATTERNS.get(module, [])
+    if not pats and not extra:
+        pats = [f"{module}/**"]
+    return list(pats) + [p for p in extra if p not in pats]
+
+
+def pytest_suites_for(files, wt):
+    """Modules whose suite this change must run, in PYTEST_SUITES order.
+
+    Returns [(module, (pattern, path))]. A hit on PYTEST_ALL_PATTERNS runs
+    every suite: a root conftest, pytest.ini or lockfile edit changes how
+    every suite collects or what it imports.
+    """
+    every = path_gate_hit(files, PYTEST_ALL_PATTERNS)
+    out = []
+    for module in PYTEST_SUITES:
+        hit = every or path_gate_hit(files, pytest_suite_patterns(wt, module))
+        if hit is not None:
+            out.append((module, hit))
+    return out
+
+
+def pytest_gate(pr, wt):
+    """Path gate for the scoped pytest suites. Returns (n_files, [(module, hit)]),
+    or (None, None) when the file list is unusable (the caller fails closed)."""
+    raw = gh("api", f"repos/{REPO}/pulls/{pr['number']}/files", "--paginate", "--slurp")
+    try:
+        files = changed_file_names(json.loads(raw or ""))
+    except ValueError:
+        files = None
+    if files is None:
+        return None, None
+    return len(files), pytest_suites_for(files, wt)
+
+
+def run_pytest_suites(wt, step, out, fails, suites, runner="uv run --frozen --no-sync "):
+    """Run each selected module's suite, one after another; return the names run.
+
+    Serial on purpose: the suites share the one .venv and several write
+    sqlite or tmp fixtures under fixed names. Every suite runs even after an
+    earlier one failed, so one red module cannot hide another's verdict. A
+    suite whose test paths are all missing from the tree is recorded in
+    `fails` by name instead of passing over zero collected tests; `step`
+    records a red or overrun run the same way it does for every other gate.
+    """
+    ran = []
+    env = pytest_env()
+    for module, hit in suites:
+        args = PYTEST_SUITES[module]
+        paths = [a for a in args if not a.startswith("-") and "/" in a]
+        out.write(f"\n===== pytest:{module}\ngate hit: {hit[0]} <- {hit[1]}\n")
+        missing = [p for p in paths if not os.path.exists(os.path.join(wt, p))]
+        if missing and len(missing) == len(paths):
+            fails.append(f"pytest:{module} (no test path)")
+            out.write(f"pytest:{module} FAIL: no test path exists ({', '.join(missing)})\n")
+            continue
+        present = [a for a in args if a not in missing]
+        cmd = runner + "pytest " + " ".join(
+            a if " " not in a else f'"{a}"' for a in present) + " -q --tb=short -p no:cacheprovider"
+        step(f"pytest:{module}", cmd, 900, env=env)
+        ran.append(module)
+    return ran
+
+
 def bun_bin():
     """Absolute path of the bun the suites run with, or None when the host has none.
 
@@ -1205,6 +1382,206 @@ def run_bun_suites(wt, step, out, fails):
         ran.append(name)
         step(f"bun:{name}", [bun, "run", "test"], BUN_TEST_TIMEOUT, os.path.join(wt, d))
     return ran
+
+
+class NpmPlanError(Exception):
+    """The path-to-workspace mapping could not be computed; run every workspace."""
+
+
+def npm_workspaces(wt):
+    """The root npm workspaces: {dir: {"name", "test", "deps"}}, in dir order.
+
+    `deps` holds the names of other workspaces this one declares in any of
+    NPM_DEP_FIELDS. Raises NpmPlanError when the root manifest names no
+    workspaces or a workspace manifest is unreadable: a mapping built from a
+    partial list would under-cover without saying so.
+    """
+    globs = root_workspace_globs(wt)
+    if not globs:
+        raise NpmPlanError("root package.json names no workspaces")
+    dirs = set()
+    for g in globs:
+        for m in glob.glob(os.path.join(wt, g, "package.json")):
+            dirs.add(os.path.relpath(os.path.dirname(m), wt).replace(os.sep, "/"))
+    if not dirs:
+        raise NpmPlanError("no workspace manifest matched " + ", ".join(globs))
+    raw = {}
+    for d in sorted(dirs):
+        try:
+            with open(os.path.join(wt, d, "package.json")) as f:
+                pkg = json.load(f)
+        except (OSError, ValueError) as exc:
+            raise NpmPlanError(f"{d}/package.json unreadable ({exc})") from exc
+        if not isinstance(pkg, dict) or not isinstance(pkg.get("name"), str):
+            raise NpmPlanError(f"{d}/package.json has no name")
+        raw[d] = pkg
+    names = {pkg["name"] for pkg in raw.values()}
+    out = {}
+    for d, pkg in raw.items():
+        deps = set()
+        for field in NPM_DEP_FIELDS:
+            block = pkg.get(field) or {}
+            if isinstance(block, dict):
+                deps.update(k for k in block if k in names and k != pkg["name"])
+        test = (pkg.get("scripts") or {}).get("test")
+        out[d] = {"name": pkg["name"], "test": test if isinstance(test, str) else None,
+                  "deps": sorted(deps)}
+    return out
+
+
+def npm_lane_patterns(wt):
+    """{lane: patterns} for NPM_LANES from scripts/ci_paths.yaml.
+
+    Raises NpmPlanError when the file or a lane block is missing: the lane
+    blocks are where the non-workspace triggers live, so without them a change
+    could miss a suite and the caller runs every workspace instead.
+    """
+    try:
+        with open(os.path.join(wt, "scripts", "ci_paths.yaml")) as f:
+            text = f.read()
+    except OSError as exc:
+        raise NpmPlanError(f"scripts/ci_paths.yaml unreadable ({exc})") from exc
+    out = {}
+    for lane in NPM_LANES:
+        pats = parse_ci_paths_block(text, lane)
+        if not pats:
+            raise NpmPlanError(f"scripts/ci_paths.yaml has no `{lane}:` block")
+        out[lane] = pats
+    return out
+
+
+def npm_dependents(workspaces, touched):
+    """`touched` plus every workspace that depends on one of them, transitively."""
+    by_name = {w["name"]: d for d, w in workspaces.items()}
+    users = {d: set() for d in workspaces}
+    for d, w in workspaces.items():
+        for dep in w["deps"]:
+            users[by_name[dep]].add(d)
+    seen, todo = set(touched), list(touched)
+    while todo:
+        for u in users.get(todo.pop(), ()):
+            if u not in seen:
+                seen.add(u)
+                todo.append(u)
+    return seen
+
+
+def npm_plan(files, wt):
+    """Which workspaces this change must test.
+
+    Returns (plan, why, error): `plan` is a list of (dir, name) in dir order,
+    restricted to workspaces with a non-bun test script; `why` maps each dir to
+    the first reason it was selected; `error` is None, or the reason the
+    mapping failed and every workspace was selected (fail closed).
+    """
+    error = None
+    why = {}
+    try:
+        ws = npm_workspaces(wt)
+        lanes = npm_lane_patterns(wt)
+        root = path_gate_hit(files, NPM_ROOT_INPUTS)
+        if root is not None:
+            for d in ws:
+                why.setdefault(d, f"root install input {root[1]}")
+        direct = set()
+        for f in files:
+            for d in ws:
+                if f.startswith(d + "/"):
+                    direct.add(d)
+                    why.setdefault(d, f"touched {f}")
+        for d in sorted(npm_dependents(ws, direct) - direct):
+            why.setdefault(d, "depends on a touched workspace")
+        rest = [f for f in files
+                if not any(f.startswith(d + "/") for d in ws) and f not in NPM_ROOT_INPUTS]
+        for lane, pats in lanes.items():
+            lane_ws = [d for d in ws if f"{d}/**" in pats]
+            hit = path_gate_hit(rest, pats)
+            if hit is not None:
+                for d in lane_ws:
+                    why.setdefault(d, f"{lane} lane path {hit[1]}")
+    except (NpmPlanError, OSError, ValueError, KeyError, TypeError) as exc:
+        error = str(exc) or type(exc).__name__
+        ws = npm_workspaces_tolerant(wt)
+        why = {d: "mapping failed; running every workspace" for d in ws}
+    plan = [(d, ws[d]["name"]) for d in sorted(why)
+            if d in ws and ws[d]["test"] and not ws[d]["test"].startswith("bun ")]
+    return plan, why, error
+
+
+def npm_workspaces_tolerant(wt):
+    """Every `apps/*` and `packages/*` manifest that can be read, for the
+    fail-closed path. The strict reader already failed, so this one keeps
+    whatever it can; a manifest it cannot read also breaks the `npm ci` that
+    runs before any suite, so that workspace still turns the verdict red."""
+    out = {}
+    for m in sorted(glob.glob(os.path.join(wt, "apps", "*", "package.json"))
+                    + glob.glob(os.path.join(wt, "packages", "*", "package.json"))):
+        d = os.path.relpath(os.path.dirname(m), wt).replace(os.sep, "/")
+        try:
+            with open(m) as f:
+                pkg = json.load(f)
+            name = pkg["name"]
+            test = (pkg.get("scripts") or {}).get("test")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            continue
+        out[d] = {"name": name, "test": test if isinstance(test, str) else None, "deps": []}
+    return out
+
+
+def npm_env(base=None):
+    """The gate environment for npm suites: ENV without any credential-looking
+    key, with CI set so no runner starts in watch mode."""
+    env = dict(ENV if base is None else base)
+    for k in list(env):
+        if any(sub in k.upper() for sub in NPM_SCRUB_SUBSTRINGS):
+            env.pop(k, None)
+    env["CI"] = "1"
+    return env
+
+
+def npm_gate(pr, wt):
+    """Path gate for the npm workspace suites. Returns (n_files, plan, why, error),
+    or (None, None, None, None) when the file list is unusable (the caller fails closed)."""
+    raw = gh("api", f"repos/{REPO}/pulls/{pr['number']}/files", "--paginate", "--slurp")
+    try:
+        files = changed_file_names(json.loads(raw or ""))
+    except ValueError:
+        files = None
+    if files is None:
+        return None, None, None, None
+    plan, why, error = npm_plan(files, wt)
+    return len(files), plan, why, error
+
+
+def short_workspace_name(name):
+    """Receipt name of a workspace: `@digithings/ui` -> `ui`."""
+    return name.rsplit("/", 1)[-1]
+
+
+def run_npm_suites(wt, step, out, fails, plan, installed=None, pool=None):
+    """Run `npm run test --workspace <name>` for every planned workspace.
+
+    `installed` is True when this tick's worker build already ran a good
+    `npm ci` in `wt`, False when that install failed (no suite can run over
+    it), and None when nothing installed yet. Every suite runs even after an
+    earlier one failed, so one red workspace cannot hide another's verdict.
+    Returns the receipt names of the suites that started.
+    """
+    if not plan:
+        return []
+    if installed is False:
+        fails.append("npm-suites: npm ci failed")
+        out.write("npm-suites FAIL: the worker-build npm ci failed; no suite ran\n")
+        return []
+    if installed is None and not step("npm-ci", ["npm", "ci", "--no-audit", "--no-fund"], 1800):
+        return []
+    env = npm_env()
+    specs = [gate_spec(f"npm-test:{short_workspace_name(name)}",
+                       ["npm", "run", "test", "--workspace", name],
+                       NPM_TEST_TIMEOUT, wt, env, ())
+             for _, name in plan]
+    fails.extend((pool or run_step_pool)(specs, out, limit=NPM_POOL))
+    return [short_workspace_name(name) for _, name in plan]
 
 
 def buildable_worker_apps(wt):
@@ -1543,27 +1920,43 @@ def prepare_wt(n, sha, base, out):
     return True, ""
 
 
-def success_desc(mins, bun=None):
-    """The success description: the verdict, then what the bun gate did (DIG-5203).
+def success_desc(mins, bun=None, pytest=None, npm=None, template_warnings=0):
+    """The success description: the verdict, then what the bun, pytest and npm
+    gates did (DIG-5203, DIG-3605, npm workspace suites), then the pr-template
+    warning count when there is one.
 
     A commit status description is capped at 140 characters (`status_fields`
     keeps 139), so the suite names are dropped before they can be cut in half:
     a receipt that names three suites and half of a fourth is worse than one
     that names none, and the run log always names every suite in full.
 
-    "gates passed" rather than GATED_NOTE when the suites ran: the receipt is no
+    "gates passed" rather than GATED_NOTE when any suite ran: the receipt is no
     longer a static-only receipt, and claiming it was would be the same false
-    green this gate exists to remove. When no `bun_suites` path changed, the
-    static note stays and the receipt says so: `bun: none` is the skip made
-    visible, not a silence.
+    green this gate exists to remove. When no suite path changed, the static
+    note stays and the receipt says so: `bun: none`, `pytest: none` and
+    `npm: none` are the skips made visible, not a silence.
     """
-    tail = f" ({mins:.0f}m)"
+    warn = f"; template: {template_warnings} warning(s)" if template_warnings else ""
+    tail = f"{warn} ({mins:.0f}m)"
     ran = (bun or {}).get("ran") or []
-    if not ran:
-        return f"{GATED_NOTE}; bun: none{tail}"
-    head = f"gates passed; bun {len(ran)}/{len(ran)}: {', '.join(ran)}"
+    py = (pytest or {}).get("ran") or []
+    js = (npm or {}).get("ran") or []
+    if not ran and not py and not js:
+        return f"{GATED_NOTE}; bun: none; pytest: none; npm: none{tail}"
+
+    def part(label, names, full):
+        if not names:
+            return f"{label}: none"
+        if full:
+            return f"{label} {len(names)}/{len(names)}: {', '.join(names)}"
+        return f"{label} {len(names)}/{len(names)}"
+
+    head = (f"gates passed; {part('bun', ran, True)}; {part('pytest', py, True)}; "
+            f"{part('npm', js, True)}")
     if len(head + tail) > 139:
-        head = f"gates passed; bun {len(ran)}/{len(ran)} (suites in the log)"
+        head = (f"gates passed; {part('bun', ran, False)}; {part('pytest', py, False)}; "
+                f"{part('npm', js, False)}"
+                " (suites in the log)")
     return head + tail
 
 
@@ -1936,7 +2329,8 @@ def run_checks(pr, out, summary=None):
             or re.match(rf"^({TYPES})\([^)]+\)!?: .+", title)):
         fails.append("pr-title"); out.write(f"pr-title FAIL: {title!r}\n")
     # PR template (DIG-3842 scope update 15 Oct 2026; DCO gate removed same day,
-    # its workflow removal rides on DIG-3845)
+    # its workflow removal rides on DIG-3845). Warning-only since plan P1-2,
+    # except the Human Gate.
     if pr_template is None:
         # A missing checker is a runner defect, not author metadata: the name
         # keeps it out of METADATA_GATES, so the row stays terminal instead of
@@ -1949,11 +2343,23 @@ def run_checks(pr, out, summary=None):
             # What this gate judges, so the queue can tell a corrected title or
             # body from the same failed one (DIG-5695).
             summary["metadata_revision"] = metadata_revision(title, body)
-        ok, reasons = pr_template.check_template(body or "")
-        if not ok:
+        _ok, reasons = pr_template.check_template(body or "")
+        # Only the Human Gate blocks (plan P1-2): every other template finding
+        # is a warning in the log and a count on the receipt, so paperwork no
+        # longer throws away a CI run. A checker without split_findings is an
+        # old install: every finding stays blocking, as before.
+        if hasattr(pr_template, "split_findings"):
+            blocking, warns = pr_template.split_findings(reasons)
+        else:
+            blocking, warns = list(reasons), []
+        if blocking:
             fails.append("pr-template")
-        for r in reasons:
+        for r in blocking:
             out.write(f"pr-template FAIL: {r}\n")
+        for r in warns:
+            out.write(f"pr-template WARN: {r}\n")
+        if summary is not None:
+            summary["template_warnings"] = len(warns)
     rep = f"{LOGD}/gitleaks-{sha[:12]}.json"
     opts = gitleaks_log_opts(base, sha, out)
     if opts is None:
@@ -2022,6 +2428,10 @@ def run_checks(pr, out, summary=None):
     elif hit is not None:
         out.write(f"\n===== worker-build\ngate hit: {hit[0]} <- {hit[1]}\n")
         fails.extend(worker_build(WT, step, out=out))
+    # The worker build's `npm ci` is the same root install the npm suites need,
+    # so a tick that already paid for it does not pay twice.
+    npm_installed = (None if hit is None
+                     else not step_failed(fails, "worker-build:npm-ci"))
     # Bun suites (DIG-5203): the required check has to prove a clients/** or
     # packages/** change, not report green over a suite nobody ran. The paths
     # come from the same `bun_suites` block the retired lane used, and a hit
@@ -2038,6 +2448,41 @@ def run_checks(pr, out, summary=None):
         ran_bun = run_bun_suites(WT, step, out, fails)
     if summary is not None:
         summary["bun"] = {"hit": bun_hit[0] if bun_hit else None, "ran": ran_bun}
+    # Scoped pytest (DIG-3605): the suite of every Python module the PR
+    # touches, with the same selection the retired per-module lane used. It
+    # needs the venv, so a failed uv-sync is already the verdict and no suite
+    # runs over a half-installed environment.
+    ran_py = []
+    n_py, py_suites = pytest_gate(pr, WT)
+    if n_py is None:
+        out.write("\n===== pytest\nchanged-files fetch failed; failing closed\n")
+        fails.append("pytest: changed-files fetch failed")
+    elif py_suites and step_failed(fails, "uv-sync"):
+        out.write("\n===== pytest\nuv-sync failed; no suite ran\n")
+    elif py_suites:
+        ran_py = run_pytest_suites(WT, step, out, fails, py_suites)
+    if summary is not None:
+        summary["pytest"] = {"ran": ran_py}
+    # npm workspace suites: `npm run test --workspace <ws>` for every root
+    # workspace the PR touches and every workspace that depends on one. The
+    # retired test-digichat/-dashboard/-web lanes ran these, and nothing has
+    # since 14 Oct. A mapping error runs every workspace (fail closed).
+    ran_npm = []
+    n_npm, npm_suites, npm_why, npm_error = npm_gate(pr, WT)
+    if n_npm is None:
+        out.write("\n===== npm-suites\nchanged-files fetch failed; failing closed\n")
+        fails.append("npm-suites: changed-files fetch failed")
+    else:
+        out.write("\n===== npm-suites\n")
+        if npm_error:
+            out.write(f"mapping failed ({npm_error}); running every workspace\n")
+        for d, _ in npm_suites:
+            out.write(f"{d}: {npm_why[d]}\n")
+        if not npm_suites:
+            out.write("no npm workspace touched\n")
+        ran_npm = run_npm_suites(WT, step, out, fails, npm_suites, installed=npm_installed)
+    if summary is not None:
+        summary["npm"] = {"ran": ran_npm, "error": npm_error}
     return fails
 
 def process(pr, dry):
@@ -2066,7 +2511,9 @@ def process(pr, dry):
     # line names the suites so a PR with no bun path says `bun: none` instead of
     # reading like the suites passed (DIG-5203).
     if fails: st, desc = "failure", f"local-ci failed: {', '.join(fails)} ({mins:.0f}m)"
-    else: st, desc = "success", success_desc(mins, summary.get("bun"))
+    else: st, desc = "success", success_desc(mins, summary.get("bun"), summary.get("pytest"),
+                                             summary.get("npm"),
+                                             template_warnings=summary.get("template_warnings", 0))
     log(f"PR #{n} {sha[:12]} {st}: {desc} log={logf}")
     if not dry:
         if metadata_failure_gates(desc) is not None:
@@ -2838,6 +3285,10 @@ def pending_applied(prs):
     pull request that arrived first is served first. The newest-first order
     left the old pull requests waiting behind every later arrival, and a
     required context that never reports is a pull request that cannot merge.
+
+    A head nobody has reviewed yet is not queued at all (plan P1-3): there is
+    no review to have applied, so the check posts nothing rather than a red
+    row. It is queued on the first tick after a review of that head lands.
     """
     out = []
     for p in prs:
@@ -2847,14 +3298,36 @@ def pending_applied(prs):
         if st == "success":
             continue
         if st in ("pending", "failure") and desc.startswith(SKIP_PREFIX):
-            out.append(p)  # gate cleared since the skip; re-check
+            due = True  # gate cleared since the skip; re-check
         elif st is None:
-            out.append(p)
+            due = True
         elif st in ("pending", "failure") and _status_age_secs(ts) >= REVIEW_RECHECK_SECS:
+            due = True
+        else:
+            due = False
+        if due and awaiting_review(p):
+            continue
+        if due:
             out.append(p)
     out.sort(key=lambda p: (p.get("createdAt") or p.get("updatedAt") or "",
                              p.get("number") or 0))
     return out
+
+
+def awaiting_review(pr):
+    """True when no review of this head exists yet, so review-applied waits.
+
+    Cached on the PR dict for the tick, so the queue scan and the run read the
+    reviews once. An unreadable record is not "no review": the head is checked
+    as before and fails closed with the reason (``None`` -> False).
+    """
+    if "_head_reviewed" not in pr:
+        if review_applied is None or not hasattr(review_applied, "head_review_exists"):
+            pr["_head_reviewed"] = None
+        else:
+            pr["_head_reviewed"] = review_applied.head_review_exists(
+                pr["number"], pr["headRefOid"], REPO, _rest)
+    return pr["_head_reviewed"] is False
 
 
 def _gh_json(argv):
@@ -2925,6 +3398,11 @@ def run_applied(pr, out):
 def process_applied(pr, dry):
     sha = pr["headRefOid"]; n = pr["number"]
     logf = f"{LOGD}/pr{n}-applied-{sha[:12]}.log"
+    if awaiting_review(pr):
+        # Nothing to judge until someone reviews this head: post no row at all
+        # (not pending, not failure). The next tick after a review re-queues it.
+        log(f"PR #{n} review-applied {sha[:12]} skipped: no review of this head yet")
+        return "skipped"
     log(f"PR #{n} review-applied {sha[:12]} start")
     if not dry: applied_status(sha, "pending", "local-ci: checking review-applied")
     sh(["git", "fetch", "-q", "origin", pr["baseRefName"], f"pull/{n}/head"], cwd=MAIN, timeout=600)

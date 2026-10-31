@@ -718,6 +718,12 @@ def fetch_review_passes(pr_number, repo, run_gh, run_rest):
         except AttributeError:
             login = None
         if state == "APPROVED":
+            # An approval is a verdict on the commit it names. An approval of an
+            # earlier head says nothing about this one: #6543, #6567 and #6635
+            # merged on an approve that a later push had already made stale.
+            head = context.get("head")
+            if head and r.get("commit_id") and not _names_this_head(r.get("commit_id"), head):
+                continue
             candidates.append({"kind": "human", "author": login,
                                "has_comments": True, "at": r.get("submitted_at"),
                                "commit_id": r.get("commit_id"), "body": body})
@@ -740,6 +746,47 @@ def fetch_review_passes(pr_number, repo, run_gh, run_rest):
     kept, _dropped = _filter_passes(candidates, pr_number, context)
     _record_corpus(pr_number, kept, context)
     return kept
+
+
+def head_review_exists(pr_number, head, repo, run_rest):
+    """Has anyone reviewed this head yet? True, False, or None when unreadable.
+
+    review-applied asks whether a review was applied, so before any review
+    exists it has nothing to judge. It used to answer with a red "no review
+    pass left comments" row on every fresh head: 1,437 of them, none of which
+    the merge queue reads (review-applied is in its ``ignored_checks``).
+    local-ci now posts nothing for a head until this returns True.
+
+    A review counts for this head when it is a submitted REST review whose
+    ``commit_id`` is the head, or a posted in-session marker comment whose
+    provenance names the head (a marker that names no head speaks about the
+    current one, the same rule ``_filter_passes`` applies). No labels are read:
+    the reviewed:* labels are retired (dev-flow plan, 29 Oct 2026), and the
+    verdict is bound to the head SHA instead.
+
+    Read-only: unlike ``fetch_review_passes`` it records nothing in the corpus,
+    so the tick can ask it about every open PR without side effects.
+    """
+    head = str(head or "").lower()
+    reviews = run_rest("repos/%s/pulls/%d/reviews?per_page=100" % (repo, pr_number))
+    comments = run_rest("repos/%s/issues/%d/comments?per_page=100" % (repo, pr_number))
+    if not isinstance(reviews, list) or not isinstance(comments, list):
+        return None
+    for r in reviews:
+        if not isinstance(r, dict):
+            continue
+        if str(r.get("state") or "").upper() not in _REVIEW_STATES:
+            continue  # PENDING: drafted, not submitted
+        commit = str(r.get("commit_id") or "").lower()
+        if head and commit and _names_this_head(commit, head):
+            return True
+    for c in comments:
+        if not isinstance(c, dict):
+            continue
+        body = c.get("body") or ""
+        if carries_agent_review_marker(body) and _names_this_head(_posted_head(body), head):
+            return True
+    return False
 
 
 def reviewer_logins_for(review_passes):

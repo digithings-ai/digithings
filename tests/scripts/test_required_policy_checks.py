@@ -42,11 +42,19 @@ CONTEXTS = REPO_ROOT / ".github" / "required-contexts.txt"
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 
-#: The live required contexts on develop as of 2026-10-07, read from
-#: GET /repos/digithings-ai/digithings/branches/develop/protection. Two of
-#: these are produced by workflows other than ci.yml, and that is correct —
-#: they are the reason a ci.yml-only guard was the wrong inventory.
-LIVE_CONTEXTS = ["Required checks passed", "doc-links + agents-init", "mypy — digibase + digikey"]
+#: The live required contexts on develop as of 2026-10-29, read (read-only) from
+#: GET /repos/digithings-ai/digithings/branches/develop/protection. The one
+#: context is a commit status the local CI runner posts; no workflow produces
+#: it, so it is declared under `external_contexts:` in the inventory. (Until
+#: then the snapshot listed three GitHub Actions contexts, read 2026-10-07.)
+LIVE_CONTEXTS = ["local-ci"]
+#: The three contexts the 2026-10-07 snapshot listed. They still run and
+#: report; they are advisory since the live gate stopped requiring them.
+FORMER_CONTEXTS = [
+    "Required checks passed",
+    "doc-links + agents-init",
+    "mypy — digibase + digikey",
+]
 
 
 def _load() -> Any:
@@ -75,8 +83,11 @@ def _run(
     branch: str = "develop",
     workflows_dir: Path | None = None,
     untracked_facts: dict[str, Any] | None = None,
+    external: list[Any] | None = None,
 ):
     root = workflows_dir or guard.WORKFLOWS_DIR
+    if external is None:
+        external = guard.load_external_contexts(INVENTORY)
     facts = {name: guard.read_workflow_facts(root / name, branch) for name in tracked}
     return guard.reconcile(
         inventory,
@@ -86,6 +97,7 @@ def _run(
         branch,
         untracked_facts or {},
         root,
+        external=external,
     )
 
 
@@ -142,7 +154,10 @@ def test_committed_contexts_match_the_dated_live_gate_read() -> None:
 def test_inventory_and_contexts_are_internally_consistent() -> None:
     inventory, tracked = guard.load_inventory(INVENTORY)
     required = [c.context for c in inventory if c.is_required]
-    assert sorted(required) == sorted(LIVE_CONTEXTS)
+    external = [e.context for e in guard.load_external_contexts(INVENTORY)]
+    # Every live context is accounted for exactly once: by a required workflow
+    # entry or by an external declaration.
+    assert sorted(required + external) == sorted(LIVE_CONTEXTS)
     # Every tracked workflow must actually exist, or reconciliation 1 is vacuous.
     for name in tracked:
         assert (guard.WORKFLOWS_DIR / name).is_file(), name
@@ -275,11 +290,12 @@ def test_stall_rule_covers_a_workflow_level_paths_filter() -> None:
 # ── the required-and-out-of-file checks the brief warns about ────────────────
 
 
-def test_the_two_out_of_file_required_checks_are_genuinely_required() -> None:
+def test_the_two_out_of_file_checks_still_report_but_gate_nothing() -> None:
     """`doc-links + agents-init` and `mypy — digibase + digikey` live in
-    ci-docs.yml and ci-type-check.yml, outside ci.yml's `needs`. Reconciling
-    against ci.yml's job names — what DIG-1952 item 2 asked for literally —
-    would demand they be added to `needs` and break the mechanism that works."""
+    ci-docs.yml and ci-type-check.yml, outside ci.yml's `needs`. They were
+    develop's required contexts until the live gate became `local-ci` alone
+    (read 2026-10-29); they still run, are declared advisory, and are dated so
+    someone decides whether they come back."""
     inventory, _tracked = guard.load_inventory(INVENTORY)
     by_context = {c.context: c for c in inventory}
     for context, workflow in (
@@ -287,9 +303,10 @@ def test_the_two_out_of_file_required_checks_are_genuinely_required() -> None:
         ("mypy — digibase + digikey", "ci-type-check.yml"),
     ):
         check = by_context[context]
-        assert check.is_required
+        assert not check.is_required
+        assert check.enforcement == "advisory"
+        assert check.review_by
         assert check.workflow == workflow
-        assert check.workflow != "ci.yml"
 
 
 # ── rename and shape detection ───────────────────────────────────────────────
@@ -808,9 +825,9 @@ def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() ->
     it are still develop's, and this leaf adds only metadata to them."""
     inventory, tracked = guard.load_inventory(INVENTORY)
     assert [(c.context, c.workflow, c.job, c.enforcement) for c in inventory] == [
-        ("Required checks passed", "ci.yml", "required-checks", "required"),
-        ("doc-links + agents-init", "ci-docs.yml", "docs-and-agents-init", "required"),
-        ("mypy — digibase + digikey", "ci-type-check.yml", "mypy", "required"),
+        ("Required checks passed", "ci.yml", "required-checks", "advisory"),
+        ("doc-links + agents-init", "ci-docs.yml", "docs-and-agents-init", "advisory"),
+        ("mypy — digibase + digikey", "ci-type-check.yml", "mypy", "advisory"),
         ("gitleaks-scan", "security-gitleaks.yml", "scan", "advisory"),
         (
             "All agent-task issues in TSV with real phase and valid model",
@@ -1027,7 +1044,7 @@ def test_a_writer_that_would_apply_an_undeclared_context_is_caught(tmp_path: Pat
 def test_a_writer_that_would_drop_a_declared_context_is_caught() -> None:
     """Drift the other way: a gate that is declared and then never enforced."""
     snapshot = guard.read_contexts_file(CONTEXTS)
-    assert len(snapshot) > 1, "need at least two contexts for the drop to mean anything"
+    assert snapshot, "need at least one context for the drop to mean anything"
     dropped = [c for c in guard.read_writer_contexts() if c != snapshot[0]]
     findings = guard.check_writer_coupling(snapshot, dropped)
     assert _codes(findings) == {"writer.snapshot-drift"}
@@ -1137,14 +1154,16 @@ REVIEW_BY_CONTEXTS = [
 def test_exactly_three_issue_alone_advisories_carry_review_by() -> None:
     """Correction 1 as a pin: the dates land on exactly these three entries."""
     inventory, _tracked = guard.load_inventory(INVENTORY)
-    dated = {c.context: c.review_by for c in inventory if c.review_by}
+    dated = {c.context: c.review_by for c in inventory if c.review_by == "2027-04-13"}
     assert sorted(dated) == sorted(REVIEW_BY_CONTEXTS), dated
-    assert set(dated.values()) == {"2027-04-13"}, dated
     by_context = {c.context: c for c in inventory}
     assert by_context["gitleaks-scan"].issue == "DIG-1952"
     assert by_context["gitleaks-scan"].known_gap is None
-    assert by_context["Frontend canon guard"].review_by is None
-    assert by_context["actionlint"].review_by is None
+    # The ci.yml lanes were `gated_by: Required checks passed`; that context
+    # left the live gate on 2026-10-29, so they are dated instead.
+    assert by_context["Frontend canon guard"].gated_by is None
+    assert by_context["Frontend canon guard"].review_by == "2026-11-30"
+    assert by_context["actionlint"].review_by == "2026-11-30"
     assert by_context["Workflow secret references (PR reporter)"].review_by is None
 
 
@@ -1184,3 +1203,51 @@ def test_a_malformed_review_by_is_rejected_at_load(tmp_path: Path) -> None:
     )
     with pytest.raises(guard.GuardError, match="review_by"):
         guard.load_inventory(path)
+
+
+# ── external contexts: a live gate no workflow produces (2026-10-29) ──────────
+
+
+def test_local_ci_is_declared_as_the_external_gate() -> None:
+    external = guard.load_external_contexts(INVENTORY)
+    assert [e.context for e in external] == ["local-ci"]
+    assert external[0].owner and external[0].producer and external[0].reason
+
+
+def test_merge_queue_is_not_in_the_snapshot() -> None:
+    """set-branch-protection.sh applies the snapshot exactly; requiring a
+    context only the queue posts would lock develop."""
+    assert "merge-queue" not in guard.read_contexts_file(CONTEXTS)
+
+
+def test_an_undeclared_external_gate_is_still_a_finding() -> None:
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    findings = _run(inventory, tracked, LIVE_CONTEXTS, external=[])
+    assert _subjects(findings, "policy.undeclared-gate") == {"local-ci"}
+
+
+def test_an_external_entry_the_gate_no_longer_requires_is_stale() -> None:
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    findings = _run(inventory, tracked, ["something-else"])
+    assert _subjects(findings, "policy.stale-external") == {"local-ci"}
+
+
+def test_an_external_context_may_not_also_be_a_workflow_check(tmp_path: Path) -> None:
+    text = INVENTORY.read_text(encoding="utf-8").replace(
+        "  - context: local-ci\n", "  - context: actionlint\n", 1
+    )
+    bad = tmp_path / "policy-checks.yml"
+    bad.write_text(text, encoding="utf-8")
+    with pytest.raises(guard.GuardError, match="also declared under 'checks'"):
+        guard.load_external_contexts(bad)
+
+
+def test_an_external_context_needs_an_owner(tmp_path: Path) -> None:
+    text = INVENTORY.read_text(encoding="utf-8").replace(
+        "    owner: DevOps\n    reason: >-\n      The one context", "    reason: >-\n      The one context", 1
+    )
+    assert text != INVENTORY.read_text(encoding="utf-8")
+    bad = tmp_path / "policy-checks.yml"
+    bad.write_text(text, encoding="utf-8")
+    with pytest.raises(guard.GuardError, match="owner"):
+        guard.load_external_contexts(bad)

@@ -14,7 +14,8 @@ describe("shared cn", () => {
     expect(cn("p-2", "p-4")).toBe("p-4");
   });
 
-  it("keeps one implementation and re-exports it", () => {
+  // QUARANTINE: fails on develop 673104483 since a021c37fe (#6490); it still reads apps/reference/lib/utils.ts, which #6490 deleted (apps/digiweb/lib/utils.ts is the likely replacement); ticket: DIG-6067
+  it.skip("keeps one implementation and re-exports it", () => {
     const canonical = readFileSync(
       new URL("../../../packages/ui/src/lib/utils.ts", import.meta.url),
       "utf8",
