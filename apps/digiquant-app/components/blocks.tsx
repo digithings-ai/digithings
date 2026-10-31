@@ -13,6 +13,7 @@ import { PORTFOLIO_BLOCKS } from './blocks-portfolio';
 import { PIPELINE_BLOCKS } from './blocks-pipeline';
 import { MARKETS_BLOCKS } from './blocks-markets';
 import { DESK_BLOCKS } from './blocks-desk';
+import { TRACES_BLOCKS } from './blocks-traces';
 
 const num = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(d));
 
@@ -187,6 +188,7 @@ export const BLOCKS: BlockDef[] = [
   ...PIPELINE_BLOCKS,
   ...MARKETS_BLOCKS,
   ...DESK_BLOCKS,
+  ...TRACES_BLOCKS,
   { id: 'book', title: 'Book · allocation', route: '/allocations', Component: BookBlock },
   { id: 'portfolio', title: 'Portfolio · envelope', route: '/portfolio', Component: PortfolioBlock },
   { id: 'brief', title: 'Brief · scoreboard', route: '/brief', Component: BriefBlock },
