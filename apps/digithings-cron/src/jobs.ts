@@ -415,6 +415,10 @@ export const JOBS: readonly Job[] = [
   wd("token-canary", "41 6 * * *", MONOREPO, "token-canary.yml"),
   // Ported from main's GitHub schedule (Oct 2026 release). Weekly OpenWiki refresh.
   wd("openwiki-update", "0 8 * * MON", MONOREPO, "openwiki-update.yml"),
+  // Weekly gold-enrichment snapshot (#4804). Prior GHA was `0 9 * * 1`
+  // (Mon 09:00 UTC). Named MON so Cloudflare cannot reinterpret a numeric DOW.
+  // The workflow file is workflow_dispatch only; the clock lives here.
+  wd("enrich-gold-refresh", "0 9 * * MON", MONOREPO, "enrich-gold-refresh.yml"),
   // Ported from main's GitHub schedule. Alerts when a production deployment waits
   // on the environment gate too long (DIG-1569); every 30 minutes.
   wd(

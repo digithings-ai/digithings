@@ -71,11 +71,11 @@ dir is pruned to `--keep` dated pages afterwards (default 30; `latest.json`
 is never pruned). One pull failing prints a warning and continues — exit 1
 only if **all** pulls fail.
 
-The weekly workflow `.github/workflows/enrich-gold-refresh.yml`
-(`enrich-gold-refresh`, Mondays 09:00 UTC + `workflow_dispatch`) always runs
-with `--include-slow`. No secrets (anonymous tools only), no Supabase/R2
-writes. First live run is a post-merge operator action via
-`workflow_dispatch`.
+The weekly clock is the digithings-cron job `enrich-gold-refresh`
+(`0 9 * * MON`, Mondays 09:00 UTC). `.github/workflows/enrich-gold-refresh.yml`
+is `workflow_dispatch` only and always runs with `--include-slow`. No secrets
+(anonymous tools only), no Supabase/R2 writes. First live run is a post-merge
+operator action via `workflow_dispatch`.
 
 ## Manual runs
 

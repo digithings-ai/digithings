@@ -68,6 +68,7 @@ MIGRATED_CLOCKS: dict[str, tuple[str, ...]] = {
     ),
     "pipeline-digiquant.yml": ("house-run-09",),
     "project-enforce-assignment.yml": ("project-enforce-assignment",),
+    "enrich-gold-refresh.yml": ("enrich-gold-refresh",),
 }
 
 _CALL = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")

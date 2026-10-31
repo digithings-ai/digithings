@@ -44,6 +44,7 @@ const PATH_A_ENABLED_IDS = [
   "smoke-stack",
   "token-canary",
   "openwiki-update",
+  "enrich-gold-refresh",
   "production-deploy-gate-watchdog",
   "secret-staleness",
   "dependency-freshness",
@@ -408,7 +409,8 @@ describe("jobsForCron", () => {
       "twelve-x-digisearch-parity",
     ]);
     // Prior GHA was `0 9 * * 1`. Offset :08 avoids house-run-09 at 09:17.
-    expect(jobsForCron("0 9 * * MON")).toEqual([]);
+    // `0 9 * * MON` is enrich-gold-refresh, not this twelve-x row.
+    expect(jobsForCron("0 9 * * MON").map((row) => row.id)).toEqual(["enrich-gold-refresh"]);
     expect(jobsForCron("17 9 * * MON").map((row) => row.id)).toEqual(["house-run-09"]);
   });
 
