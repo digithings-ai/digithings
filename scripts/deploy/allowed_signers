@@ -4,6 +4,8 @@
 # One key per line, sshd allowed-signers format:
 #   <email> namespaces="git" <key-type> <public-key>
 #
-# Chris adds his ed25519-sk public key here. A file with no key lines
-# fails closed: every deploy job refuses the tag. Do not put a private
-# key in this file.
+# Only the promotion identity signs deploy tags. Its private half is held
+# in the Mac keychain and never leaves it (approved 2026-10-31). A file
+# with no key lines fails closed: every deploy job refuses the tag.
+# Do not put a private key in this file.
+promotion@local.invalid namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINKq/T6JvmayBhm/nZZyYZnz7SZc+Ef+h/+vCoN1vrvl
