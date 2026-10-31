@@ -55,6 +55,8 @@ const WORKER_ONLY_ENV_MEMBERS: Record<string, string> = {
     "Worker-only lifetime of the /chat/occ invite cookie; the container never reads the cookie",
   ZAMMAD_EDGE_KEY:
     "Worker-only /api/mcp/zammad gate (stage 1); the container never sees the edge key",
+  ZAMMAD_MCP_JWT_ONLY:
+    "Worker-only switch that refuses the edge key on /api/mcp/zammad (DIG-3585); the container never judges it",
   DIGICHAT_ADMIN_KEY:
     "Worker-only /_digichat-admin container reset lever; the container never sees the admin key",
   DIGICHAT_CONTAINER_REV:

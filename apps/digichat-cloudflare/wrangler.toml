@@ -245,7 +245,20 @@ new_sqlite_classes = ["DigiChatContainer"]
 binding = "DIGICHAT_TENANTS_KV"
 id = "361b710bee56466097053275404535ba"
 
+# DIG-3585: the digikey JWKS for the helpdesk MCP gate (src/helpdesk-mcp-auth.ts).
+# key.digithings.ai is served by the digithings-stack Worker; the binding keeps
+# the read inside Cloudflare. Read-only use: GET /.well-known/jwks.json.
+[[services]]
+binding = "DIGIKEY"
+service = "digithings-stack"
+
 [vars]
+# DIG-3585: /api/mcp/zammad* accepts the ZAMMAD_EDGE_KEY secret OR a digikey JWT
+# with the exact `mcp:zammad` scope (minted by the chat only on the
+# invite-gated tenant's turn). After the tenant row has moved to
+# `authScheme: jwt`, set this to "1" to refuse the shared key:
+#   ZAMMAD_MCP_JWT_ONLY = "1"
+# Left unset here until that cutover, so nothing breaks before it.
 # Legacy generic anonymous embed is intentionally NOT set (OFF). A stock deploy
 # must not grant `/embed` to unregistered hosts. To opt in for a dedicated legacy
 # deployment (no DIGICHAT_EMBED_TENANTS), add:

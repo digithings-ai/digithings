@@ -281,12 +281,16 @@ describe("the /chat cutover (DIG-5121)", () => {
 
   it("the Worker uses that gate, and the container never sees the key", () => {
     const index = read(`${WORKER_SRC}/index.ts`);
-    expect(index).toMatch(/evaluateMcpGate\(/);
+    expect(index).toMatch(/await authorizeHelpdeskMcp\(/);
     expect(index).toMatch(/mcpGate\.kind === "unauthorized"/);
-    expect(index).toMatch(/status: 401/);
-    // The key is dropped from the request that goes to the container.
+    expect(index).toMatch(/status: mcpGate\.status/);
+    // The key and the bearer are dropped from the request that goes to the container.
     expect(index).toMatch(/containerRequest\.headers\.delete\(MCP_KEY_HEADER\)/);
-    // …and the module that owns the gate is the one the Worker imports.
+    expect(index).toMatch(/containerRequest\.headers\.delete\("authorization"\)/);
+    // …and the modules that own the gate are the ones the Worker imports:
+    // the helpdesk gate (DIG-3585) runs the key check through evaluateMcpGate.
+    const helpdesk = read(`${WORKER_SRC}/helpdesk-mcp-auth.ts`);
+    expect(helpdesk).toMatch(/evaluateMcpGate\(pathname, presentedKey, env\.ZAMMAD_EDGE_KEY\)/);
     const gate = read(`${WORKER_SRC}/mcp-gate.ts`);
     expect(gate).toMatch(/export function evaluateMcpGate\(/);
     // The base-path spelling is mapped back onto the container-local one, so

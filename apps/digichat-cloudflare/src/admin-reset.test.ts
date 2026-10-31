@@ -114,8 +114,8 @@ describe("DIGICHAT_ADMIN_KEY stays Worker-only", () => {
     const resetAt = indexSource.indexOf('"/_digichat-admin/container/reset"');
     // The MCP gate is the last thing before the container proxy, so the reset
     // lever has to be handled before it (DIG-5121 moved the gate into its own
-    // module, src/mcp-gate.ts).
-    const zammadAt = indexSource.indexOf("const mcpGate = evaluateMcpGate(");
+    // module, src/mcp-gate.ts; DIG-3585 wrapped it in src/helpdesk-mcp-auth.ts).
+    const zammadAt = indexSource.indexOf("const mcpGate = await authorizeHelpdeskMcp(");
     expect(resetAt).toBeGreaterThan(-1);
     expect(zammadAt).toBeGreaterThan(-1);
     expect(resetAt).toBeLessThan(zammadAt);
