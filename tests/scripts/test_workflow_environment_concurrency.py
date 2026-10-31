@@ -108,9 +108,6 @@ ENVIRONMENT_GATED: dict[str, set[str]] = {
     "pipeline-maintenance.yml": {
         "dependency-audit",
         "stale-branches",
-        "doc-links",
-        "adr-numbering",
-        "agents-drift",
         "architecture-drift",
         "stale-issues",
         "stale-prs",

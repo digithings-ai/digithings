@@ -33,10 +33,10 @@ are gone from the tables below.
 
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
-| Broken internal doc links | `pipeline-maintenance.yml` — `doc-links` job | weekly Mon 08:00 UTC | Runs `python3 scripts/check_doc_links.py`, files `[housekeeping] Broken internal doc links — <date>` if any found |
-| `agents.yml` ↔ `.claude/` drift | `pipeline-maintenance.yml` — `agents-drift` job | weekly Mon 08:00 UTC | Runs `make agents-init --check`, files an issue if regeneration is needed |
+| Broken internal doc links | local-ci + `ci-docs.yml` | on PR | Runs `python3 scripts/check_doc_links.py` (the weekly `pipeline-maintenance.yml` job was removed; local-ci runs the same script per PR) |
+| `agents.yml` ↔ `.claude/` drift | local-ci + `ci-docs.yml` | on PR | Runs `agents_init.py --check` (the weekly `pipeline-maintenance.yml` job was removed) |
 | Per-module `ARCHITECTURE.md` drift | `pipeline-maintenance.yml` — `architecture-drift` job | weekly Mon 08:00 UTC | Runs `scripts/check_architecture_drift.py`: flags modules whose public-interface paths moved ≥3d after their `ARCHITECTURE.md` did (last 30d), one tracker issue for **human** triage. Advisory only — never edits docs |
-| ADR numbering | `pipeline-maintenance.yml` — `adr-numbering` job + `ci-docs.yml` | weekly + on PR | Runs `scripts/check_adr_numbering.py`: `docs/adr/NNNN-*.md` must be zero-padded, unique and gap-free; files `[housekeeping] ADR numbering violation — <date>` on breach |
+| ADR numbering | local-ci + `ci-docs.yml` | on PR | Runs `scripts/check_adr_numbering.py`: `docs/adr/NNNN-*.md` must be zero-padded, unique and gap-free (the weekly `pipeline-maintenance.yml` job was removed) |
 | Doc-link check on every PR | `ci-docs.yml` | on PR | Same check as above, gates PRs with broken links |
 
 ## Security
