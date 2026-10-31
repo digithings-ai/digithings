@@ -15,8 +15,9 @@ import { DigichatThread } from "../components/chat/DigichatThread";
 
 const saved = vi.hoisted(() => [] as Array<{ name: string; body: string }>);
 
-vi.mock("../components/chat/transcript", () => ({
-  downloadTextFile: (name: string, body: string) => {
+vi.mock("../components/chat/transcript/save-file", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../components/chat/transcript/save-file")>()),
+  saveTextFile: (name: string, body: string) => {
     saved.push({ name, body });
   },
 }));
@@ -48,8 +49,29 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe("message menu Export as HTML", () => {
-  it("clicks the portaled menu item and saves only that question and answer", async () => {
+/** More → Export ▸ → the format row. Both menus are portaled to the body. */
+async function pickFormat(
+  user: ReturnType<typeof userEvent.setup>,
+  more: HTMLElement,
+  format: "md" | "html",
+): Promise<HTMLElement> {
+  await user.click(more);
+  const sub = await vi.waitFor(() => {
+    const el = document.body.querySelector<HTMLElement>("[data-slot='message-export-trigger']");
+    expect(el).toBeTruthy();
+    return el!;
+  });
+  expect(sub.textContent).toContain("Export");
+  await user.click(sub);
+  return vi.waitFor(() => {
+    const el = document.body.querySelector<HTMLElement>(`[data-export-format='${format}']`);
+    expect(el).toBeTruthy();
+    return el!;
+  });
+}
+
+describe("message menu Export submenu", () => {
+  it("clicks the portaled HTML row and saves only that answer", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(null, { status: 404 })),
@@ -90,16 +112,13 @@ describe("message menu Export as HTML", () => {
     );
     expect(more).toBeTruthy();
 
-    const user = userEvent.setup();
-    await user.click(more!);
-    const item = [...document.body.querySelectorAll("[role='menuitem']")].find((el) =>
-      el.textContent?.includes("Export as HTML"),
-    );
-    expect(item).toBeTruthy();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const item = await pickFormat(user, more!, "html");
+    expect(item.textContent).toContain("HTML (.html)");
     expect(thread!.contains(item!)).toBe(false);
     expect(item!.closest(".aui-thread-root")).toBeNull();
 
-    await user.click(item!);
+    await act(async () => item!.click());
     await act(async () => {
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => resolve());
@@ -108,7 +127,8 @@ describe("message menu Export as HTML", () => {
     await vi.waitFor(() => expect(saved).toHaveLength(1));
 
     const body = saved[0]!.body;
-    expect(body).toContain("beta-question-token");
+    expect(saved[0]!.name).toMatch(/beta-question-token\.html$/);
+    expect(body).not.toContain("beta-question-token");
     expect(body).toContain("beta-answer-token");
     expect(body).not.toContain("alpha-question-token");
     expect(body).not.toContain("alpha-answer-token");
@@ -147,16 +167,12 @@ describe("message menu Export as HTML", () => {
       expect(button).toBeTruthy();
       return button!;
     });
-    const user = userEvent.setup();
-    await user.click(more);
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const item = await pickFormat(user, more, "html");
     await act(async () => {
       alpha!.dispatchEvent(new MouseEvent("mouseleave", { bubbles: false }));
     });
-    const item = [...document.body.querySelectorAll("[role='menuitem']")].find((el) =>
-      el.textContent?.includes("Export as HTML"),
-    );
-    expect(item).toBeTruthy();
-    await user.click(item!);
+    await act(async () => item.click());
     await act(async () => {
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => resolve());
@@ -165,7 +181,7 @@ describe("message menu Export as HTML", () => {
     await vi.waitFor(() => expect(saved).toHaveLength(1));
 
     const body = saved[0]!.body;
-    expect(body).toContain("alpha-question-token");
+    expect(body).not.toContain("alpha-question-token");
     expect(body).toContain("alpha-answer-token");
     expect(body).not.toContain("beta-question-token");
     expect(body).not.toContain("beta-answer-token");
@@ -176,5 +192,33 @@ describe("message menu Export as HTML", () => {
 
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
+  });
+
+  it("saves that answer as markdown, without the question", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(<Harness />);
+    });
+    const beta = [...document.querySelectorAll("[data-role='assistant']")].find((el) =>
+      el.textContent?.includes("beta-answer-token"),
+    );
+    const more = [...beta!.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("More"),
+    );
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const item = await pickFormat(user, more!, "md");
+    expect(item.textContent).toContain("Markdown (.md)");
+    await act(async () => item.click());
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+    await vi.waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0]!.name).toMatch(/beta-question-token\.md$/);
+    expect(saved[0]!.body).toBe("beta-answer-token");
+    await act(async () => root.unmount());
   });
 });

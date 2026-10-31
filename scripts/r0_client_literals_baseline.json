@@ -290,7 +290,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-suggestion-pools.ts": {
-      "count": 6,
+      "count": 5,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-tenants.test.ts": {
@@ -298,7 +298,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-tenants.ts": {
-      "count": 5,
+      "count": 4,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-trial-messages.test.ts": {
@@ -614,10 +614,6 @@
       "ticket": "DIG-3689"
     },
     "packages/ui/src/components/chat/DigichatBootLoader.tsx": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
-    "packages/ui/src/components/chat/skins/digichat.tsx": {
       "count": 1,
       "ticket": "DIG-3689"
     },

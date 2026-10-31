@@ -3,7 +3,6 @@
 import { cn } from "@/lib/utils";
 import {
   ActionBarPrimitive,
-  ActionBarMorePrimitive,
   AuiIf,
   AttachmentPrimitive,
   BranchPickerPrimitive,
@@ -13,6 +12,7 @@ import {
   useAui,
 } from "@assistant-ui/react";
 import { type FC } from "react";
+import { MessageExportMenu } from "../stock/message-export-menu";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { useAttachmentSrc } from "../stock/use-attachment-src";
 import {
@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { MarkdownText } from "../stock/markdown-text";
 import { ToolFallback } from "../stock/tool-fallback.aui";
+import { useViewDisclosure } from "../stock/deploy-ui-context";
 import { SkinCredit, useComposerCopy } from "../stock";
 
 
@@ -46,7 +47,7 @@ export const ChatGPT: FC = () => {
     "Ask anything",
   );
   return (
-    <ThreadPrimitive.Root className="flex h-full flex-col items-stretch bg-white px-4 text-[#0d0d0d] dark:bg-black dark:text-[#ececec]">
+    <ThreadPrimitive.Root data-export-thread="" className="flex h-full flex-col items-stretch bg-white px-4 text-[#0d0d0d] dark:bg-[color:var(--chat-skin-canvas,#000)] dark:text-[#ececec]">
         <AuiIf condition={(s) => s.thread.isEmpty}>
           <EmptyState />
         </AuiIf>
@@ -61,7 +62,7 @@ export const ChatGPT: FC = () => {
               }}
             </ThreadPrimitive.Messages>
 
-            <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-3xl flex-col gap-2 overflow-visible rounded-t-3xl bg-white pb-1 dark:bg-black">
+            <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-3xl flex-col gap-2 overflow-visible rounded-t-3xl bg-white pb-1 dark:bg-[color:var(--chat-skin-canvas,#000)]">
               <ThreadScrollToBottom />
               <Composer placeholder={placeholder} />
               <SkinCredit />
@@ -94,7 +95,7 @@ const EmptyState: FC = () => {
 
 const Composer: FC<{ placeholder: string }> = ({ placeholder }) => {
   return (
-    <ComposerPrimitive.Root className="group/composer flex w-full flex-col rounded-[28px] border border-[#e5e5e5] bg-white px-2 py-2 focus-within:border-[#d0d0d0] dark:border-transparent dark:bg-[#212121] dark:focus-within:border-transparent">
+    <ComposerPrimitive.Root data-export-chrome="" className="group/composer flex w-full flex-col rounded-[28px] border border-[#e5e5e5] bg-white px-2 py-2 focus-within:border-[#d0d0d0] dark:border-transparent dark:bg-[#212121] dark:focus-within:border-transparent">
       <AuiIf condition={(s) => s.composer.attachments.length > 0}>
         <div className="flex flex-row flex-wrap gap-2 px-1 pt-1 pb-2">
           <ComposerPrimitive.Attachments
@@ -211,7 +212,7 @@ const ThreadScrollToBottom: FC = () => {
 
 const UserMessage: FC = () => {
   return (
-    <MessagePrimitive.Root className="relative mx-auto flex w-full max-w-3xl flex-col items-end gap-1">
+    <MessagePrimitive.Root data-role="user" className="relative mx-auto flex w-full max-w-3xl flex-col items-end gap-1">
       <div className="flex flex-row flex-wrap justify-end gap-2">
         <MessagePrimitive.Attachments
           components={{ Attachment: ChatGPTAttachmentUI }}
@@ -223,7 +224,7 @@ const UserMessage: FC = () => {
       </div>
 
       <div className="flex items-center gap-0.5">
-        <ActionBarPrimitive.Root
+        <ActionBarPrimitive.Root data-export-chrome=""
           hideWhenRunning
           autohide="always"
           autohideFloat="single-branch"
@@ -262,7 +263,7 @@ const UserMessage: FC = () => {
 
 const EditComposer: FC = () => {
   return (
-    <ComposerPrimitive.Root className="mx-auto flex w-full max-w-3xl flex-col justify-end gap-1 rounded-3xl bg-[#e9e9e9]/50 dark:bg-[#323232]">
+    <ComposerPrimitive.Root data-export-chrome="" className="mx-auto flex w-full max-w-3xl flex-col justify-end gap-1 rounded-3xl bg-[#e9e9e9]/50 dark:bg-[#323232]">
       <ComposerPrimitive.Input className="text-foreground flex h-8 w-full resize-none bg-transparent p-5 pb-0 outline-none dark:text-white" />
 
       <div className="m-3 mt-2 flex items-center justify-center gap-2 self-end">
@@ -281,21 +282,29 @@ const assistantActionClassName =
   "flex size-8 items-center justify-center rounded-lg text-[#5d5d5d] transition-colors hover:bg-black/[0.07] hover:text-[#5d5d5d] dark:text-[#cdcdcd] dark:hover:bg-white/15 dark:hover:text-[#cdcdcd]";
 
 const AssistantMessage: FC = () => {
+  const disclosure = useViewDisclosure();
   return (
-    <MessagePrimitive.Root className="relative mx-auto flex w-full max-w-3xl flex-col">
+    <MessagePrimitive.Root data-role="assistant" className="relative mx-auto flex w-full max-w-3xl flex-col">
       <div className="text-[#0d0d0d] dark:text-[#ececec]">
         <MessagePrimitive.Parts>
           {({ part }) => {
             if (part.type === "text") return <MarkdownText />;
             if (part.type === "tool-call")
-              return part.toolUI ?? <ToolFallback {...part} />;
+              return (
+                part.toolUI ?? (
+                  <ToolFallback
+                    key={disclosure.key}
+                    {...part}
+                  />
+                )
+              );
             return null;
           }}
         </MessagePrimitive.Parts>
       </div>
 
       <div className="-ml-2 flex items-center pt-1">
-        <ActionBarPrimitive.Root hideWhenRunning className="flex items-center">
+        <ActionBarPrimitive.Root data-export-chrome="" hideWhenRunning className="flex items-center">
           <ActionBarPrimitive.Copy asChild>
             <TooltipIconButton
               tooltip="Copy"
@@ -353,8 +362,8 @@ const AssistantMessage: FC = () => {
               <RefreshCwIcon className="size-5" />
             </TooltipIconButton>
           </ActionBarPrimitive.Reload>
-          <ActionBarMorePrimitive.Root>
-            <ActionBarMorePrimitive.Trigger asChild>
+          <MessageExportMenu
+            trigger={
               <button
                 type="button"
                 aria-label="More"
@@ -365,21 +374,12 @@ const AssistantMessage: FC = () => {
               >
                 <MoreHorizontal className="size-5" />
               </button>
-            </ActionBarMorePrimitive.Trigger>
-            <ActionBarMorePrimitive.Content
-              side="bottom"
-              align="end"
-              sideOffset={6}
-              className="bg-popover text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 z-50 min-w-40 overflow-hidden rounded-xl border p-1.5"
-            >
-              <ActionBarPrimitive.ExportMarkdown asChild>
-                <ActionBarMorePrimitive.Item className="text-muted-foreground focus:bg-accent focus:text-accent-foreground flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none select-none">
-                  <Download className="size-5" />
-                  Export as Markdown
-                </ActionBarMorePrimitive.Item>
-              </ActionBarPrimitive.ExportMarkdown>
-            </ActionBarMorePrimitive.Content>
-          </ActionBarMorePrimitive.Root>
+            }
+            icon={<Download className="size-5" />}
+            align="end"
+            contentClassName="bg-popover text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 z-50 min-w-40 overflow-hidden rounded-xl border p-1.5 shadow-md"
+            itemClassName="text-muted-foreground focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none select-none"
+          />
         </ActionBarPrimitive.Root>
         <BranchPicker className="ml-1" />
       </div>
@@ -389,7 +389,7 @@ const AssistantMessage: FC = () => {
 
 const BranchPicker: FC<{ className?: string }> = ({ className }) => {
   return (
-    <BranchPickerPrimitive.Root
+    <BranchPickerPrimitive.Root data-export-chrome=""
       hideWhenSingleBranch
       className={cn(
         "text-muted-foreground inline-flex items-center text-sm font-semibold dark:text-[#b4b4b4]",

@@ -108,7 +108,7 @@ const copyImagePart = async (
 };
 
 const imageVariants = cva(
-  "aui-image-root relative overflow-hidden rounded-none",
+  "aui-image-root relative overflow-hidden rounded-lg",
   {
     variants: {
       variant: {
@@ -350,7 +350,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
                 e.stopPropagation();
                 handleClose();
               }}
-              className="text-ink-mute hover:text-ink bg-surface/80 absolute end-4 top-4 cursor-pointer rounded-none p-2"
+              className="text-ink-mute hover:text-ink bg-surface/80 absolute end-4 top-4 cursor-pointer rounded-md p-2"
             >
               <XIcon className="size-5" />
             </button>
@@ -429,7 +429,7 @@ function RegenerateButton({
       disabled={isRegenerating}
       data-slot="image-regenerate"
       aria-label="Regenerate image"
-      className="hover:bg-surface-2 inline-flex size-7 items-center justify-center rounded-none disabled:opacity-50"
+      className="hover:bg-surface-2 inline-flex size-7 items-center justify-center rounded disabled:opacity-50"
     >
       <RefreshCwIcon
         className={cn("size-4", isRegenerating && "animate-spin")}
@@ -449,7 +449,7 @@ function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
         onClick={() => downloadImagePart(part)}
         data-slot="image-download"
         aria-label="Download image"
-        className="hover:bg-surface-2 inline-flex size-7 items-center justify-center rounded-none"
+        className="hover:bg-surface-2 inline-flex size-7 items-center justify-center rounded"
       >
         <DownloadIcon className="size-4" />
       </button>
@@ -460,7 +460,7 @@ function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
         }}
         data-slot="image-copy"
         aria-label="Copy image"
-        className="hover:bg-surface-2 inline-flex size-7 items-center justify-center rounded-none"
+        className="hover:bg-surface-2 inline-flex size-7 items-center justify-center rounded"
       >
         <CopyIcon className="size-4" />
       </button>

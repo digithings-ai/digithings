@@ -55,7 +55,7 @@ const AttachmentPreview: FC<AttachmentPreviewProps> = ({ src }) => {
       src={src}
       alt="Attachment preview"
       className={cn(
-        "block h-auto max-h-[80vh] w-auto max-w-full rounded-none object-contain transition-opacity duration-(--dur) motion-reduce:transition-none",
+        "block h-auto max-h-[80vh] w-auto max-w-full rounded-sm object-contain transition-opacity duration-(--dur) motion-reduce:transition-none",
         isLoaded
           ? "aui-attachment-preview-image-loaded opacity-100"
           : "aui-attachment-preview-image-loading opacity-0",
@@ -83,11 +83,11 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
           )
         }
       />
-      <DialogContent className="aui-attachment-preview-dialog-content [&>button]:bg-ink/60 [&>button]:hover:bg-ink/80 [&_svg]:text-background p-2 sm:max-w-3xl [&>button]:rounded-none [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0!">
+      <DialogContent className="aui-attachment-preview-dialog-content [&>button]:bg-ink/60 [&>button]:hover:bg-ink/80 [&_svg]:text-background p-2 sm:max-w-3xl [&>button]:rounded-full [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0!">
         <DialogTitle className="aui-sr-only sr-only">
           Image Attachment Preview
         </DialogTitle>
-        <div className="aui-attachment-preview bg-surface relative mx-auto flex max-h-[80dvh] w-full items-center justify-center overflow-hidden rounded-none">
+        <div className="aui-attachment-preview bg-surface relative mx-auto flex max-h-[80dvh] w-full items-center justify-center overflow-hidden rounded-sm">
           <AttachmentPreview src={src} />
         </div>
       </DialogContent>
@@ -176,7 +176,7 @@ const AttachmentUI: FC = () => {
               render={
                 <div
                   className={cn(
-                    "aui-attachment-tile bg-surface-2 hover:after:bg-ink/10 focus-visible:ring-accent/50 relative size-14 cursor-pointer overflow-hidden rounded-none transition-transform outline-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:ring-1 after:ring-black/10 after:transition-colors after:ring-inset focus-visible:ring-1 active:scale-[0.96] motion-reduce:transition-none dark:after:ring-white/10",
+                    "aui-attachment-tile bg-surface-2 hover:after:bg-ink/10 focus-visible:ring-accent/50 relative size-14 cursor-pointer overflow-hidden rounded-[calc(var(--composer-radius,1rem)-var(--composer-padding,8px))] transition-transform outline-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:ring-1 after:ring-black/10 after:transition-colors after:ring-inset focus-visible:ring-1 active:scale-[0.96] motion-reduce:transition-none dark:after:ring-white/10",
                     isError &&
                       "after:ring-danger/60 dark:after:ring-danger/60",
                   )}
@@ -230,7 +230,7 @@ const AttachmentRemove: FC = () => {
       render={
         <TooltipIconButton
           tooltip="Remove file"
-          className="aui-attachment-tile-remove absolute end-1 top-1 size-5 rounded-none bg-ink/60! text-bg after:absolute after:-inset-1.5 hover:bg-ink/80! hover:text-bg! active:scale-[0.96] motion-reduce:transition-none"
+          className="aui-attachment-tile-remove absolute end-1 top-1 size-5 rounded-full bg-ink/60! text-bg after:absolute after:-inset-1.5 hover:bg-ink/80! hover:text-bg! active:scale-[0.96] motion-reduce:transition-none"
           side="top"
         />
       }
@@ -269,7 +269,7 @@ export const ComposerAddAttachment: FC = () => {
           side="bottom"
           variant="ghost"
           size="icon"
-          className="aui-composer-add-attachment text-ink-mute hover:text-ink hover:bg-ink-mute/15 dark:border-hair dark:hover:bg-ink-mute/30 size-7 rounded-none active:scale-[0.96] motion-reduce:transition-none"
+          className="aui-composer-add-attachment text-ink-mute hover:text-ink hover:bg-ink-mute/15 dark:border-hair dark:hover:bg-ink-mute/30 size-7 rounded-full active:scale-[0.96] motion-reduce:transition-none"
           aria-label="Add Attachment"
         />
       }

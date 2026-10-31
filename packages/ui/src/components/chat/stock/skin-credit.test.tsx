@@ -17,7 +17,7 @@ describe("SkinCredit", () => {
     // Boot carve-out hook: product-chrome lifts this above the overlay.
     expect(el.getAttribute("data-slot")).toBe("aui_credit");
     expect(SKIN_CREDIT_TEXT).toBe(
-      "powered by digichat — a digithings product.",
+      "powered by digichat, a digithings product.",
     );
   });
 

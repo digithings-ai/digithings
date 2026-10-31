@@ -19,9 +19,10 @@ import {
 } from "@digithings/ui/chat/stock";
 import { resolveModelCatalog } from "@/lib/model-picker-catalog";
 
-/** Navigated row: the user-message chevron on the left. */
-function hasChevron(row: HTMLElement): boolean {
-  return (row.querySelector(".aui-menu-cursor")?.childElementCount ?? 0) > 0;
+/** Navigated row: marked by data-cursor (the lighter wash); no chevron glyph on any row. */
+function isCursorRow(row: HTMLElement): boolean {
+  expect(row.querySelector(".aui-menu-cursor")).toBeNull();
+  return row.getAttribute("data-cursor") === "true";
 }
 
 /** Configured value: the 3x3 cube diamond on the right. */
@@ -95,7 +96,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     document.querySelector("[data-picker-test-host]")?.remove();
   });
 
-  it("applies a model on click and closes; selected row uses the diamond, not on", async () => {
+  it("applies a model on click and stays open; selected row uses the diamond, not on", async () => {
     const user = userEvent.setup();
     const api = prefs();
     const onClose = vi.fn();
@@ -112,35 +113,36 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const selected = await screen.findByRole("menuitemradio", { name: "alpha" });
     expect(selected).toHaveAttribute("aria-checked", "true");
     expect(selected.textContent).not.toMatch(/\bon\b/i);
-    // The cursor row always carries the chevron; a checked row also keeps its
+    // The cursor row always carries the cursor wash; a checked row also keeps its
     // diamond on the right, so the two marks never share a side.
-    expect(hasChevron(selected)).toBe(true);
+    expect(isCursorRow(selected)).toBe(true);
     expect(hasDiamond(selected)).toBe(true);
 
     const other = screen.getByRole("menuitemradio", { name: "beta" });
-    expect(hasChevron(other)).toBe(false);
+    expect(isCursorRow(other)).toBe(false);
     expect(hasDiamond(other)).toBe(false);
 
-    // The chevron follows hover / arrow keys; the configured value keeps its
+    // The cursor wash follows hover / arrow keys; the configured value keeps its
     // diamond, so the two marks mean different things.
     await user.hover(other);
-    expect(hasChevron(other)).toBe(true);
-    expect(hasChevron(selected)).toBe(false);
+    expect(isCursorRow(other)).toBe(true);
+    expect(isCursorRow(selected)).toBe(false);
     expect(hasDiamond(selected)).toBe(true);
     expect(hasDiamond(other)).toBe(false);
 
-    // Navigating back to the checked row restores the chevron beside the
+    // Navigating back to the checked row restores the cursor wash beside the
     // diamond; the diamond still marks the configured value.
     await user.hover(selected);
-    expect(hasChevron(selected)).toBe(true);
+    expect(isCursorRow(selected)).toBe(true);
     expect(hasDiamond(selected)).toBe(true);
 
     await user.click(other);
     expect(api.setModel).toHaveBeenCalledWith("beta");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("applies a model on Enter and closes", async () => {
+  it("applies a model on Enter and stays open", async () => {
     const user = userEvent.setup();
     const api = prefs();
     const onClose = vi.fn();
@@ -158,10 +160,11 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     await user.keyboard("{ArrowDown}");
     await user.keyboard("{Enter}");
     expect(api.setModel).toHaveBeenCalledWith("beta");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("applies a model on ArrowRight and closes", async () => {
+  it("applies a model on ArrowRight and stays open", async () => {
     const user = userEvent.setup();
     const api = prefs();
     const onClose = vi.fn();
@@ -179,10 +182,11 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     await user.keyboard("{ArrowDown}");
     await user.keyboard("{ArrowRight}");
     expect(api.setModel).toHaveBeenCalledWith("beta");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("closes language pick on click and marks the current code with the diamond", async () => {
+  it("keeps the menu open after a language pick and marks the current code with the diamond", async () => {
     const user = userEvent.setup();
     const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, language: "en", model: "alpha" } });
     const onClose = vi.fn();
@@ -195,16 +199,17 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const english = await screen.findByRole("menuitemradio", { name: /en\s+English/i });
     expect(english).toHaveAttribute("aria-checked", "true");
     expect(english.textContent).not.toMatch(/\bon\b/i);
-    expect(hasChevron(english)).toBe(true);
+    expect(isCursorRow(english)).toBe(true);
     expect(hasDiamond(english)).toBe(true);
 
     const dutch = screen.getByRole("menuitemradio", { name: /nl\s+Dutch/i });
     await user.click(dutch);
     expect(api.setLanguage).toHaveBeenCalledWith("nl");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("closes search-engine pick on click and marks the current engine with the chevron", async () => {
+  it("keeps the menu open after a search-engine pick and marks the current engine as the cursor row", async () => {
     const user = userEvent.setup();
     const api = prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, searchEngine: "auto" } });
     const onClose = vi.fn();
@@ -220,7 +225,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     const exa = screen.getByRole("menuitemradio", { name: /search-engine exa/i });
     await user.click(exa);
     expect(api.setSearchEngine).toHaveBeenCalledWith("exa");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("renders the shared wording for every view level, so no level is left blank", async () => {
@@ -317,7 +323,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(document.documentElement.getAttribute("data-palette")).toBe("aura");
     expect(localStorage.getItem("dt-theme")).toBe("dark");
     expect(localStorage.getItem("dt-palette")).toBe("aura");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
     unmount();
     vi.unstubAllGlobals();
   });
@@ -356,7 +363,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
 
     expect(setTheme).toHaveBeenCalledWith("dark", "aura");
     expect(store.size).toBe(0);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
     unmount();
     vi.unstubAllGlobals();
   });
@@ -382,7 +390,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     // "auto" is how an embed clears the pick (embedThemePick("auto") is null).
     expect(setTheme).toHaveBeenCalledTimes(1);
     expect(setTheme).toHaveBeenCalledWith("auto", "default");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
     unmount();
   });
 
@@ -417,7 +426,8 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     await user.click(checked!);
 
     expect(store.get("dt-theme")).toBe(mode);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
     unmount();
     vi.unstubAllGlobals();
   });
@@ -449,7 +459,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     unmount();
   });
 
-  it("puts modes above provider groups and selects a preset token", async () => {
+  it("puts modes above a flat list of model names and selects a preset token", async () => {
     const onClose = vi.fn();
     const setModel = vi.fn();
     const picker = {
@@ -472,35 +482,23 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(radios.map((row) => row.textContent)).toEqual([
       expect.stringContaining("Default"),
       expect.stringContaining("Reasoning"),
-      "└─flash",
+      "flash",
+      "think",
     ]);
     expect(screen.queryByText(/our default/)).toBeNull();
     expect(screen.queryByText(/Best reasoning/)).toBeNull();
-    // Header rows are ordinary selectable rows, not headings.
-    const header = screen.getByRole("menuitem", { name: "/beta" });
-    expect(header.getAttribute("aria-expanded")).toBe("false");
-    // Only the provider holding the current model starts open.
-    expect(screen.getByRole("menuitem", { name: "/alpha" }).getAttribute("aria-expanded")).toBe(
-      "true",
-    );
-    expect(screen.queryByText("think")).toBeNull();
-    await userEvent.click(screen.getByRole("menuitem", { name: "/beta" }));
-    expect(screen.getByRole("menuitem", { name: "/beta" }).getAttribute("aria-expanded")).toBe(
-      "true",
-    );
-    expect(screen.getByText("think")).not.toBeNull();
-    // The row reads `think` under /beta; the pick is still the full id.
+    // No provider headers, no expand state: just model names.
+    expect(screen.queryAllByRole("menuitem", { name: /^\// })).toEqual([]);
+    expect(document.querySelector("[aria-expanded]")).toBeNull();
+    expect(screen.queryByText(/alpha|beta/)).toBeNull();
+    // The row reads `think`; the pick is still the full id.
     await userEvent.click(screen.getByRole("menuitemradio", { name: /think/ }));
     expect(setModel).toHaveBeenLastCalledWith("beta/think");
-    await userEvent.click(screen.getByRole("menuitem", { name: "/alpha" }));
-    expect(screen.getByRole("menuitem", { name: "/alpha" }).getAttribute("aria-expanded")).toBe(
-      "false",
-    );
-    expect(screen.queryByText("flash")).toBeNull();
     await userEvent.click(screen.getByRole("menuitemradio", { name: /Reasoning/ }));
     expect(setModel).toHaveBeenCalledWith("preset:reasoning");
     unmount();
   });
+
 
   it("builds the /models tree from id path segments, folders first, sorted at every level", () => {
     const tree = buildModelPathTree([
@@ -529,7 +527,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     expect(deep.id).toBe("alpha/sub/deep-1");
   });
 
-  it("nests deeper ids, lists bare ids at the top, and picks the full id", async () => {
+  it("flattens deeper ids to their model name and picks the full id", async () => {
     const setModel = vi.fn();
     const picker = {
       showFullList: true,
@@ -544,64 +542,37 @@ describe("EmbedComposerMenu exclusive pickers", () => {
         <EmbedComposerMenu kind="models" picker={picker} models={["alpha/sub/deep"]} onClose={vi.fn()} />
       </EmbedChatPrefsProvider>,
     );
-    // The folders holding the current model open by default, at every depth.
-    await screen.findByRole("menuitem", { name: "/alpha" });
+    await screen.findByRole("menuitemradio", { name: "alpha/sub/deep" });
     const rows = [...document.querySelectorAll('[id^="dc-menu-"]')];
-    expect(rows.map((row) => row.textContent)).toEqual([
-      "Default",
-      "/alpha",
-      "├─/sub",
-      "│  └─deep",
-      "└─top",
-      "bare-model",
-    ]);
-    expect(screen.getByRole("menuitem", { name: "/sub" }).getAttribute("aria-expanded")).toBe("true");
+    expect(rows.map((row) => row.textContent)).toEqual(["Default", "deep", "top", "bare-model"]);
     await userEvent.click(screen.getByRole("menuitemradio", { name: /deep/ }));
     expect(setModel).toHaveBeenLastCalledWith("alpha/sub/deep");
     unmount();
   });
 
-  it("opens the non-first provider holding the current model by default", async () => {
+  it("keeps the full id on rows whose model names collide across providers", async () => {
     const setModel = vi.fn();
     const picker = {
       showFullList: true,
-      presets: [{ id: "auto", label: "Default", model: "zeta/thing" }],
+      presets: [{ id: "auto", label: "Default", model: "alpha/same" }],
       groups: [
-        { provider: "alpha", models: [{ id: "alpha/flash", label: "Alpha Flash" }] },
-        { provider: "zeta", models: [{ id: "zeta/thing", label: "Zeta Thing" }] },
+        { provider: "alpha", models: [{ id: "alpha/same", label: "Same" }, { id: "alpha/solo", label: "Solo" }] },
+        { provider: "beta", models: [{ id: "beta/same", label: "Same" }] },
       ],
     };
     const { unmount } = render(
       <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
-        <EmbedComposerMenu kind="models" picker={picker} models={["zeta/thing"]} onClose={vi.fn()} />
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha/same"]} onClose={vi.fn()} />
       </EmbedChatPrefsProvider>,
     );
-    // The folder holding the current model (zeta) starts expanded even though
-    // alpha sorts first; alpha stays collapsed.
-    expect(screen.getByRole("menuitem", { name: "/zeta" }).getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("menuitem", { name: "/alpha" }).getAttribute("aria-expanded")).toBe("false");
+    await screen.findByRole("menuitemradio", { name: "beta/same" });
+    const rows = [...document.querySelectorAll('[id^="dc-menu-"]')];
+    expect(rows.map((row) => row.textContent)).toEqual(["Default", "alpha/same", "solo", "beta/same"]);
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "beta/same" }));
+    expect(setModel).toHaveBeenLastCalledWith("beta/same");
     unmount();
   });
 
-  it("opens every folder holding a deeply nested current model by default", async () => {
-    const setModel = vi.fn();
-    const picker = {
-      showFullList: true,
-      presets: [{ id: "auto", label: "Default", model: "a/b/c" }],
-      groups: [
-        { provider: "a", models: [{ id: "a/b/c", label: "Deep" }] },
-        { provider: "z", models: [{ id: "z/other", label: "Other" }] },
-      ],
-    };
-    const { unmount } = render(
-      <EmbedChatPrefsProvider value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, setModel })}>
-        <EmbedComposerMenu kind="models" picker={picker} models={["a/b/c"]} onClose={vi.fn()} />
-      </EmbedChatPrefsProvider>,
-    );
-    expect(screen.getByRole("menuitem", { name: "/a" }).getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("menuitem", { name: "/b" }).getAttribute("aria-expanded")).toBe("true");
-    unmount();
-  });
 
   it("exposes the full raw id as a model row's accessible name", async () => {
     const picker = {
@@ -621,7 +592,7 @@ describe("EmbedComposerMenu exclusive pickers", () => {
     unmount();
   });
 
-  it("finds a model under a collapsed provider while a filter is typed", async () => {
+  it("filters the flat list by model name", async () => {
     const picker = {
       showFullList: true,
       presets: [{ id: "auto", label: "Default", model: "alpha/flash" }],
@@ -637,16 +608,60 @@ describe("EmbedComposerMenu exclusive pickers", () => {
         <EmbedComposerMenu kind="models" picker={picker} models={["alpha/flash"]} onClose={vi.fn()} />
       </EmbedChatPrefsProvider>,
     );
-    // `/beta` starts collapsed, but the typed `thi` still finds `beta/think`
-    // by the part of the id after the provider.
     const radios = await screen.findAllByRole("menuitemradio");
-    expect(radios.map((row) => row.textContent?.trim())).toEqual([
-      "think",
-    ]);
+    expect(radios.map((row) => row.textContent?.trim())).toEqual(["think"]);
     unmount();
   });
 
-  it("renders the modes first, then a /provider tree of raw ids", async () => {
+  it("filters the model list by any part of the name or id, start-of-name first", async () => {
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "alpha/flash" }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/big-flash", label: "Big Flash" }] },
+        { provider: "beta", models: [{ id: "beta/flash-mini", label: "Flash Mini" }, { id: "beta/think-luna", label: "Luna" }] },
+      ],
+    };
+    const shown = async (paletteQuery: string) => {
+      const { unmount } = render(
+        <EmbedChatPrefsProvider
+          value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, paletteQuery })}
+        >
+          <EmbedComposerMenu kind="models" picker={picker} models={["alpha/big-flash"]} onClose={vi.fn()} />
+        </EmbedChatPrefsProvider>,
+      );
+      const radios = await screen.findAllByRole("menuitemradio");
+      const out = radios.map((row) => row.textContent?.trim());
+      unmount();
+      return out;
+    };
+    expect(await shown("FLASH")).toEqual(["flash-mini", "big-flash"]);
+    expect(await shown("luna")).toEqual(["think-luna"]);
+    expect(await shown("ALPHA")).toEqual(["big-flash"]);
+  });
+
+  it("still filters by the provider part of the full id", async () => {
+    const picker = {
+      showFullList: true,
+      presets: [{ id: "auto", label: "Default", model: "alpha/flash" }],
+      groups: [
+        { provider: "alpha", models: [{ id: "alpha/flash", label: "Alpha Flash" }] },
+        { provider: "beta", models: [{ id: "beta/think", label: "Beta Think" }] },
+      ],
+    };
+    const { unmount } = render(
+      <EmbedChatPrefsProvider
+        value={prefs({ prefs: { ...DEFAULT_EMBED_CHAT_PREFS, model: "" }, paletteQuery: "beta" })}
+      >
+        <EmbedComposerMenu kind="models" picker={picker} models={["alpha/flash"]} onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    const radios = await screen.findAllByRole("menuitemradio");
+    expect(radios.map((row) => row.textContent?.trim())).toEqual(["think"]);
+    unmount();
+  });
+
+  it("renders the modes first, then a flat list of model names with no provider", async () => {
     const onClose = vi.fn();
     const resolved = resolveModelCatalog(
       { presets: ["auto", "reasoning", "fast", "light"], showFullList: true },
@@ -663,46 +678,30 @@ describe("EmbedComposerMenu exclusive pickers", () => {
       </EmbedChatPrefsProvider>,
     );
     const radios = await screen.findAllByRole("menuitemradio");
-    expect(radios.map((row) => row.textContent)).toEqual([
+    const texts = radios.map((row) => row.textContent ?? "");
+    expect(texts.slice(0, 4)).toEqual([
       expect.stringContaining("Default"),
       expect.stringContaining("Reasoning"),
       expect.stringContaining("Fast"),
       expect.stringContaining("Light"),
-      "├─deepseek-v4.1-flash",
-      "└─deepseek-v4.1-flash-1017",
     ]);
-    // No descriptions or subtitles anywhere.
+    const names = texts.slice(4);
+    expect(names.length).toBeGreaterThan(2);
+    expect(names).toContain("deepseek-v4.1-flash");
+    expect(names).toContain("gemini-3.8-flash");
+    // No provider prefix, header or tree glyph on any row.
+    for (const name of names) expect(name).not.toMatch(/\/|├─|└─/);
+    expect(screen.queryAllByRole("menuitem", { name: /^\// })).toEqual([]);
+    expect(document.querySelectorAll('[data-slot="tools-tree-branch"]').length).toBe(0);
+    // No descriptions, subtitles or catalog labels.
     expect(screen.queryByText("Manual selection")).toBeNull();
     expect(screen.queryByText("Premium")).toBeNull();
     expect(screen.queryByText(/Best reasoning in this list/)).toBeNull();
-    // One header per provider, sorted by id, with the current one open.
-    const headers = await screen.findAllByRole("menuitem", { name: /^\// });
-    expect(headers.map((row) => row.textContent)).toEqual([
-      "/deepseek",
-      "/google",
-      "/minimax",
-      "/openai",
-      "/qwen",
-      "/xiaomi",
-      "/z-ai",
-    ]);
-    expect(headers[0]?.getAttribute("aria-expanded")).toBe("true");
-    expect(headers[1]?.getAttribute("aria-expanded")).toBe("false");
-    // Children are the raw ids under ├─ / └─, never the catalog label.
     expect(screen.queryByText("GLM 5.3")).toBeNull();
     expect(screen.queryByText("Gemini 3.8 Flash")).toBeNull();
-    expect(screen.queryByText("Qwen 3.8 27B")).toBeNull();
-    const branches = document.querySelectorAll('[data-slot="tools-tree-branch"]');
-    expect([...branches].map((node) => node.textContent)).toEqual(["├─", "└─"]);
-    await userEvent.click(screen.getByRole("menuitem", { name: "/google" }));
-    expect(screen.getByText("gemini-3.5-flash-lite")).not.toBeNull();
-    expect(screen.getByText("gemini-3.8-flash")).not.toBeNull();
-    expect(screen.queryByText("google/gemini-3.8-flash")).toBeNull();
-    expect(screen.queryByText("deepseek-v4-pro")).toBeNull();
-    expect(screen.queryByText("glm-4.7-flash")).toBeNull();
-    expect(screen.queryByText("gpt-5.6-luna")).toBeNull();
     unmount();
   });
+
 
   it("does not offer auto when a model is pinned", async () => {
     const onClose = vi.fn();
@@ -816,16 +815,17 @@ describe("EmbedComposerMenu current value", () => {
     await user.click(await screen.findByRole("menuitem", { name: /\/view/ }));
 
     const balanced = await screen.findByRole("menuitemradio", { name: /\/view balanced/ });
-    expect(hasChevron(balanced)).toBe(true);
+    expect(isCursorRow(balanced)).toBe(true);
     // `quiet` is a level that is not the current value, so it carries no
     // cursor. It was `hidden` before #6079 retired that level; the assertion
     // is the same, on a level the ladder still has.
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /\/view quiet/ }))).toBe(false);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /\/view quiet/ }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setView).toHaveBeenCalledWith("balanced");
     expect(api.setView).not.toHaveBeenCalledWith("quiet");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("opens a sub-page on the value that is set, not on the first row", async () => {
@@ -842,12 +842,52 @@ describe("EmbedComposerMenu current value", () => {
 
     // The effort is "medium", the second row: the cursor is not the top one.
     const medium = await screen.findByRole("menuitemradio", { name: /\/effort medium/ });
-    expect(hasChevron(medium)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /\/effort low/ }))).toBe(false);
+    expect(isCursorRow(medium)).toBe(true);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /\/effort low/ }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setEffort).toHaveBeenCalledWith("medium");
     expect(api.setEffort).not.toHaveBeenCalledWith("low");
+  });
+
+  it("offers only the tenant's chip languages on /language when the tenant sets a list", async () => {
+    const user = userEvent.setup();
+    const api = prefs({
+      prefs: { ...DEFAULT_EMBED_CHAT_PREFS, language: "en", model: "alpha" },
+      languageOptions: [
+        { code: "en", short: "EN", label: "English" },
+        { code: "fr", short: "FR", label: "Français" },
+      ],
+    });
+    const onClose = vi.fn();
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="language" onClose={onClose} />
+      </EmbedChatPrefsProvider>,
+    );
+
+    const rows = await screen.findAllByRole("menuitemradio");
+    expect(rows.map((row) => row.textContent?.trim().slice(0, 2))).toEqual(["en", "fr"]);
+    expect(screen.queryByRole("menuitemradio", { name: /nl\s+Dutch/i })).toBeNull();
+    await user.click(screen.getByRole("menuitemradio", { name: /fr\s+French/i }));
+    expect(api.setLanguage).toHaveBeenCalledWith("fr");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("shows only the pinned language on /language for a single-language tenant", async () => {
+    const api = prefs({
+      prefs: { ...DEFAULT_EMBED_CHAT_PREFS, language: "fr", model: "alpha" },
+      allowedLanguages: ["fr"],
+    });
+    render(
+      <EmbedChatPrefsProvider value={api}>
+        <EmbedComposerMenu kind="language" onClose={vi.fn()} />
+      </EmbedChatPrefsProvider>,
+    );
+    const rows = await screen.findAllByRole("menuitemradio");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByRole("menuitemradio", { name: /en\s+English/i })).toBeNull();
   });
 
   it("opens /language on the language that is set", async () => {
@@ -861,8 +901,8 @@ describe("EmbedComposerMenu current value", () => {
     );
 
     const dutch = await screen.findByRole("menuitemradio", { name: /nl\s+Dutch/i });
-    expect(hasChevron(dutch)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /en\s+English/i }))).toBe(false);
+    expect(isCursorRow(dutch)).toBe(true);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /en\s+English/i }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setLanguage).toHaveBeenCalledWith("nl");
@@ -880,8 +920,8 @@ describe("EmbedComposerMenu current value", () => {
     );
 
     const collapsed = await screen.findByRole("menuitemradio", { name: /thinking collapsed/i });
-    expect(hasChevron(collapsed)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /thinking auto/i }))).toBe(false);
+    expect(isCursorRow(collapsed)).toBe(true);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /thinking auto/i }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setThinking).toHaveBeenCalledWith("collapsed");
@@ -899,8 +939,8 @@ describe("EmbedComposerMenu current value", () => {
     );
 
     const exa = await screen.findByRole("menuitemradio", { name: /search-engine exa/i });
-    expect(hasChevron(exa)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /search-engine auto/i }))).toBe(false);
+    expect(isCursorRow(exa)).toBe(true);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /search-engine auto/i }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setSearchEngine).toHaveBeenCalledWith("exa");
@@ -918,8 +958,8 @@ describe("EmbedComposerMenu current value", () => {
     );
 
     const alpha = await screen.findByRole("menuitemradio", { name: "alpha" });
-    expect(hasChevron(alpha)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: "beta" }))).toBe(false);
+    expect(isCursorRow(alpha)).toBe(true);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: "beta" }))).toBe(false);
 
     await user.keyboard("{Enter}");
     expect(api.setModel).toHaveBeenCalledWith("alpha");
@@ -958,9 +998,9 @@ describe("EmbedComposerMenu current value", () => {
     );
 
     const anthropic = await screen.findByRole("menuitemradio", { name: /\/anthropic/ });
-    expect(hasChevron(anthropic)).toBe(true);
+    expect(isCursorRow(anthropic)).toBe(true);
     expect(hasDiamond(anthropic)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /\/openai/ }))).toBe(false);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /\/openai/ }))).toBe(false);
   });
 
   it("keeps the cursor on the clear row when no provider is connected", async () => {
@@ -972,8 +1012,8 @@ describe("EmbedComposerMenu current value", () => {
     );
 
     const clear = await screen.findByRole("menuitemradio", { name: /\/cheaperinference/ });
-    expect(hasChevron(clear)).toBe(true);
-    expect(hasChevron(screen.getByRole("menuitemradio", { name: /\/openai/ }))).toBe(false);
+    expect(isCursorRow(clear)).toBe(true);
+    expect(isCursorRow(screen.getByRole("menuitemradio", { name: /\/openai/ }))).toBe(false);
   });
 
   it("comes back from the key form on the provider row the user opened", async () => {
@@ -995,10 +1035,10 @@ describe("EmbedComposerMenu current value", () => {
     await user.keyboard("{Escape}");
 
     const openai = await screen.findByRole("menuitemradio", { name: /\/openai/ });
-    expect(hasChevron(openai)).toBe(true);
+    expect(isCursorRow(openai)).toBe(true);
   });
 
-  it("closes a model pick when the composer writer is not bound", async () => {
+  it("keeps the menu open after a model pick when the composer writer is not bound", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     const api = prefs({ setComposerDraft: vi.fn() });
@@ -1009,7 +1049,8 @@ describe("EmbedComposerMenu current value", () => {
     );
     await user.click(await screen.findByRole("menuitemradio", { name: "beta" }));
     expect(api.setModel).toHaveBeenCalledWith("beta");
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // A setting pick keeps the menu open on the same page.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("leaves the provider page on Escape when the composer writer is not bound", async () => {

@@ -259,7 +259,7 @@ function HomeStockClientSingle({
         data-chrome-mode={mode}
         data-persistence="none"
       >
-        <SiteRails mode={mode} />
+        <SiteRails mode={mode} skin={clientConfig.chrome.skin} />
         <PresentationFrame mode={mode} clientConfig={clientConfig}>
           <ProductStockShell
             runtime={runtime}
@@ -378,7 +378,7 @@ function HomeStockClientMemory({
         data-chrome-mode={mode}
         data-persistence="memory"
       >
-        <SiteRails mode={mode} />
+        <SiteRails mode={mode} skin={clientConfig.chrome.skin} />
         <PresentationFrame mode={mode} clientConfig={clientConfig}>
           <ProductStockShell
             runtime={runtime}

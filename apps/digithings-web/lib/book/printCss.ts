@@ -542,6 +542,16 @@ thead th { border-bottom-color: var(--accent) !important; }
 }
 .pagedjs_page .book-figure__viewport > div { width: 100% !important; transform: none !important; }
 
+/* The 549px pin above is the READER's column, and on paper it made every figure
+   a narrower box than the text: a drawing wide enough to fill that box (chapter
+   15's credential chain) ended about 27mm short of the text's right edge and
+   read as jammed left, while a short one (chapter 02's three homes) centred
+   inside the narrow box and hid it. The A4 pixel box is 174mm wide, so on the
+   page the figure takes the full measure: a wide drawing starts and ends with
+   the body text, a narrow one centres on the text's centre, and the caption
+   stays flush with the column's left edge in both cases. */
+.pagedjs_page .book-figure { max-width: none !important; }
+
 
 /* The welcome page's field, behind the cover. It fades out before the
    wordmark, so the mark and the edition keep a clean ground to sit on. */
