@@ -600,31 +600,15 @@ Standard commands are also documented in root `README.md` and `Makefile`.
 
 ---
 
-## Origin iteration, GitHub promotion
+## Forgejo iteration, GitHub promotion
 
-digithings and twelve-x are inbound Origin mirrors (`chrizefan/digithings`, `chrizefan/twelve-x`). GitHub stays the public face and the release host. Agent iterations stay off GitHub.
+*Updated 2026-10-31.* Cursor Origin was the iteration home until 2026-10-29 and is now history only. Do not push to `origin.cursor.com` remotes or use `origin push local`.
 
-On a clone, `origin` is `https://origin.cursor.com/chrizefan/<repo>.git` and `github` is the GitHub URL. One-time: `origin auth login`, then `origin repo set-origin-remote`, then point `origin`'s push URL at `chrizefan/<repo>` if the command wrote `digithings-ai/<repo>` (that path is not the mirror).
-
-| Branch | Publish with | Lands on |
-|---|---|---|
-| `origin/<slug>` | `origin push local` | Origin only |
-| `task/<N>-slug`, `module/*`, `develop`, `main`, `release/*` | `git push origin` or `git push github` | GitHub, mirrored back to Origin |
-
-`git push` of any other name, including a push of `origin/<slug>` to `origin` or `github`, writes through to GitHub. Do not open a pull request from an `origin/<slug>` branch. Review starts at promotion:
-
-```bash
-git fetch origin develop
-git switch -c origin/<slug> origin/develop
-# edit, commit
-origin push local
-
-# when the slice is ready for GitHub
-git switch -c task/<N>-<slug> origin/<slug>
-git push -u origin HEAD
-```
-
-Releases, release-please, GitHub Actions, and Cloudflare Pages stay on GitHub. Do not detach the mirror.
+- **Where agents work:** commit and open pull requests on the local Forgejo (digiforge), `digithings-ai` org, and review and iterate there. See [Source control: local forge first](#source-control-local-forge-first-when-available). On a host without Forgejo, the GitHub flow in this file applies.
+- **Promotion:** a ready change goes to GitHub `develop` as a promotion PR (`sctl publish --remote github --target develop`), and `develop` reaches `main` through the promote PR. GitHub `digithings-ai` is the public org and stays the release host: releases, release-please, GitHub Actions, Cloudflare Pages.
+- **Private repos** (the split's R1–R5 and the client repos) live on Forgejo. The owner pushes a private GitHub backup at release time; agents never push backups.
+- **Client repos:** one private `digithings-ai/<client-slug>` repo per client, created from `digithings-ai/client-template`. It is the source of that client's tenant config, its deploy writes KV, and it pins R0 releases. Public text names a client only as `<client-slug>`.
+- Full plan: [docs/repo-split/migration-plan.md](docs/repo-split/migration-plan.md).
 
 ## Branching model
 
