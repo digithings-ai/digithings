@@ -42,6 +42,7 @@ import {
 } from "@/lib/digikey-exchange";
 import type { McpUpstreamServer } from "@/lib/deploy-config/mcp-servers";
 import { jwtExpiresAtMs } from "@/lib/digigraph-upstream";
+import { isInviteOnlyDeployment } from "@/lib/embed-invite-only";
 
 /** Every edge server scope the chat may request. Mirrors the Worker's set. */
 export const MCP_EDGE_SCOPES: Record<string, string> = {
@@ -60,6 +61,32 @@ const SCOPE_RE = /^mcp:[a-z0-9][a-z0-9-]{0,63}$/;
 /** The scope for an MCP server id, or "" when it has none. */
 export function mcpEdgeScopeFor(serverId: string): string {
   return MCP_EDGE_SCOPES[serverId.trim().toLowerCase()] ?? "";
+}
+
+/**
+ * The scope `serverId` may be minted for on `tenantSlug`'s turn, or "".
+ *
+ * The shared servers (`MCP_EDGE_SCOPES`) keep their scope on every tenant.
+ * Any other `authScheme: jwt` row is a tenant-private server, and it gets
+ * `mcp:<id>` ONLY on an invite-gated tenant's turn (DIG-3585). That turn exists
+ * only behind the invite link (the chat Worker binds it from the invite cookie
+ * and drops the client's own tenant headers), so a private server's edge can
+ * require that exact scope and know which chat is calling. On every other
+ * tenant such a row gets no scope, so no token is ever asked for.
+ *
+ * Rows come from operator documents only (tenant KV / deploy YAML), never from
+ * a session overlay: the overlay is checked against `allowUserServers` and its
+ * rows cannot set `authScheme`.
+ */
+export function mcpEdgeScopeForTenant(
+  serverId: string,
+  tenantSlug: string | null | undefined,
+): string {
+  const shared = mcpEdgeScopeFor(serverId);
+  if (shared) return shared;
+  if (!isInviteOnlyDeployment(null, tenantSlug ?? null)) return "";
+  const scope = `mcp:${serverId.trim().toLowerCase()}`;
+  return SCOPE_RE.test(scope) ? scope : "";
 }
 
 /** Minted tokens are reused until this long before their `exp`. */
@@ -211,19 +238,38 @@ export async function withMcpEdgeIdentity(
   const jwtRows = servers.filter((s) => s.authScheme === "jwt");
   if (!jwtRows.length) return servers.map((s) => ({ ...s }));
 
-  const scopes: string[] = [];
+  // DIG-3585: the shared servers share one token; each tenant-private server
+  // gets a token of its own, carrying only its scope. So a private edge never
+  // sees a token good for digisearch/digivault, the shared edges never see the
+  // private scope, and a digikey refusal of one private scope cannot take the
+  // shared servers down with it. A row with no scope gets no token — never a
+  // neighbour's.
+  const tenantSlug = ctx.identity?.tenantSlug;
+  const sharedScopes: string[] = [];
+  const privateScopes: string[] = [];
   for (const row of jwtRows) {
-    const scope = mcpEdgeScopeFor(row.id);
-    if (scope) scopes.push(scope);
+    const scope = mcpEdgeScopeForTenant(row.id, tenantSlug);
+    if (!scope) continue;
+    const bucket = mcpEdgeScopeFor(row.id) ? sharedScopes : privateScopes;
+    if (!bucket.includes(scope)) bucket.push(scope);
   }
 
   const mint = ctx.mint ?? mintMcpEdgeToken;
-  const outcome = await mint({ identity: ctx.identity, scopes });
+  const tokens = new Map<string, McpEdgeTokenOutcome>();
+  const shared: McpEdgeTokenOutcome = sharedScopes.length
+    ? await mint({ identity: ctx.identity, scopes: sharedScopes })
+    : { ok: false, reason: "bad_scope" };
+  for (const scope of sharedScopes) tokens.set(scope, shared);
+  for (const scope of privateScopes) {
+    tokens.set(scope, await mint({ identity: ctx.identity, scopes: [scope] }));
+  }
 
   return servers.map((row) => {
     const copy: McpUpstreamServer = { ...row };
     if (row.authScheme !== "jwt") return copy;
-    if (outcome.ok) {
+    const scope = mcpEdgeScopeForTenant(row.id, tenantSlug);
+    const outcome = scope ? tokens.get(scope) : undefined;
+    if (outcome?.ok) {
       copy.token = outcome.token;
       delete copy.authHeader;
     } else {

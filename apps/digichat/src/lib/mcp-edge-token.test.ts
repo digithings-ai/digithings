@@ -10,11 +10,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mcpUpstreamHeaderValue, type McpUpstreamServer } from "@/lib/deploy-config/mcp-servers";
+import { INVITE_ONLY_EMBED_HOSTS } from "@/lib/embed-invite-only";
 import {
   MCP_EDGE_SCOPES,
   MCP_EDGE_TOKEN_EXPIRY_SKEW_MS,
   _resetMcpEdgeTokenCacheForTests,
   mcpEdgeScopeFor,
+  mcpEdgeScopeForTenant,
   mintMcpEdgeToken,
   readMcpEdgeIdentityFromEnv,
   withMcpEdgeIdentity,
@@ -32,11 +34,7 @@ function fakeJwt(expSeconds: number, marker = "tok"): string {
 
 const NOW_SEC = () => Math.floor(Date.now() / 1000);
 
-function stubDigikey(opts: {
-  token?: string;
-  status?: number;
-  reason?: string;
-}) {
+function stubDigikey(opts: { token?: string; status?: number; reason?: string }) {
   const fetchStub = vi.fn(async () => {
     if (opts.status && opts.status >= 400) {
       return new Response(JSON.stringify({ detail: opts.reason ?? "nope" }), {
@@ -45,7 +43,10 @@ function stubDigikey(opts: {
       });
     }
     return new Response(
-      JSON.stringify({ access_token: opts.token ?? fakeJwt(NOW_SEC() + 900), token_type: "Bearer" }),
+      JSON.stringify({
+        access_token: opts.token ?? fakeJwt(NOW_SEC() + 900),
+        token_type: "Bearer",
+      }),
       { status: 200, headers: { "content-type": "application/json" } },
     );
   });
@@ -166,7 +167,9 @@ describe("withMcpEdgeIdentity", () => {
       expect(row.authHeader).toBeUndefined();
       // The scheme is a chat-side concept; digigraph never sees it.
       expect(row.authScheme).toBeUndefined();
-      const headers = row.authHeader ? { [row.authHeader]: row.token } : { Authorization: `Bearer ${row.token}` };
+      const headers = row.authHeader
+        ? { [row.authHeader]: row.token }
+        : { Authorization: `Bearer ${row.token}` };
       expect(headers.Authorization).toBe(`Bearer ${token}`);
     }
   });
@@ -370,5 +373,121 @@ describe("identity from the environment", () => {
       tenantSlug: "acme",
       subject: "u1",
     });
+  });
+});
+
+describe("tenant-private servers (DIG-3585)", () => {
+  // The tenant behind an invite link; read from the app's own map so no
+  // tenant name is written here.
+  const INVITE_TENANT = [...INVITE_ONLY_EMBED_HOSTS.values()][0]!;
+  const INVITE_IDENTITY: McpEdgeIdentity = {
+    digikeyUrl: "http://digikey.test",
+    apiKey: "dgk_live_identity",
+    tenantSlug: INVITE_TENANT,
+    subject: "bff:visitor-1",
+  };
+  const privateRow: McpUpstreamServer = {
+    id: "helpdesk",
+    url: "https://digithings.ai/api/mcp/helpdesk/mcp",
+    authScheme: "jwt",
+  };
+
+  function scopesOf(call: unknown[] | undefined): unknown {
+    const init = call?.[1] as RequestInit | undefined;
+    return (JSON.parse(String(init?.body)) as Record<string, unknown>).requested_scopes;
+  }
+
+  it("scopes a private row only on an invite-gated tenant's turn", () => {
+    expect(INVITE_TENANT).toBeTruthy();
+    expect(mcpEdgeScopeForTenant("helpdesk", INVITE_TENANT)).toBe("mcp:helpdesk");
+    for (const tenant of ["digithings-ai", "", null, undefined]) {
+      expect(mcpEdgeScopeForTenant("helpdesk", tenant)).toBe("");
+    }
+    // Shared servers keep their scope everywhere.
+    expect(mcpEdgeScopeForTenant("digisearch", "digithings-ai")).toBe("mcp:digisearch");
+    expect(mcpEdgeScopeForTenant("digivault", INVITE_TENANT)).toBe("mcp:digivault");
+  });
+
+  it("never builds a scope outside the mcp:<id> allowlist", () => {
+    for (const id of ["*", "a b", "../x", "UPPER:x", "", "x".repeat(65)]) {
+      expect(mcpEdgeScopeForTenant(id, INVITE_TENANT)).toBe("");
+    }
+  });
+
+  it("mints the private scope in its own token, apart from the shared one", async () => {
+    let n = 0;
+    const fetchStub = vi.fn(async () =>
+      Response.json({ access_token: fakeJwt(NOW_SEC() + 900, `t${++n}`), token_type: "Bearer" }),
+    );
+    vi.stubGlobal("fetch", fetchStub);
+
+    const rows = await withMcpEdgeIdentity([...jwtRows(), privateRow], {
+      identity: INVITE_IDENTITY,
+    });
+
+    expect(fetchStub).toHaveBeenCalledTimes(2);
+    expect(scopesOf(fetchStub.mock.calls[0])).toEqual(["mcp:digisearch", "mcp:digivault"]);
+    expect(scopesOf(fetchStub.mock.calls[1])).toEqual(["mcp:helpdesk"]);
+    const [search, vault, helpdesk] = rows;
+    expect(search?.token).toBeTruthy();
+    expect(vault?.token).toBe(search?.token);
+    expect(helpdesk?.token).toBeTruthy();
+    expect(helpdesk?.token).not.toBe(search?.token);
+    expect(helpdesk?.authHeader).toBeUndefined();
+  });
+
+  it("asks for nothing private on any other tenant, and the row gets no token", async () => {
+    const fetchStub = stubDigikey({});
+    const rows = await withMcpEdgeIdentity([...jwtRows(), privateRow], {
+      identity: { ...INVITE_IDENTITY, tenantSlug: "digithings-ai" },
+    });
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    expect(scopesOf(fetchStub.mock.calls[0])).toEqual(["mcp:digisearch", "mcp:digivault"]);
+    expect(rows[2]?.token).toBeUndefined();
+    expect(rows[2]?.authHeader).toBeUndefined();
+  });
+
+  it("drops a static credential on a private row instead of keeping it", async () => {
+    stubDigikey({});
+    const rows = await withMcpEdgeIdentity(
+      [{ ...privateRow, token: "static-edge-value", authHeader: "x-digi-mcp-key" }],
+      { identity: { ...INVITE_IDENTITY, tenantSlug: "digithings-ai" } },
+    );
+    expect(rows[0]?.token).toBeUndefined();
+    expect(rows[0]?.authHeader).toBeUndefined();
+  });
+
+  it("keeps the shared servers working when digikey refuses the private scope", async () => {
+    const fetchStub = vi.fn(async (_url: string, init?: RequestInit) => {
+      const scopes = (JSON.parse(String(init?.body)) as { requested_scopes: string[] })
+        .requested_scopes;
+      if (scopes.includes("mcp:helpdesk")) {
+        return Response.json(
+          { detail: "requested_scopes not allowed for this key" },
+          { status: 400 },
+        );
+      }
+      return Response.json({ access_token: fakeJwt(NOW_SEC() + 900), token_type: "Bearer" });
+    });
+    vi.stubGlobal("fetch", fetchStub);
+
+    const rows = await withMcpEdgeIdentity([...jwtRows(), privateRow], {
+      identity: INVITE_IDENTITY,
+    });
+    expect(rows[0]?.token).toBeTruthy();
+    expect(rows[1]?.token).toBeTruthy();
+    expect(rows[2]?.token).toBeUndefined();
+  });
+
+  it("caches the private token per tenant, never across tenants", async () => {
+    const fetchStub = stubDigikey({});
+    await withMcpEdgeIdentity([privateRow], { identity: INVITE_IDENTITY });
+    await withMcpEdgeIdentity([privateRow], { identity: INVITE_IDENTITY });
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    const rows = await withMcpEdgeIdentity([privateRow], {
+      identity: { ...INVITE_IDENTITY, tenantSlug: "digithings-ai" },
+    });
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    expect(rows[0]?.token).toBeUndefined();
   });
 });
