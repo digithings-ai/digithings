@@ -166,7 +166,8 @@ on `17 12 * * MON-FRI`. `twelve-x-digisearch-parity` is weekly Monday
 ## GitHub cost-lock holds (DIG-4364)
 
 The 2026-10-14 GitHub cost lock set 57 workflows to `disabled_manually`,
-including four this Worker used to dispatch on a clock. GitHub refuses
+including four this Worker used to dispatch on a clock (`security-pip-audit` and
+`security-npm-audit`, since deleted with their workflows, were two of them). GitHub refuses
 `workflow_dispatch` on a disabled workflow with
 `422 {"message":"Cannot trigger a 'workflow_dispatch' on a disabled workflow"}`,
 a body `isBenign422` (in `src/dispatch.ts`) deliberately does not match, so each
@@ -176,8 +177,6 @@ tick surfaced as a `scheduled` exception:
 | --- | --- | --- |
 | `agent-pr-finalizer` | `11 7 * * *` | `agent-pr-finalizer.yml` |
 | `ci-pr-hygiene` | `21 6 * * *` | `ci-pr-hygiene.yml` |
-| `security-pip-audit` | `33 6 * * MON` | `security-pip-audit.yml` |
-| `security-npm-audit` | `37 6 * * MON` | `security-npm-audit.yml` |
 
 Each row stays in `src/jobs.ts` with its `cron`, `workflow` and `inputs` intact
 but `enabled: false`, and its `[triggers].crons` line is removed — leaving the

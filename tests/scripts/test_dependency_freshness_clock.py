@@ -11,9 +11,10 @@ a ``workflow_dispatch``-only workflow whose clock is a ``wd()`` row plus a
 
 Same outcome the idea asked for -- a uv.lock-vs-PyPI comparison, posted as a
 tracking issue -- on the one clock the repo actually owns. DIG-2277 moved the
-cadence from monthly to weekly: security-pip-audit and security-npm-audit
-already read the same lock every Monday, so monthly put new versions behind
-known vulnerabilities rather than in front of them.
+cadence from monthly to weekly: the weekly audits (then security-pip-audit and
+security-npm-audit, since deleted with the GHA exit ledger) read the same lock
+every Monday, so monthly put new versions behind known vulnerabilities rather
+than in front of them.
 """
 
 from __future__ import annotations
@@ -96,8 +97,8 @@ def test_the_clock_is_weekly() -> None:
     The original argument was that a weekly clock would bury the report. That was
     wrong about the cost: the publish step edits one standing issue in place, so
     weekly costs 52 edits of a single issue, not 52 issues. The real argument for
-    weekly is the one below -- `security-pip-audit` (33 6 * * MON) already reads
-    this same lock every Monday, so a monthly freshness clock would report new
+    weekly is the one below -- the weekly audit (`security-pip-audit` at the time,
+    since deleted) read this same lock every Monday, so a monthly freshness clock would report new
     versions at a lower rate than we report known vulnerabilities in them.
 
     Read out of jobs.ts rather than asserted against the module literal, so this

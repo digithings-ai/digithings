@@ -26,13 +26,13 @@ import sys
 ADVISORY_JOBS: frozenset[str] = frozenset()
 
 # Jobs whose `if:` in ci.yml must evaluate on every push to develop/main, so a push can
-# never report them as `skipped`. `npm-audit` is here because the advisory set is a
-# property of *time* while its path filter answers a property of the *diff*: the five
-# `next` advisories of 2026-10-07 had nowhere to land on develop, so they surfaced on
-# PR #5107 — a PR whose lockfile was strictly better than develop's — and cost a full
-# round of auditing develop to disprove as the cause. See
-# tests/scripts/test_ci_npm_audit_evaluates_on_push.py.
-ALWAYS_EVALUATED_ON_PUSH: frozenset[str] = frozenset({"npm-audit"})
+# never report them as `skipped`. `npm-audit` was the one entry: the advisory set is a
+# property of *time* while its path filter answers a property of the *diff* (the five
+# `next` advisories of 2026-10-07 surfaced on PR #5107 instead of on develop). The lane
+# and its security-npm-audit.yml were deleted with the GHA exit ledger (Dependabot
+# alerts read the lockfiles), so the set is empty; the mechanism stays for the next
+# such lane. See tests/scripts/test_ci_npm_audit_evaluates_on_push.py.
+ALWAYS_EVALUATED_ON_PUSH: frozenset[str] = frozenset()
 
 
 def classify_needs(
@@ -93,7 +93,9 @@ def main(argv: list[str] | None = None) -> int:
         print("RESULTS must be a JSON object", file=sys.stderr)
         return 2
 
-    blocking, advisory_failed = classify_needs(results, require_evaluated=_pushed())
+    blocking, advisory_failed = classify_needs(
+        results, require_evaluated=_pushed(), always_evaluated=ALWAYS_EVALUATED_ON_PUSH
+    )
     summary = {k: str(v.get("result", "")) for k, v in results.items()}
     if advisory_failed:
         print("Advisory (non-blocking) jobs failed:", advisory_failed)
