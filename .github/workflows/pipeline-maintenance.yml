@@ -1,8 +1,8 @@
 # Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron). Schedule removed #3579.
 name: "Pipeline: scheduled maintenance"
 
-# Weekly maintenance sweep: security scan, quality check, stale branch cleanup,
-# dependency audit. Creates labelled issues for Copilot to pick up, or auto-fixes
+# Weekly maintenance sweep: security scan, quality check, dependency audit
+# (stale branches: branch-age-guard.yml). Creates labelled issues for Copilot to pick up, or auto-fixes
 # trivial housekeeping directly.
 
 on:
@@ -113,103 +113,8 @@ jobs:
             gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
           fi
 
-  # ── 2. Stale branch cleanup ───────────────────────────────────────────────────
-  stale-branches:
-    name: Stale branch cleanup
-    runs-on: ubuntu-latest
-    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
-    environment: cron
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Find stale branches
-        id: stale
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Branches merged into develop and older than 14 days
-          CUTOFF=$(date -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || \
-                   date -v-14d +%Y-%m-%dT%H:%M:%SZ)
-          git fetch origin --prune --quiet
-
-          STALE=""
-          while IFS= read -r branch; do
-            [[ "$branch" =~ ^(main|develop|HEAD)$ ]] && continue
-            [[ "$branch" =~ ^module/ ]] && continue
-            LAST=$(git log -1 --format="%aI" "origin/$branch" 2>/dev/null || echo "")
-            [[ -z "$LAST" ]] && continue
-            if [[ "$LAST" < "$CUTOFF" ]]; then
-              MERGED=$(git branch -r --merged origin/develop | grep "origin/$branch" || true)
-              [[ -n "$MERGED" ]] && STALE="${STALE}${branch}\n"
-            fi
-          done < <(git branch -r | sed 's|origin/||' | tr -d ' ')
-
-          # Both reads below use '%b' to expand the literal \n separators STALE
-          # accumulates above while keeping the branch names as data. `printf
-          # "$STALE"` would put them in the format string, where a branch named
-          # e.g. `fix/100%-cpu` is a bogus conversion spec (SC2059); `printf
-          # "%s"` would not expand the separators at all, collapsing the list to
-          # one line so `grep -c .` reports 1 however many branches are stale.
-          # `count` is interpolated into the cleanup issue title, not just used
-          # as the boolean for the `if:` gate below, so the number has to be right.
-          COUNT=0
-          [[ -n "$STALE" ]] && COUNT=$(printf '%b' "$STALE" | grep -c .)
-
-          # Computed before the append group so all four writes stay contiguous.
-          {
-            echo "stale_branches<<EOF"
-            printf '%b' "$STALE"
-            echo "EOF"
-            echo "count=$COUNT"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Create cleanup issue if stale branches found
-        if: steps.stale.outputs.count != '0'
-        env:
-          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
-          REPO: ${{ github.repository }}
-          STALE: ${{ steps.stale.outputs.stale_branches }}
-          COUNT: ${{ steps.stale.outputs.count }}
-          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
-        run: |
-          TITLE="[cleanup] ${COUNT} stale merged branches — $(date +%Y-%m-%d)"
-          EXISTING=$(gh issue list --repo "$REPO" --label "cleanup" --state open \
-            --search "stale merged branches in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
-          [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
-
-          BRANCH_LIST=$(printf '%b' "$STALE" | sed 's/^/- /')
-
-          URL=$(gh issue create --repo "$REPO" \
-            --title "$TITLE" \
-            --label "agent-task,component:root,priority:medium" \
-            --body "## Stale Branch Cleanup
-
-          Found **${COUNT}** branches that are merged into \`develop\` and have not been updated in 14+ days.
-
-          ## Branches to delete
-          ${BRANCH_LIST}
-
-          ## Task
-          Delete each branch after confirming it is fully merged:
-          \`\`\`bash
-          for branch in <list>; do
-            git push origin --delete \"\$branch\"
-          done
-          \`\`\`
-
-          ## Acceptance Criteria
-          - [ ] All listed branches deleted from origin
-          - [ ] No unmerged work lost (verify each branch is merged before deletion)
-          - [ ] Comment on this issue with the list of branches deleted")
-          echo "Created: $URL"
-          # Best-effort board placement: never fail the step over it. Written as
-          # if/then rather than `A && B || true`, where the `|| true` covers both
-          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
-          if [[ -n "${PROJ:-}" ]]; then
-            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
-          fi
+  # ── 2. Stale branch cleanup: removed with the GHA exit ledger. It duplicated
+  # branch-age-guard.yml, which stays as the stale-branch report.
 
   # ── 3. Doc link check ─────────────────────────────────────────────────────────
   doc-links:
