@@ -10,6 +10,7 @@ import { registerFx } from "./fx";
 import { registerPipeline } from "./pipeline";
 import { registerPortfolio } from "./portfolio";
 import { registerStrategies } from "./strategies";
+import { registerTraces } from "./traces";
 import { Registry, type RouteModule } from "./registry";
 
 export const ROUTE_MODULES: RouteModule<Env>[] = [
@@ -18,6 +19,8 @@ export const ROUTE_MODULES: RouteModule<Env>[] = [
   registerFx,
   registerStrategies,
   registerDesk,
+  // digitrace Traces tab (DIG-2661). Mounted on this worker: no new hostname.
+  registerTraces,
 ];
 
 export function buildRegistry(modules: readonly RouteModule<Env>[] = ROUTE_MODULES): Registry<Env> {
