@@ -106,6 +106,7 @@ def _pr(
     local_ci_target_url: str = "",
     local_ci_started_at: str = "2026-10-21T02:06:27Z",
     local_ci_created_at: str = "",
+    body: str = "",
 ) -> dict[str, Any]:
     rollup: list[dict[str, Any]] = list(extra_checks or [])
     # `local-ci` is the host mirror's commit status, and it is a REQUIRED check on both
@@ -170,8 +171,11 @@ def _pr(
     # asserted a missing comment list was *eligible*.
     pr["comments"] = list(comments) if comments is not None else []
     pr["commits"] = list(commits) if commits is not None else [{"oid": head_sha}]
+    pr["body"] = body
     for key in omit:
         pr.pop(key, None)
+    if "body" in omit:
+        pr.pop("body", None)
     return pr
 
 
@@ -3722,7 +3726,7 @@ def test_the_generated_rule_adapters_carry_the_roster() -> None:
 _MARKER = "<!-- in-session-review -->"
 
 
-def _labeled_pr(number: int, comments: list[dict[str, Any]] | None) -> dict[str, Any]:
+def _labeled_pr(number: int, comments: list[dict[str, Any]] | None, body: str = "") -> dict[str, Any]:
     """A `reviewed:agent` PR.
 
     `comments=None` means the row was fetched WITHOUT the comment list — the shape the
@@ -3730,7 +3734,7 @@ def _labeled_pr(number: int, comments: list[dict[str, Any]] | None) -> dict[str,
     refuses when it has no repo to read from. A read that came back empty is
     `comments=[]`, which is a different row.
     """
-    pr = _pr(number, omit=("comments",))
+    pr = _pr(number, omit=("comments",), body=body)
     pr["labels"] = [{"name": "reviewed:agent"}]
     if comments is not None:
         pr["comments"] = comments
@@ -8577,3 +8581,547 @@ def test_a_build_that_reports_no_commit_is_measured_not_refused(
     assert verdict.eligible, verdict.reasons
     written = log.read_text(encoding="utf-8")
     assert "reports no commit" in written, written
+
+
+# --- the queue's own `merge-queue` status (2026-10-27) --------------------------
+#
+# `develop` requires `local-ci` and nothing else, so on 2026-10-27 three PRs were
+# merged by hand over a standing changes-requested review: GitHub has no idea the
+# queue exists. The queue now posts a `merge-queue` commit status that branch
+# protection can require, `success` only on the exact head it is about to merge.
+
+
+def _status_calls(stub: GhStub) -> list[list[str]]:
+    return [c for c in stub.calls if any("/statuses/" in a for a in c)]
+
+
+def _field(call: list[str], name: str) -> str:
+    for i, arg in enumerate(call):
+        if arg == "-f" and call[i + 1].startswith(f"{name}="):
+            return call[i + 1].split("=", 1)[1]
+    raise AssertionError(f"no -f {name}= in {call}")
+
+
+def _status_stub(gh_stub: Any, prs: list[dict[str, Any]]) -> GhStub:
+    return _queue_stub(
+        gh_stub(
+            gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^api graphql", stdout=NO_THREADS),
+            gh_rule(r"/statuses/", stdout="{}"),
+            gh_rule(r"^pr merge", stdout=""),
+            gh_rule(r"^pr comment", stdout=""),
+        ),
+        prs,
+    )
+
+
+def test_success_is_posted_on_the_merged_head_before_the_merge(gh_stub: Any) -> None:
+    prs = [_pr(42, head_sha="d" * 40, approved=True)]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    posts = _status_calls(stub)
+    assert len(posts) == 1, posts
+    post = posts[0]
+    assert f"repos/{DIGITHINGS_REPO}/statuses/{'d' * 40}" in post
+    assert _field(post, "state") == "success"
+    assert _field(post, "context") == "merge-queue"
+    # Ordered: the status GitHub requires must exist before the merge is asked for.
+    joined = [" ".join(c) for c in stub.calls]
+    status_at = next(i for i, c in enumerate(joined) if "/statuses/" in c)
+    merge_at = next(i for i, c in enumerate(joined) if c.startswith("pr merge 42"))
+    assert status_at < merge_at
+
+
+def test_a_refused_pr_gets_a_failure_naming_the_reason(gh_stub: Any) -> None:
+    prs = [_pr(7, head_sha="e" * 40, approved=True, local_ci_state="FAILURE")]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert not stub.matching("pr merge")
+    posts = _status_calls(stub)
+    assert len(posts) == 1, posts
+    assert f"repos/{DIGITHINGS_REPO}/statuses/{'e' * 40}" in posts[0]
+    assert _field(posts[0], "state") == "failure"
+    desc = _field(posts[0], "description")
+    assert "local-ci" in desc
+    assert len(desc) <= 140
+
+
+def test_a_stale_success_on_a_refused_head_is_overwritten(gh_stub: Any) -> None:
+    """A `success` left by a merge that GitHub refused must not outlive the refusal."""
+    queue_ok = {"__typename": "StatusContext", "context": "merge-queue", "state": "SUCCESS"}
+    prs = [
+        _pr(8, approved=True, local_ci_state="FAILURE", extra_checks=[queue_ok]),
+    ]
+    stub = _status_stub(gh_stub, prs)
+    _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    posts = _status_calls(stub)
+    assert [_field(p, "state") for p in posts] == ["failure"]
+
+
+def test_a_state_github_already_shows_is_not_re_posted(gh_stub: Any) -> None:
+    """GitHub keeps every status sent, up to 1000 per SHA; a tick must not add one."""
+    queue_red = {"__typename": "StatusContext", "context": "merge-queue", "state": "FAILURE"}
+    prs = [_pr(9, approved=True, local_ci_state="FAILURE", extra_checks=[queue_red])]
+    stub = _status_stub(gh_stub, prs)
+    _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert _status_calls(stub) == []
+
+
+def test_an_eligible_pr_not_reached_this_tick_is_pending(gh_stub: Any) -> None:
+    prs = [
+        _pr(1, head_sha="1" * 40, approved=True),
+        _pr(2, head_sha="2" * 40, created="2026-10-02T00:00:00Z", approved=True),
+    ]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    states = {p[p.index("--method") + 2].rsplit("/", 1)[1]: _field(p, "state")
+              for p in _status_calls(stub)}
+    assert states == {"1" * 40: "success", "2" * 40: "pending"}
+
+
+def test_the_queue_does_not_read_its_own_failure_as_a_red_check(gh_stub: Any) -> None:
+    """`merge-queue` is in `ignored_checks`: last tick's `failure` cannot refuse this one."""
+    queue_red = {"__typename": "StatusContext", "context": "merge-queue", "state": "FAILURE"}
+    prs = [_pr(10, approved=True, extra_checks=[queue_red])]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert stub.matching("pr merge 10")
+
+
+def test_blocked_only_by_the_missing_queue_status_still_queues(gh_stub: Any) -> None:
+    """Once `develop` requires `merge-queue`, GitHub reads every unposted PR as BLOCKED.
+
+    Treating that BLOCKED as a gate would deadlock: the queue never posts the status
+    because the PR is blocked, and the PR is blocked because the status is missing.
+    """
+    prs = [_pr(11, approved=True, merge_state="BLOCKED")]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert stub.matching("pr merge 11")
+
+
+def test_blocked_with_a_green_queue_status_is_still_refused() -> None:
+    """When `merge-queue` is already green, BLOCKED means something else and stands."""
+    queue_ok = {"__typename": "StatusContext", "context": "merge-queue", "state": "SUCCESS"}
+    pr = _pr(12, approved=True, merge_state="BLOCKED", extra_checks=[queue_ok])
+    verdict = mq.evaluate(
+        pr, _policy(DIGITHINGS_REPO), acting_role="cto", base="develop", repo=None
+    )
+    assert any("mergeStateStatus=BLOCKED" in r for r in verdict.reasons)
+
+
+def _managed_repo_without_queue_status() -> str:
+    """A repository the shipped policy manages but posts no `merge-queue` status in."""
+    policy = mq.load_policy()
+    unlisted = sorted(set(policy.required_checks_by_repo) - policy.queue_status_repos)
+    assert unlisted, "the shipped policy should manage a repo outside queue_status_repos"
+    return unlisted[0]
+
+
+def test_an_unlisted_repo_posts_no_status_and_keeps_blocked_as_a_gate(gh_stub: Any) -> None:
+    """A repo with no branch protection to require the status: nothing changes there."""
+    prs = [_pr(13, approved=True, merge_state="BLOCKED"), _pr(14, approved=True)]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", _managed_repo_without_queue_status(), "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert _status_calls(stub) == []
+    assert "mergeStateStatus=BLOCKED" in done.stdout or stub.matching("pr merge 14")
+    assert not stub.matching("pr merge 13")
+
+
+def test_a_failed_status_post_warns_and_leaves_the_merge_to_github(gh_stub: Any) -> None:
+    """A lost `success` makes GitHub refuse the merge; the post itself must not crash."""
+    prs = [_pr(15, approved=True)]
+    stub = _queue_stub(
+        gh_stub(
+            gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^api graphql", stdout=NO_THREADS),
+            gh_rule(r"/statuses/", stderr="gh: Server Error (HTTP 502)", exit_code=1),
+            gh_rule(r"^pr merge", stdout=""),
+            gh_rule(r"^pr comment", stdout=""),
+        ),
+        prs,
+    )
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert "posting merge-queue=success" in done.stderr
+    assert stub.matching("pr merge 15")
+
+
+def test_a_merge_github_refuses_after_success_posts_failure_on_that_head(
+    gh_stub: Any,
+) -> None:
+    """`success` then a refused `gh pr merge` must not leave the required status green.
+
+    Otherwise a hand merge finds `merge-queue` satisfied on a PR the queue failed to
+    merge, which is the bypass the status exists to close.
+    """
+    sha = "a" * 40
+    prs = [_pr(20, head_sha=sha, approved=True)]
+    stub = _queue_stub(
+        gh_stub(
+            gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^api graphql", stdout=NO_THREADS),
+            gh_rule(r"/statuses/", stdout="{}"),
+            gh_rule(
+                r"^pr merge",
+                stderr="GraphQL: Pull Request is not mergeable (mergePullRequest)",
+                exit_code=1,
+            ),
+            gh_rule(r"^pr comment", stdout=""),
+        ),
+        prs,
+    )
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == mq.EXIT_OPERATIONAL, done.stdout
+    posts = _status_calls(stub)
+    assert [_field(p, "state") for p in posts] == ["success", "failure"]
+    assert all(f"repos/{DIGITHINGS_REPO}/statuses/{sha}" in p for p in posts)
+    desc = _field(posts[1], "description")
+    assert "not mergeable" in desc
+    assert len(desc) <= mq.QUEUE_STATUS_DESCRIPTION_MAX
+    # Ordered: success, then the refused merge, then the overwrite.
+    joined = [" ".join(c) for c in stub.calls]
+    merge_at = next(i for i, c in enumerate(joined) if c.startswith("pr merge 20"))
+    status_at = [i for i, c in enumerate(joined) if "/statuses/" in c]
+    assert status_at[0] < merge_at < status_at[1]
+    assert not stub.matching("pr comment 20")
+
+
+def test_success_github_already_shows_is_not_re_posted_before_the_merge(
+    gh_stub: Any,
+) -> None:
+    """The doc's "a state GitHub already shows is not re-posted" holds for `success` too."""
+    queue_ok = {"__typename": "StatusContext", "context": "merge-queue", "state": "SUCCESS"}
+    prs = [_pr(21, approved=True, extra_checks=[queue_ok])]
+    stub = _status_stub(gh_stub, prs)
+    done = _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert done.returncode == EXIT_OK, done.stderr
+    assert stub.matching("pr merge 21")
+    assert _status_calls(stub) == []
+
+
+def test_dry_run_and_list_post_no_status(gh_stub: Any) -> None:
+    prs = [_pr(16, approved=True), _pr(17, approved=True, local_ci_state="FAILURE")]
+    stub = _status_stub(gh_stub, prs)
+    _run("run", "--repo", DIGITHINGS_REPO, "--acting-role", "cto", "--dry-run")
+    _run("list", "--repo", DIGITHINGS_REPO, "--acting-role", "cto")
+    assert _status_calls(stub) == []
+
+
+def test_the_status_description_fits_githubs_limit() -> None:
+    verdict = mq.Verdict(
+        number=1, title="", head_ref="", created_at="", head_sha="f" * 40,
+        eligible=False, reasons=("x" * 500, "second"),
+    )
+    status = mq.refusal_status(verdict)
+    assert status is not None
+    assert len(mq._status_description(status[1])) <= mq.QUEUE_STATUS_DESCRIPTION_MAX
+
+
+def test_the_shipped_policy_ignores_the_queue_status_and_posts_it_on_digithings() -> None:
+    policy = mq.load_policy()
+    assert mq.QUEUE_STATUS_CONTEXT in policy.ignored_checks
+    assert policy.for_repo(DIGITHINGS_REPO).posts_queue_status
+    assert not policy.for_repo(_managed_repo_without_queue_status()).posts_queue_status
+
+
+def test_a_bare_string_queue_status_repos_is_refused(tmp_path: Path) -> None:
+    raw = json.loads(mq.POLICY_PATH.read_text(encoding="utf-8"))
+    raw["queue_status_repos"] = DIGITHINGS_REPO
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(mq.QueueError, match="queue_status_repos"):
+        mq.load_policy(path)
+
+
+# --- Human Gate blocks the merge queue until `reviewed:owner` ----------------
+
+
+_HUMAN_GATE_UNTICKED = """## Summary
+
+Some change.
+
+## Human Gate
+
+- [ ] Live-trading path modified
+- [ ] Auth or crypto modified
+
+**Is human review required?** No
+"""
+
+_HUMAN_GATE_TICKED = """## Summary
+
+Some change.
+
+## Human Gate
+
+- [ ] Live-trading path modified
+- [x] Auth or crypto modified
+
+**Is human review required?** Yes
+"""
+
+
+def test_human_gate_ticked_box_blocks_merge_queue() -> None:
+    pr = _pr(9001, approved=True, body=_HUMAN_GATE_TICKED)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert not verdict.eligible
+    assert any("Human Gate" in r for r in verdict.reasons)
+    assert any("reviewed:owner" in r for r in verdict.reasons)
+
+
+def test_human_gate_needs_chris_review_blocks_merge_queue() -> None:
+    pr = _pr(9002, approved=True, body="## Summary\n\nx\n\nNeeds Chris's review\n")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert not verdict.eligible
+    assert any("Human Gate" in r for r in verdict.reasons)
+
+
+def test_human_gate_reviewed_owner_unblocks_merge_queue() -> None:
+    pr = _pr(9003, approved=True, body=_HUMAN_GATE_TICKED)
+    pr["labels"] = [{"name": "reviewed:owner"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_human_gate_unticked_template_passes_merge_queue() -> None:
+    pr = _pr(9004, approved=True, body=_HUMAN_GATE_UNTICKED)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_human_gate_prose_mention_does_not_hide_the_ticked_section() -> None:
+    """A sentence naming the gate is not the section; the real heading still blocks."""
+    body = (
+        "## Summary\n\nThe Human Gate section below is unchanged.\n\n"
+        "## Testing\n\nran it\n\n"
+        "## Human Gate\n\n- [ ] Live-trading path modified\n- [x] Auth or crypto modified\n"
+    )
+    assert mq._human_gate_section(body).lstrip().startswith("- [ ] Live-trading")
+    pr = _pr(9005, approved=True, body=body)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert not verdict.eligible
+    assert any("Human Gate" in r for r in verdict.reasons)
+
+
+def test_human_gate_prose_mention_without_heading_fails_closed() -> None:
+    """A body that only mentions the gate in prose has no gate section and is blocked."""
+    body = (
+        "## Summary\n\nNothing here touches the Human Gate list.\n\n"
+        "- [x] Auth or crypto modified\n"
+    )
+    assert mq._human_gate_section(body) == ""
+    pr = _pr(9006, approved=True, body=body)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert not verdict.eligible
+    assert any("Human Gate" in r for r in verdict.reasons)
+
+
+# --- DIG-6137: Human Gate parser must not fail open on code or subheadings ----
+
+
+def _assert_human_gate_blocks(number: int, body: str) -> None:
+    assert mq._body_requires_human_review(body)
+    pr = _pr(number, approved=True, body=body)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert not verdict.eligible
+    assert any("Human Gate" in r for r in verdict.reasons)
+
+
+def test_human_gate_heading_inside_code_fence_is_not_the_section() -> None:
+    """(a) A fenced gate heading before the real section must not shadow it."""
+    for fence in ("```", "~~~"):
+        body = (
+            "## Summary\n\nTemplate example:\n\n"
+            f"{fence}markdown\n## Human Gate\n\n- [ ] Live-trading path modified\n{fence}\n\n"
+            "## Testing\n\nran it\n\n"
+            "## Human Gate\n\n- [ ] Live-trading path modified\n- [x] Auth or crypto modified\n"
+        )
+        assert "- [x] Auth" in mq._human_gate_section(body)
+        _assert_human_gate_blocks(9101, body)
+
+
+def test_human_gate_hash_line_inside_code_fence_does_not_end_the_section() -> None:
+    """(b) A `#` line inside a fenced block within the section must not end it."""
+    for fence in ("```", "~~~"):
+        body = (
+            "## Summary\n\nx\n\n"
+            "## Human Gate\n\n"
+            f"{fence}bash\n# touched paths\nls services/\n{fence}\n\n"
+            "- [ ] Live-trading path modified\n- [x] Auth or crypto modified\n\n"
+            "## Notes\n\nnone\n"
+        )
+        section = mq._human_gate_section(body)
+        assert "- [x] Auth" in section
+        assert "none" not in section
+        _assert_human_gate_blocks(9102, body)
+
+
+def test_human_gate_subheading_stays_inside_the_section() -> None:
+    """(c) A deeper subheading inside the section must not end it."""
+    body = (
+        "## Summary\n\nx\n\n"
+        "## Human Gate\n\n"
+        "### Trading\n\n- [ ] Live-trading path modified\n\n"
+        "### Security\n\n- [x] Auth or crypto modified\n\n"
+        "## Notes\n\nnone\n"
+    )
+    section = mq._human_gate_section(body)
+    assert "- [x] Auth" in section
+    assert "none" not in section
+    _assert_human_gate_blocks(9103, body)
+
+
+def test_human_gate_section_ends_at_a_higher_level_heading() -> None:
+    """The section still ends at a heading of higher level than the gate heading."""
+    body = (
+        "### Human Gate\n\n- [ ] Live-trading path modified\n\n"
+        "**Is human review required?** No\n\n"
+        "## Appendix\n\n- [x] unrelated checklist item\n"
+    )
+    assert "unrelated" not in mq._human_gate_section(body)
+    assert not mq._body_requires_human_review(body)
+
+
+def test_human_gate_unclosed_fence_hiding_the_heading_fails_closed() -> None:
+    """An unclosed fence that swallows the gate heading leaves no readable section."""
+    body = "## Summary\n\n```\nexample\n\n## Human Gate\n\n- [x] Auth or crypto modified\n"
+    assert mq._human_gate_section(body) == ""
+    _assert_human_gate_blocks(9104, body)
+
+
+# --- DIG-6157: more shapes the Human Gate must fail closed on -----------------
+
+
+def _gate_body(boxes: str, answer: str = "**Is human review required?** No\n") -> str:
+    return "## Summary\n\nx\n\n## Human Gate\n\n" + boxes + "\n" + answer + "\n## Notes\n\nnone\n"
+
+
+@pytest.mark.parametrize("bullet", ["-", "*", "+", "1.", "1)", "12."])
+def test_human_gate_ticked_box_counts_for_every_list_marker(bullet: str) -> None:
+    """(a, b) `+` bullets and ordered items (`1.`, `1)`) are task-list boxes too."""
+    body = _gate_body(f"- [ ] Live-trading path modified\n{bullet} [x] Auth or crypto modified\n")
+    reason = mq._human_gate_refusal(body)
+    assert reason is not None and "ticks a Human Gate box" in reason
+    _assert_human_gate_blocks(9201, body)
+
+
+def test_human_gate_two_headings_fail_closed_with_a_reason() -> None:
+    """(c) Two gate headings are ambiguous; a tick under the second must not be missed."""
+    body = (
+        "## Human Gate\n\n- [ ] Live-trading path modified\n\n"
+        "**Is human review required?** No\n\n"
+        "## Human Gate\n\n- [x] Auth or crypto modified\n"
+    )
+    reason = mq._human_gate_refusal(body)
+    assert reason is not None and "2 Human Gate headings" in reason
+    assert mq._human_gate_section(body) == ""
+    _assert_human_gate_blocks(9202, body)
+
+
+@pytest.mark.parametrize(
+    "decoy",
+    [
+        "<!-- ## Human Gate\n- [ ] Live-trading path modified -->\n",
+        "<!--\n## Human Gate\n\n- [ ] Live-trading path modified\n\n"
+        "**Is human review required?** No\n-->\n",
+    ],
+    ids=["single-line", "multi-line"],
+)
+def test_human_gate_heading_inside_html_comment_is_not_the_section(decoy: str) -> None:
+    """(d) A decoy gate heading in an HTML comment must not shadow the real section."""
+    body = (
+        "## Summary\n\n"
+        + decoy
+        + "\n## Human Gate\n\n- [ ] Live-trading path modified\n- [x] Auth or crypto modified\n\n"
+        "**Is human review required?** Yes\n"
+    )
+    assert "- [x] Auth" in mq._human_gate_section(body)
+    _assert_human_gate_blocks(9203, body)
+
+
+def test_human_gate_heading_only_inside_html_comment_fails_closed() -> None:
+    body = "## Summary\n\n<!--\n## Human Gate\n- [ ] Live-trading path modified\n-->\n"
+    assert mq._human_gate_section(body) == ""
+    _assert_human_gate_blocks(9204, body)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "**Is human review required?** Yes\n",
+        "**Is human review required?** **Yes**\n",
+        "**Is human review required? Yes**\n",
+        "Is human review required? __Yes__\n",
+        "**Is human review required?** Yes / No\n",
+    ],
+)
+def test_human_gate_answer_yes_requires_review_with_no_box_ticked(answer: str) -> None:
+    """One's policy: a Yes answer is REQUIRED even when every box is unticked."""
+    body = _gate_body("- [ ] Live-trading path modified\n", answer)
+    reason = mq._human_gate_refusal(body)
+    assert reason is not None and "explicit No" in reason
+    _assert_human_gate_blocks(9205, body)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "**Is human review required?** No\n",
+        "**Is human review required?** **No**\n",
+        "**Is human review required? No**\n",
+        "Is human review required? no, docs only\n",
+    ],
+)
+def test_human_gate_explicit_no_is_allowed(answer: str) -> None:
+    body = _gate_body("- [ ] Live-trading path modified\n", answer)
+    assert mq._human_gate_refusal(body) is None
+    pr = _pr(9206, approved=True, body=body)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+@pytest.mark.parametrize(
+    "answer",
+    ["**Is human review required?**\n", "**Is human review required?** TBD\n", ""],
+    ids=["empty", "not-yes-or-no", "question-missing"],
+)
+def test_human_gate_missing_answer_fails_closed(answer: str) -> None:
+    body = _gate_body("- [ ] Live-trading path modified\n", answer)
+    reason = mq._human_gate_refusal(body)
+    assert reason is not None and "Is human review required?" in reason
+    _assert_human_gate_blocks(9207, body)
+
+
+@pytest.mark.parametrize("quote", ["> ", ">", ">> ", "> > ", ">>> "])
+@pytest.mark.parametrize("bullet", ["-", "+", "1."])
+def test_human_gate_ticked_box_inside_a_blockquote_counts(quote: str, bullet: str) -> None:
+    """(a) Blockquote markers, nested ones included, do not hide a ticked box."""
+    ticked = f"{quote}{bullet} [x] Auth or crypto modified\n"
+    body = _gate_body("- [ ] Live-trading path modified\n" + ticked)
+    reason = mq._human_gate_refusal(body)
+    assert reason is not None and "ticks a Human Gate box" in reason
+    _assert_human_gate_blocks(9208, body)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "**Is human review required?** No, human review required\n",
+        "**Is human review required?** No - required\n",
+        "**Is human review required?** **No** (required for the auth change)\n",
+        "**Is human review required? No — REQUIRED**\n",
+    ],
+)
+def test_human_gate_no_that_also_says_required_fails_closed(answer: str) -> None:
+    """(d) A No that also says 'required' is ambiguous and needs owner review."""
+    body = _gate_body("- [ ] Live-trading path modified\n", answer)
+    reason = mq._human_gate_refusal(body)
+    assert reason is not None and "explicit No" in reason
+    _assert_human_gate_blocks(9209, body)

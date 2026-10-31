@@ -117,6 +117,15 @@ _MERGE_PR = re.compile(r"^Merge pull request #(\d+)\b")
 
 BOT_AUTHORS = frozenset({"github-actions[bot]", "dependabot[bot]", "cursor[bot]"})
 
+# The board's GitHub App seat. `gh --json` (2.102, measured 2026-10-27) returns its
+# review author as the bare record ``{"login": "digiforge-board"}`` with no
+# ``is_bot``, so nothing in the record says bot and its APPROVED review cleared
+# coverage as a person's approval — how #6516 merged over a standing
+# changes-requested review. It is a bot for `is_bot_login` only, deliberately NOT in
+# `BOT_AUTHORS`: that set also exempts a commit's author from review coverage, and
+# this seat authors the squash commit of nearly every PR on `develop`.
+SEAT_BOT_LOGINS = frozenset({"digiforge-board", "digiforge-board[bot]"})
+
 # Bots that *review* PRs. cursor[bot] is the author, not a reviewer — a router
 # pass approving its own work is not a review loop. github-actions is CI.
 #
@@ -365,21 +374,21 @@ def is_bot_login(author: dict | str | None) -> bool:
 
       * its record says so -- `gh --json`'s ``is_bot``, REST's ``type``, or
         GraphQL's ``__typename`` being ``Bot`` (when the query asks for it).
-        This is what catches an UNLISTED bot whose login is bare: gh builds at
-        least since 2.102 (the review environments this repo actually runs)
-        send ``is_bot`` on the author records both filters read, and the bare
-        login alone is indistinguishable from a person's; or
+        Do not rely on it being there: gh 2.102 sends ``is_bot`` on a PR's
+        ``author`` but NOT on the author of a ``reviews`` entry, which arrives as
+        a bare ``{"login": ...}`` (measured 2026-10-27 on the board seat's
+        approvals); or
       * its name says so -- the ``[bot]`` suffix GitHub appends in the REST
-        timeline, or a login in `REVIEW_BOTS`/`BOT_AUTHORS` (both spellings are
-        in the sets), which is what classifies hand-built fixtures and feeds
-        that predate the record typing.
+        timeline, or a login in `REVIEW_BOTS`/`BOT_AUTHORS`/`SEAT_BOT_LOGINS`
+        (both spellings are in the sets). For a review author this is the
+        signal that actually decides, so every bot that can submit a review
+        must be listed by name.
 
     A record with no typing field and an unlisted bare name is treated as a
     person. That is deliberate: assuming the login is a bot would refuse real
     approvals -- the failure mode that retired the non-author-approval demand on
-    2026-10-18 -- and both production fetches (``gh pr list/view --json``) carry
-    ``is_bot``, so a bare name with nothing else is a fixture artefact, not a
-    review a bot could actually submit.
+    2026-10-18. The cost is that an unlisted bot's review reads as a person's,
+    which is why the seat's login is listed rather than inferred.
 
     Call it with whatever makes the login: the author record (`gh --json`,
     GraphQL or REST shape), or the bare login string itself.
@@ -403,7 +412,12 @@ def is_bot_login(author: dict | str | None) -> bool:
     # login collides with a reviewer-bot name loses nothing either way: their
     # verdict degrades from the approval hatch to the agent-review hatch, both
     # of which count.
-    if login.endswith("[bot]") or login in REVIEW_BOTS or login in BOT_AUTHORS:
+    if (
+        login.endswith("[bot]")
+        or login in REVIEW_BOTS
+        or login in BOT_AUTHORS
+        or login in SEAT_BOT_LOGINS
+    ):
         return True
     if record.get("is_bot") is True:
         return True

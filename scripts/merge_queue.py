@@ -87,6 +87,18 @@ STALE_MERGE_STATES: frozenset[str] = frozenset({"BLOCKED", "BEHIND", "DIRTY", "U
 # it is left out of the audit comment's check list.
 IGNORED_STATUS_CONTEXTS: frozenset[str] = frozenset({"qa/gate"})
 
+# The commit status the queue posts on a PR head, so GitHub can require it. Without
+# it, GitHub accepts any write-access merge on `develop` the moment `local-ci` is
+# green, and the queue's review gates are advisory: on 2026-10-27 three PRs merged
+# by hand over a standing changes-requested review and a red `review-applied`.
+# Like `local-ci`, anyone with write access could post this by hand; it stops the
+# accidental bypass, not a deliberate one. It is posted only for repositories named
+# in `queue_status_repos`, and the queue never reads its own status as a check —
+# it is in `ignored_checks`, so a stale `failure` cannot refuse the PR it describes.
+QUEUE_STATUS_CONTEXT = "merge-queue"
+# GitHub caps a commit status description at 140 characters and rejects longer ones.
+QUEUE_STATUS_DESCRIPTION_MAX = 140
+
 # --- CI provenance (DIG-4794) -------------------------------------------------
 #
 # `local-ci` is a commit status, and GitHub's own documentation says what that is
@@ -443,6 +455,10 @@ class Policy:
     status_context_checks: frozenset[str] = frozenset()
     ci_provenance: CiProvenance = field(default_factory=CiProvenance)
     review_independence: ReviewIndependence = field(default_factory=ReviewIndependence)
+    #: Repositories whose PR heads carry the queue's own `merge-queue` status.
+    queue_status_repos: frozenset[str] = frozenset()
+    #: Resolved by `for_repo`: True when this repository requires the status.
+    posts_queue_status: bool = False
 
     def authority(self, role: str) -> Authority | None:
         return next((a for a in self.merge_authorities if a.role == role), None)
@@ -478,7 +494,11 @@ class Policy:
         and `_audit_body` both read `policy.required_checks`, so the check the merge
         depended on and the check the audit comment names cannot come from two places.
         """
-        return replace(self, required_checks=self.required_for(repo))
+        return replace(
+            self,
+            required_checks=self.required_for(repo),
+            posts_queue_status=repo in self.queue_status_repos,
+        )
 
 
 @dataclass
@@ -506,6 +526,10 @@ class Verdict:
     #: every other tick (DIG-5573, 42 handbacks on #6418 in 29 h). Such a PR is not
     #: eligible — an unread gate is not a cleared gate — it is skipped this tick.
     deferred: str = ""
+    #: The state of the queue's own `merge-queue` status on this head as GitHub
+    #: reported it ("" when none). Read so a tick does not re-post the same state:
+    #: GitHub keeps every status it is sent, up to 1000 per SHA and context.
+    queue_status: str = ""
 
     def order_key(self) -> tuple[str, int]:
         """FIFO on creation time, PR number breaking ties.
@@ -549,7 +573,22 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
         },
         ci_provenance=_load_ci_provenance(raw.get("ci_provenance"), path),
         review_independence=_load_review_independence(raw, path),
+        queue_status_repos=_load_queue_status_repos(raw, path),
     )
+
+
+def _load_queue_status_repos(raw: Mapping[str, Any], path: Path) -> frozenset[str]:
+    """Read `queue_status_repos`: where the queue posts its `merge-queue` status.
+
+    A bare string is refused rather than iterated: `"digithings-ai/digithings"`
+    read as a list is twenty-four one-letter repositories and posts nowhere.
+    """
+    value = raw.get("queue_status_repos")
+    if value is None:
+        return frozenset()
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        raise QueueError(f"{path}: queue_status_repos must be a list of owner/name strings")
+    return frozenset(value)
 
 
 def _load_ci_provenance(raw: Mapping[str, Any] | None, path: Path) -> CiProvenance:
@@ -772,7 +811,7 @@ def fetch_queue(repo: str, base: str, limit: int) -> list[dict[str, Any]]:
         "--json",
         "number,title,headRefName,headRefOid,baseRefName,isDraft,mergeable,"
         "mergeStateStatus,statusCheckRollup,reviewDecision,author,createdAt,reviews,"
-        "comments,commits,labels",
+        "comments,commits,labels,body",
     )
     if not isinstance(prs, list):
         raise QueueError(f"gh pr list did not return a list for {repo}:{base}")
@@ -3372,6 +3411,182 @@ def _label_names(pr: dict[str, Any]) -> set[str]:
 def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
     return _review_coverage(pr, repo)[0]
 
+# A ticked checkbox list item: `-`, `*` or `+` bullets and ordered items
+# (`1.` or `1)`), any of which GitHub renders as a task list (DIG-6157).
+_HUMAN_GATE_CHECKED_RE = re.compile(r"(?im)^\s*(?:[-*+]|\d{1,9}[.)])\s*\[[xX]\]")
+# The section starts only at an ATX heading (`#` to `######`, then whitespace).
+# A sentence that merely mentions the gate is not the section: matching it
+# would start the section in prose, end it at the next heading, and miss a
+# ticked box in the real section further down (fail open).
+_HUMAN_GATE_HEADING_RE = re.compile(r"(?i)^ {0,3}(#{1,6})[ \t]+.*human gate")
+_ATX_HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]|$)")
+_HTML_COMMENT_RE = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
+_HUMAN_REVIEW_QUESTION_RE = re.compile(r"(?i)is human review required\?(?P<answer>.*)$")
+_HUMAN_GATE_NEEDS_OWNER = " — needs the `reviewed:owner` label"
+
+
+def _strip_html_comments(body: str) -> str:
+    """``body`` with HTML comments blanked, keeping every newline (DIG-6157).
+
+    A comment does not render, so a gate heading or answer inside one is not
+    part of the body a reader sees. An unclosed ``<!--`` runs to the end, which
+    can only hide a heading, so the caller fails closed.
+    """
+    return _HTML_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), body)
+
+
+def _visible_lines(body: str) -> list[str]:
+    """Body lines as rendered: fenced code and HTML comments blanked, count kept.
+
+    Fences go first, so a ``<!--`` shown inside code opens nothing. Both
+    helpers keep the line count, so indices map straight back onto the raw
+    body's ``splitlines()``.
+    """
+    return _strip_html_comments(_strip_fenced_blocks(body)).splitlines()
+
+
+def _human_gate_headings(visible: list[str]) -> list[tuple[int, int]]:
+    """(line index, level) of every Human Gate heading outside code and comments."""
+    found = []
+    for i, line in enumerate(visible):
+        m = _HUMAN_GATE_HEADING_RE.match(line)
+        if m:
+            found.append((i, len(m.group(1))))
+    return found
+
+
+def _human_gate_section_lines(body: str) -> list[str] | None:
+    """Original lines of the Human Gate section, or None when there is not exactly one.
+
+    Fenced code and HTML comments are ignored when looking for the gate heading
+    and for the end of the section, so a heading or `#` line inside either can
+    neither open a decoy section nor cut the real one short. The section runs
+    until the next heading of the same or a higher level (fewer or equal `#`),
+    so a subheading inside it stays part of it. The returned lines are the raw
+    body lines, code included, so a ticked box can only add to the verdict.
+    More than one gate heading is ambiguous and yields None (fail closed).
+    """
+    if not body:
+        return None
+    raw = body.splitlines()
+    visible = _visible_lines(body)
+    headings = _human_gate_headings(visible)
+    if len(headings) != 1:
+        return None
+    start, level = headings[0][0] + 1, headings[0][1]
+    end = len(raw)
+    for j in range(start, len(visible)):
+        h = _ATX_HEADING_RE.match(visible[j])
+        if h and len(h.group(1)) <= level:
+            end = j
+            break
+    return raw[start:end]
+
+
+def _human_gate_section(body: str) -> str:
+    """Text under the single ATX heading that names the Human Gate section.
+
+    The section ends at the next heading of the same or higher level; fenced
+    code and HTML comments never open or end it (DIG-6137, DIG-6157).
+    """
+    lines = _human_gate_section_lines(body)
+    if not lines:
+        return ""
+    return "\n".join(lines) + "\n"
+
+
+def _human_review_answer_is_no(answer: str) -> bool:
+    """True only for an unambiguous No (bold or plain, optional trailing text).
+
+    A No that also says "required" (``No, human review required``,
+    ``No - required``) contradicts itself and fails closed (DIG-6157).
+    """
+    cleaned = re.sub(r"[*_`\s]+", " ", answer).strip(" :—-").strip()
+    if not re.match(r"(?i)no\b", cleaned):
+        return False
+    return not re.search(r"(?i)\byes\b|\brequir", cleaned)
+
+
+def _strip_blockquote_markers(text: str) -> str:
+    """``text`` with leading blockquote markers removed, nested ones included.
+
+    GitHub renders a task-list box inside ``>`` or ``>>`` as a box, so the
+    tick must count there too (DIG-6157).
+    """
+    return re.sub(r"(?m)^[ \t]*(?:>[ \t]?)+", "", text)
+
+
+def _human_gate_refusal(pr: Any) -> str | None:
+    """Why the PR body needs owner review, or None when it does not.
+
+    Accepts either a PR dict (with a ``body`` key) or a body string. Fails
+    closed on anything the gate cannot read with certainty (DIG-6157):
+
+    - the body names the gate but has no gate heading outside code/comments;
+    - more than one gate heading;
+    - a ticked box in the section (any bullet or ordered item);
+    - an ``Is human review required?`` answer that is not an explicit No,
+      including a missing question in the section or an empty answer;
+    - ``Needs Chris's review`` anywhere.
+    """
+    if isinstance(pr, str):
+        body = pr
+    else:
+        body = str((pr or {}).get("body") or "")
+    visible = _visible_lines(body)
+    headings = _human_gate_headings(visible)
+    if len(headings) > 1:
+        return (
+            f"Human Gate: PR body has {len(headings)} Human Gate headings; exactly one "
+            "is allowed" + _HUMAN_GATE_NEEDS_OWNER
+        )
+    if re.search(r"(?i)human gate", body) and not headings:
+        # The body names the gate but has no gate heading outside code or
+        # comments, so the boxes cannot be read: fail closed.
+        return (
+            "Human Gate: PR body names the gate but has no readable Human Gate "
+            "heading" + _HUMAN_GATE_NEEDS_OWNER
+        )
+    section = _human_gate_section(body)
+    if section and _HUMAN_GATE_CHECKED_RE.search(_strip_blockquote_markers(section)):
+        return "Human Gate: PR body ticks a Human Gate box" + _HUMAN_GATE_NEEDS_OWNER
+    answers = [
+        m.group("answer") for line in visible if (m := _HUMAN_REVIEW_QUESTION_RE.search(line))
+    ]
+    if headings and not answers:
+        return (
+            "Human Gate: 'Is human review required?' is missing from the Human Gate "
+            "section" + _HUMAN_GATE_NEEDS_OWNER
+        )
+    if any(not _human_review_answer_is_no(a) for a in answers):
+        return (
+            "Human Gate: 'Is human review required?' is not answered with an explicit "
+            "No" + _HUMAN_GATE_NEEDS_OWNER
+        )
+    normalised = body.replace("\u2019", "'").lower()
+    if "needs chris's review" in normalised:
+        return "Human Gate: PR body says 'Needs Chris's review'" + _HUMAN_GATE_NEEDS_OWNER
+    return None
+
+
+def _body_requires_human_review(pr: Any) -> bool:
+    """True when the PR body needs owner review (see `_human_gate_refusal`)."""
+    return _human_gate_refusal(pr) is not None
+
+
+def _gate_human_gate(pr: dict[str, Any]) -> list[str]:
+    """Refuse a PR that needs human review unless it carries `reviewed:owner`.
+
+    Bugbot or seat approval alone is never enough for such a PR: the
+    `reviewed:owner` label is the only thing that clears it. The queue posts
+    the refusal as a `merge-queue` status so GitHub's required check keeps the
+    PR out of `develop` until Chris has reviewed it.
+    """
+    if "reviewed:owner" in _label_names(pr):
+        return []
+    reason = _human_gate_refusal(pr)
+    return [reason] if reason else []
+
 
 # --- reviewer independence: the review must come from another seat ------------
 #
@@ -4878,9 +5093,22 @@ def evaluate(
     # The local queue has to catch it itself.
     state = str(pr.get("mergeStateStatus") or "")
     stale_reason = f"mergeStateStatus={state} (base moved since the checks ran)"
-    if state in STALE_MERGE_STATES:
+    queue_status = _queue_status_state(pr)
+    # Once `develop` requires `merge-queue`, GitHub reports every PR the queue has not
+    # yet passed as BLOCKED — the status is missing because the queue has not posted
+    # it, and the queue would never post it because the PR reads BLOCKED. Break that
+    # loop only where it can arise: in a repository that requires the status, while
+    # the status is not yet green. Every other cause of BLOCKED on `develop` has its
+    # own gate below (a red required check, a changes-requested review, an open
+    # thread), and a cause none of them models makes `gh pr merge` refuse, which
+    # fails the tick loudly rather than landing anything.
+    blocked_by_own_status = (
+        state == "BLOCKED" and policy.posts_queue_status and queue_status != "SUCCESS"
+    )
+    if state in STALE_MERGE_STATES and not blocked_by_own_status:
         reasons.append(stale_reason)
 
+    reasons.extend(_gate_human_gate(pr))
     reasons.extend(_gate_checks(pr, policy, repo=repo))
     # The verdict gate reads the review record, so the row is completed before either
     # review gate runs. `_review_coverage`'s own lazy fetch is not enough on its own:
@@ -4927,6 +5155,7 @@ def evaluate(
         ),
         stale_base_only=stale_base_only,
         deferred=deferred,
+        queue_status=queue_status,
     )
 
 
@@ -4961,6 +5190,86 @@ def _audit_body(verdict: Verdict, authority: Authority, policy: Policy) -> str:
         "Gate definition and the roster: `docs/MERGE_QUEUE.md`, "
         "`scripts/merge_queue_policy.json`."
     )
+
+
+def _queue_status_state(pr: dict[str, Any]) -> str:
+    """The state of the queue's own status on this head, upper-cased; "" when absent.
+
+    GitHub's rollup carries one row per context — the latest — so the first match is
+    the current state.
+    """
+    for e in pr.get("statusCheckRollup") or []:
+        if isinstance(e, dict) and _check_name(e) == QUEUE_STATUS_CONTEXT:
+            return str(e.get("state") or e.get("conclusion") or "").upper()
+    return ""
+
+
+def _status_description(text: str) -> str:
+    text = " ".join(text.split())
+    if len(text) <= QUEUE_STATUS_DESCRIPTION_MAX:
+        return text
+    return text[: QUEUE_STATUS_DESCRIPTION_MAX - 1] + "…"
+
+
+def post_queue_status(repo: str, sha: str, state: str, description: str) -> bool:
+    """Post the `merge-queue` commit status on one head. Returns False on failure.
+
+    A failed post warns and does not stop the tick. That is safe in both
+    directions: a missing `success` leaves GitHub refusing the merge, which fails
+    the tick loudly in `merge_one`; a missing `failure` leaves the head with no
+    green status to merge on, because statuses are per SHA and the queue only
+    ever posts `success` immediately before merging that exact SHA.
+    """
+    proc = subprocess.run(
+        [
+            "gh",
+            "api",
+            "--method",
+            "POST",
+            f"repos/{repo}/statuses/{sha}",
+            "-f",
+            f"state={state}",
+            "-f",
+            f"context={QUEUE_STATUS_CONTEXT}",
+            "-f",
+            f"description={_status_description(description)}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        print(
+            f"warning: posting {QUEUE_STATUS_CONTEXT}={state} on {sha[:12]} failed: "
+            f"{proc.stderr.strip()}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def refusal_status(verdict: Verdict) -> tuple[str, str] | None:
+    """The `merge-queue` state and description for a PR the queue did not merge.
+
+    `failure` names the first gate the PR failed. `pending` covers the cases where
+    nobody has to fix anything: an eligible PR waiting its turn, a branch that is
+    only behind its base, and a fact the queue could not read this tick. Returns
+    None when GitHub already shows this state, so a tick does not re-post it.
+    """
+    if verdict.eligible:
+        state, desc = "pending", "eligible; waiting its turn in the merge queue"
+    elif verdict.stale_base_only:
+        state, desc = "pending", "behind its base; the queue updates it, then re-runs checks"
+    elif verdict.reasons:
+        extra = len(verdict.reasons) - 1
+        more = f" (+{extra} more)" if extra else ""
+        state, desc = "failure", f"refused: {verdict.reasons[0]}{more}"
+    elif verdict.deferred:
+        state, desc = "pending", f"not judged this tick: {verdict.deferred}"
+    else:
+        return None
+    if verdict.queue_status == state.upper():
+        return None
+    return state, desc
 
 
 def merge_one(repo: str, verdict: Verdict, authority: Authority, policy: Policy) -> None:
@@ -5269,7 +5578,33 @@ def main(argv: list[str] | None = None) -> int:
             head = next((v for v in verdicts if v.eligible), None)
             if head is None:
                 break
-            merge_one(args.repo, head, authority, policy)
+            if policy.posts_queue_status and head.queue_status != "SUCCESS":
+                # Posted on the exact SHA `merge_one` pins with --match-head-commit, so
+                # the green status can only ever vouch for the commit the gates read.
+                # Skipped when GitHub already shows `success` on this head (a tick
+                # that posted it and then stopped before the merge): GitHub keeps
+                # every status sent, so the same state is never posted twice.
+                post_queue_status(
+                    args.repo,
+                    head.head_sha,
+                    "success",
+                    f"passed the merge queue gates; merging as {authority.role}",
+                )
+            try:
+                merge_one(args.repo, head, authority, policy)
+            except QueueError as exc:
+                if policy.posts_queue_status:
+                    # GitHub refused the merge after the queue posted `success`. Left
+                    # alone, that green required status would let a hand merge land
+                    # the PR the queue just failed to merge — the bypass this status
+                    # exists to close. Overwrite it on the same SHA, then fail the tick.
+                    post_queue_status(
+                        args.repo,
+                        head.head_sha,
+                        "failure",
+                        f"merge refused by GitHub: {exc}",
+                    )
+                raise
             comment_audit(
                 args.repo,
                 head,
@@ -5297,6 +5632,20 @@ def main(argv: list[str] | None = None) -> int:
                     "checks re-run against the current base; the next tick re-evaluates it"
                 )
 
+        if policy.posts_queue_status:
+            # Every PR the tick did not merge gets a non-green status on its current
+            # head, so a `success` left on an older head cannot be mistaken for a
+            # verdict on this one, and a hand merge sees the refusal reason. A PR this
+            # tick merged or updated is skipped: the first is closed, the second has a
+            # new head that the next read judges.
+            skip = {v.number for v in merged} | {v.number for v in updated}
+            for v in verdicts:
+                if v.number in skip or not v.head_sha:
+                    continue
+                status = refusal_status(v)
+                if status:
+                    post_queue_status(args.repo, v.head_sha, *status)
+
         if not merged:
             print("nothing merged — no PR passed the queue gates")
         if len(merged) < args.max_merges:
@@ -5322,3 +5671,10 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# --- aliases for the Human Gate gate (DIG-5942) ------------------------------
+human_gate_blocks = _body_requires_human_review
+human_gate_requires_owner = _body_requires_human_review
+is_human_gate_blocked = _body_requires_human_review
+gate_human_gate = _gate_human_gate
