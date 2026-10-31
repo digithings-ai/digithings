@@ -10,7 +10,6 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD = REPO_ROOT / "scripts" / "build-digiquant.sh"
-DEPLOY = REPO_ROOT / ".github" / "workflows" / "deploy-digiquant-cloudflare.yml"
 REDIRECTS = REPO_ROOT / "apps" / "digiquant-web" / "public" / "_redirects"
 HEADERS = REPO_ROOT / "apps" / "digiquant-web" / "public" / "_headers"
 
@@ -30,12 +29,6 @@ def test_build_asserts_alpaca_oauth_callback_export() -> None:
     text = BUILD.read_text(encoding="utf-8")
     assert "[ -f dist/dashboard/settings/brokers/callback/index.html ]" in text
     assert "alpaca-oauth-callback" in text
-
-
-def test_pages_build_check_asserts_dist_dashboard() -> None:
-    text = DEPLOY.read_text(encoding="utf-8")
-    assert "test -d dist/dashboard" in text
-    assert "test -d dist/olympus" not in text
 
 
 

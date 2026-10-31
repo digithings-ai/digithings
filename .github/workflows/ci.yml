@@ -238,7 +238,6 @@ jobs:
               - '.github/workflows/pipeline-digiquant-prices.yml'
               - '.github/workflows/pipeline-digiquant.yml'
               - '.github/workflows/deploy-digithings-cloudflare.yml'
-              - '.github/workflows/deploy-digiquant-cloudflare.yml'
               - '.github/workflows/**'
             workflows:
               - '.github/workflows/**'

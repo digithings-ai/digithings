@@ -376,8 +376,9 @@ never put → probe.
 `digiquant-io` deploys from Cloudflare Pages' Git integration on `main` (`production_branch: main`,
 `build_command: bash scripts/build-digiquant.sh`, `destination_dir: dist`), so every merge to `main` rebuilds and
 re-inlines the var. Two consequences: (a) a var set today stops shipping only once `main` is merged *after* this
-date — not the moment you `put`; (b) `.github/workflows/deploy-digiquant-cloudflare.yml` is a **PR build check, not
-the deploy**, so "wait for the workflow" is the wrong instinct and that file is an inviting wrong turn. If you need
+date — not the moment you `put`; (b) there is no deploy workflow to wait for: the old
+`.github/workflows/deploy-digiquant-cloudflare.yml` was only a **PR build check, not the deploy**, and was
+deleted with the GHA exit ledger. If you need
 the new value live without merging, the lever is the Cloudflare Pages dashboard's retry-redeploy, and there is no
 sanctioned CLI for it in this runbook — get a Decision rather than improvising one.
 

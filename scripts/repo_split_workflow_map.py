@@ -140,13 +140,6 @@ ROWS: tuple[Row, ...] = (
     ),
     Row(
         "R3",
-        ".github/workflows/deploy-digiquant-cloudflare.yml",
-        "local-ci",
-        anchor="scripts/build-digiquant.sh",
-        note="Pull-request build check. Pages watching main is the publish.",
-    ),
-    Row(
-        "R3",
         ".github/workflows/test-dashboard.yml",
         "local-ci",
         ci_uses=True,

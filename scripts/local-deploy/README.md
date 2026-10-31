@@ -11,7 +11,7 @@ or spends without an explicit live flag plus a named approval.
 | Disabled GitHub workflow | Local replacement | Needs secret? |
 |---|---|---|
 | `build-cloudflare-workers.yml` (worker build check) | `build_workers.sh` | No (`--dry-run`, no Docker) |
-| `deploy-digiquant-cloudflare.yml` (digiquant.io Pages build check) | `build_sites.sh digiquant` | No |
+| `deploy-digiquant-cloudflare.yml` (digiquant.io Pages build check; deleted with the GHA exit ledger) | `build_sites.sh digiquant` | No |
 | `deploy-digithings-cloudflare.yml` (digithings.ai Pages build check) | `build_sites.sh digithings` | No |
 | `deploy-digithings-cron.yml` (cron Worker deploy) | `deploy_worker.sh digithings-cron` | Only with `--live` |
 | `deploy-digiquant-runner.yml` (runner Worker + image deploy) | `deploy_worker.sh digiquant-runner` | Only with `--live` |

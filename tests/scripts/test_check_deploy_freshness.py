@@ -25,8 +25,8 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = REPO_ROOT / "scripts" / "check_deploy_freshness.py"
+# The digiquant.io build check was deleted with the GHA exit ledger (site paused).
 _BUILD_CHECK_WORKFLOWS = [
-    REPO_ROOT / ".github" / "workflows" / "deploy-digiquant-cloudflare.yml",
     REPO_ROOT / ".github" / "workflows" / "deploy-digithings-cloudflare.yml",
 ]
 

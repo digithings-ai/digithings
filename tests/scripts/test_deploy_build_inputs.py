@@ -48,11 +48,6 @@ DEPLOY_CHECKS = [
         REPO_ROOT / "scripts" / "build-digithings.sh",
         id="digithings.ai",
     ),
-    pytest.param(
-        REPO_ROOT / ".github" / "workflows" / "deploy-digiquant-cloudflare.yml",
-        REPO_ROOT / "scripts" / "build-digiquant.sh",
-        id="digiquant.io",
-    ),
 ]
 
 #: A line that builds a workspace. `run build:analyze` is deliberately not one.
@@ -224,7 +219,9 @@ def test_digichat_ui_is_a_digithings_build_input_but_not_a_digiquant_one() -> No
     other untouched should be able to see that this was computed, not overlooked.
     """
     digithings = _closure_for("digithings.ai")
-    digiquant = _closure_for("digiquant.io")
+    # The digiquant.io build check workflow was deleted with the GHA exit ledger (site
+    # paused); its build script stays, so read the closure straight from it.
+    digiquant = _build_input_dirs(REPO_ROOT / "scripts" / "build-digiquant.sh")
     assert "packages/digichat-ui" in digithings
     assert "packages/digichat-ui" not in digiquant
     # The walk follows dependencies, not dependents: `digichat` consumes digichat-ui but is

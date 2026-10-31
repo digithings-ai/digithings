@@ -334,8 +334,9 @@ Worker is added without landing in the matrix. The matrix covers
 
 `bash scripts/build-digithings.sh` plus `dist/` assertions. It never deploys: the real
 digithings.ai deploy is **Cloudflare Pages watching `main`**, configured in the Cloudflare
-dashboard, not in this repo. `deploy-digiquant-cloudflare.yml` is the same shape for
-digiquant.io. Nothing in the repo can make a Pages deployment fail before it happens, only
+dashboard, not in this repo. `deploy-digiquant-cloudflare.yml` was the same shape for
+digiquant.io until it was deleted with the GHA exit ledger (site paused; the local lane is
+`scripts/local-deploy/build_sites.sh digiquant`). Nothing in the repo can make a Pages deployment fail before it happens, only
 fail a PR before it merges.
 
 ### The two stacks have a deploy lane again

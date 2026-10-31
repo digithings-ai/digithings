@@ -55,7 +55,6 @@ STACK_WORKFLOW = WORKFLOWS_DIR / "deploy-digithings-stack-cloudflare.yml"
 PAGES_GIT_INTEGRATION_WORKFLOWS = frozenset(
     {
         "deploy-digithings-cloudflare.yml",
-        "deploy-digiquant-cloudflare.yml",
     }
 )
 
