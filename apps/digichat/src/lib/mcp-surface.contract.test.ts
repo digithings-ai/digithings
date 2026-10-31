@@ -132,7 +132,7 @@ const DOCUMENTS: string[] = [
   "infra/digichat-release/config/digichat.yaml.example",
 ].map((path) => (path.startsWith("/") ? path : join(repoRoot, path)));
 
-const OVERLAYS: string[] = ["DIG-3556-staged-prod-tenant-config.json", "DIG-4488-occ-tenant-overlay.json"].map(
+const OVERLAYS: string[] = ["DIG-3556-staged-prod-tenant-config.json", "DIG-4488-tenant-overlay.json"].map(
   (name) => join(repoRoot, "infra/digichat-release", name),
 );
 

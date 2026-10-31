@@ -241,7 +241,7 @@ python3 scripts/digichat_tenant_registry.py apply \
   KV key was edited by hand for `occ.digithings.ai` only. `welcome` became
   `Ask about OCC.` and `privateMode` was added as `true`. No other tenant or
   field changed. A backup of the previous value is kept off-repo in the host
-  secret store. `DIG-4488-occ-tenant-overlay.json` records the new state.
+  secret store. `DIG-4488-tenant-overlay.json` records the new state.
 
 The compose refuses, and names the reason: an overlay that drops a tenant, an
 overlay that carries a `token` or `mcp` rows, an overlay that adds a tenant the
@@ -291,7 +291,7 @@ rotation runbook.
 
 ### The OCC-only overlay
 
-`DIG-4488-occ-tenant-overlay.json` carries the OCC tenant alone and only turns
+`DIG-4488-tenant-overlay.json` carries the OCC tenant alone and only turns
 its model picker on (`models.occPicker`). It sets no model policy and no raw
 model id list, so OCC inherits the same product defaults as the house chat.
 The overlay does not touch the `digithings.ai` tenant.
@@ -308,7 +308,7 @@ the short house prompt. Applying it to KV is still a human step.
 
 | Scope | Overlay | Change to the `digithings.ai` tenant |
 |---|---|---|
-| OCC only | `DIG-4488-occ-tenant-overlay.json` | none |
+| OCC only | `DIG-4488-tenant-overlay.json` | none |
 | Full staged | `DIG-3556-staged-prod-tenant-config.json` | corpus routing, web search, and the catalog policy |
 
 Both scopes write the same KV key and the same OCC catalog policy. The
@@ -318,7 +318,7 @@ Both scopes write the same KV key and the same OCC catalog policy. The
 # scope A: the OCC tenant only
 python3 scripts/digichat_tenant_registry.py apply \
   --live-from ~/.config/digithings/secrets/digichat-embed-tenants.deploy.json \
-  --overlay infra/digichat-release/DIG-4488-occ-tenant-overlay.json
+  --overlay infra/digichat-release/DIG-4488-tenant-overlay.json
 
 # scope B: the OCC tenant and the staged digithings.ai corpus switch.
 # Run it only after the DIG-3556 prompt merge and the corpus backfill.
@@ -343,7 +343,7 @@ writes the KV key, the Worker secret, or recycles the container.
 | Local monorepo build | `make up-digichat` |
 | Validate the deployment config | `make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml` |
 | Plan the digichat tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --kv-from <live-kv-file> --overlay infra/digichat-release/DIG-3556-staged-prod-tenant-config.json` |
-| Plan the OCC-only tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --kv-from <live-kv-file> --overlay infra/digichat-release/DIG-4488-occ-tenant-overlay.json` |
+| Plan the OCC-only tenant registry compose | `python3 scripts/digichat_tenant_registry.py compose --live-from <host-store-file> --kv-from <live-kv-file> --overlay infra/digichat-release/DIG-4488-tenant-overlay.json` |
 | Client install guide | [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md) |
 | Populate client docs (offline) | [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../docs/digichat/CLIENT-DOCS-ONBOARD.md) |
 | Post-publish smoke | [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md) |

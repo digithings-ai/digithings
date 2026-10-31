@@ -13,7 +13,7 @@ pytestmark = pytest.mark.unit
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "digichat_tenant_registry.py"
 STAGED = REPO / "infra" / "digichat-release" / "DIG-3556-staged-prod-tenant-config.json"
-OCC_ONLY = REPO / "infra" / "digichat-release" / "DIG-4488-occ-tenant-overlay.json"
+OCC_ONLY = REPO / "infra" / "digichat-release" / "DIG-4488-tenant-overlay.json"
 
 
 def _load_module():
