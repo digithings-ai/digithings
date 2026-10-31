@@ -156,17 +156,18 @@ weekly Monday morning only (`house-run-09` at `17 9 * * MON`); daily
 GHA `schedule:` stays off — this Worker is the SSOT. Leftover sweep after
 #4970: develop YAML has zero `on.schedule` keys; `digisearch_parity` is
 not a workflow in this repo. Path A traps
-(`agent-pr-finalizer`, `agent-backlog-snapshot`, `refresh-repo-activity`,
+(`agent-backlog-snapshot`, `refresh-repo-activity`,
 `project-enforce-assignment`) are `workflow_dispatch` jobs with dispatch-only
-YAML; `agent-pr-finalizer` is held off the clock by the 2026-10-14 GitHub cost
-lock (see below). twelve-x-new-york is weekday-only
+YAML. The fourth trap, `agent-pr-finalizer`, was deleted with its workflow
+(GHA exit ledger; the merge queue does its job). twelve-x-new-york is weekday-only
 on `17 12 * * MON-FRI`. `twelve-x-digisearch-parity` is weekly Monday
 09:08 UTC (`8 9 * * MON`; GHA was `0 9 * * 1`, offset avoids house-run-09).
 
 ## GitHub cost-lock holds (DIG-4364)
 
 The 2026-10-14 GitHub cost lock set 57 workflows to `disabled_manually`,
-including four this Worker used to dispatch on a clock. GitHub refuses
+including four this Worker used to dispatch on a clock (`agent-pr-finalizer`,
+since deleted with its workflow, was the fourth). GitHub refuses
 `workflow_dispatch` on a disabled workflow with
 `422 {"message":"Cannot trigger a 'workflow_dispatch' on a disabled workflow"}`,
 a body `isBenign422` (in `src/dispatch.ts`) deliberately does not match, so each
@@ -174,7 +175,6 @@ tick surfaced as a `scheduled` exception:
 
 | Job row | Cron | Workflow |
 | --- | --- | --- |
-| `agent-pr-finalizer` | `11 7 * * *` | `agent-pr-finalizer.yml` |
 | `ci-pr-hygiene` | `21 6 * * *` | `ci-pr-hygiene.yml` |
 | `security-pip-audit` | `33 6 * * MON` | `security-pip-audit.yml` |
 | `security-npm-audit` | `37 6 * * MON` | `security-npm-audit.yml` |
@@ -464,8 +464,7 @@ digithings-cron.
 ## Jobs
 
 See src/jobs.ts for the full enabled map. market_context uses bucket inputs
-intraday / daily / weekly. agent-pr-finalizer dispatches with `dry_run=false`
-(held off the clock by DIG-4364 until its workflow is re-enabled on GitHub).
+intraday / daily / weekly.
 twelve-x-archive-maintenance dispatches with `dry_run=false` and
 `dump_before_prune=true`. `twelve-x-digisearch-parity` dispatches
 `digisearch_parity_check.yml` with no inputs (workflow default days=14).

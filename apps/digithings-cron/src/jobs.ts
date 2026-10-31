@@ -368,24 +368,13 @@ export const JOBS: readonly Job[] = [
 
   // --- digithings: ops / agent / smoke (off-grid minutes) ---
   // Path A traps restored after #4967 (Approve-full). YAML is workflow_dispatch
-  // only; clocks live here. dry_run must be false: workflow defaults dispatch
-  // to dry_run=true and only forced live on the old GHA schedule event.
-  //
-  // DIG-4364 (2026-10-19): the 2026-10-14 GitHub-exit cost lock set this workflow
-  // to `disabled_manually` on GitHub. A dispatch to a disabled workflow is a 422
-  // ("Cannot trigger a 'workflow_dispatch' on a disabled workflow") that
-  // `isBenign422` deliberately does not match, so every 07:11 tick surfaced as a
-  // `scheduled` exception. The row keeps its cron and inputs so lifting the lock is
-  // one flag, not a re-registration; the trigger line is gone from wrangler.toml,
-  // so the tick no longer fires at all. Restoring the lane is a GitHub settings
-  // decision, not this seat's.
-  wd("agent-pr-finalizer", "11 7 * * *", MONOREPO, "agent-pr-finalizer.yml", {
-    inputs: { dry_run: "false" },
-    enabled: false,
-  }),
+  // only; clocks live here. agent-pr-finalizer.yml was deleted with the GHA exit
+  // ledger (the merge queue, scripts/merge_queue.py, does its job), and its
+  // disabled row went with it.
   wd("agent-backlog-snapshot", "13 6 * * MON", MONOREPO, "agent-backlog-snapshot.yml"),
   // DIG-4364: disabled_manually on GitHub since the 2026-10-14 cost lock; the
-  // daily 06:21 tick answered 422 every day. See agent-pr-finalizer above.
+  // daily 06:21 tick answered 422 every day (a disabled workflow's 422 is not one
+  // `isBenign422` matches).
   wd("ci-pr-hygiene", "21 6 * * *", MONOREPO, "ci-pr-hygiene.yml", { enabled: false }),
   // DIG-1578: daily census of remote branches carrying no open PR whose head is
   // over 10 days old (docs/ops/branch-hygiene-policy.md §6.2 item 2). Report only —
@@ -402,8 +391,8 @@ export const JOBS: readonly Job[] = [
   ),
   pj("smoke-stack", "27 7 * * *", "smoke-stack.yml", "stack"),
   // DIG-4364: both audits are `disabled_manually` on GitHub since the 2026-10-14
-  // cost lock; the Monday 06:33 / 06:37 ticks answered 422. See agent-pr-finalizer
-  // above. The audits still run on PR and `workflow_call` from ci.yml.
+  // cost lock; the Monday 06:33 / 06:37 ticks answered 422 (a disabled workflow's
+  // 422 is not one `isBenign422` matches). The audits still run on PR and `workflow_call` from ci.yml.
   wd("security-pip-audit", "33 6 * * MON", MONOREPO, "security-pip-audit.yml", {
     enabled: false,
   }),

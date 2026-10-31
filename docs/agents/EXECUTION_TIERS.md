@@ -62,7 +62,7 @@ issue, `agent-pr-autolabel.yml` adds `automerge-agent`.
 live-trading, workflows, scoring rubrics) and enables squash auto-merge.
 Minimal-gate paths never auto-merge — that is path-based now, not label-based.
 
-**Daily PR finalizer:** `agent-pr-finalizer.yml` runs at 07:11 UTC via digithings-cron as backstop for agent PRs. (The workflow was set `disabled_manually` by the 2026-10-14 GitHub cost lock, so its clock is held off — `enabled: false` in `jobs.ts`, DIG-4364 — until it is re-enabled on GitHub.)
+**Daily PR finalizer:** retired. `agent-pr-finalizer.yml` (disabled since the 2026-10-14 GitHub cost lock, DIG-4364) was deleted with its digithings-cron row; the merge queue (`scripts/merge_queue.py`) does its job.
 
 ### cursor tier — Cursor Cloud Agent (@cursor dispatch)
 
