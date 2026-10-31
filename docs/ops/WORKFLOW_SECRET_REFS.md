@@ -38,18 +38,12 @@ that can define it:
 
 `GITHUB_TOKEN` is provided by Actions itself and is never reported.
 
-The check runs in two places, on the same one-line command against the same manifest:
-
-| Where | What it is |
-| --- | --- |
-| `ci.yml`, job `workflow-secret-refs` | folded into the `Required checks passed` aggregator, so a failure **blocks a merge to `develop`** |
-| `.github/workflows/security-workflow-secret-refs.yml` | the **live reporter**: it runs on any change to a workflow, to the manifest or to the script, and reports on the PR |
-
-Both exist because `ci.yml` is **disabled on GitHub** — the cost lock of 2026-10-14
-(DIG-4364) turned the whole CI suite off, and it has not been turned back on. A lane
-inside a disabled workflow reports nothing at all, so the standalone workflow is what
-makes the check run today. When CI comes back, the ci.yml copy is the one that gates,
-and the standalone copy is the reporter.
+The check runs in `.github/workflows/security-workflow-secret-refs.yml`, the **live
+reporter**: it runs on any change to a workflow, to the manifest or to the script, and
+reports on the PR. `ci.yml` used to carry a duplicate `workflow-secret-refs` lane folded
+into `Required checks passed`; it was removed with the GHA exit ledger, since `ci.yml` is
+**disabled on GitHub** (the cost lock of 2026-10-14, DIG-4364) and that lane reported
+nothing.
 
 The standalone workflow is deliberately **not** a required status-check context: it is
 path-filtered, and a path-filtered check can never be required — GitHub blocks a merge
@@ -59,8 +53,7 @@ human-only repo-settings write (DIG-1952 child B). It is declared `advisory` in
 
 ## How it runs in CI, and why the manifest exists
 
-The check runs in `ci.yml` as the `workflow-secret-refs` lane, folded into the
-`Required checks passed` aggregator, so a failure blocks a merge to `develop`.
+The check runs in `security-workflow-secret-refs.yml` (see above).
 
 It runs against **`.github/secret-names.json`**, a committed manifest of secret and
 variable **names** per level (no values, ever). The manifest exists because CI cannot do

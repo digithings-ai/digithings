@@ -844,7 +844,6 @@ def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() ->
             "supabase-freeze",
             "advisory",
         ),
-        ("Workflow secret references", "ci.yml", "workflow-secret-refs", "advisory"),
         (
             "Workflow secret references (PR reporter)",
             "security-workflow-secret-refs.yml",

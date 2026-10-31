@@ -279,22 +279,6 @@ checks:
       baseline growth guard above. Retired with the Supabase exit, when the
       baseline is empty.
 
-  - context: Workflow secret references
-    workflow: ci.yml
-    job: workflow-secret-refs
-    enforcement: advisory
-    owner: DevOps
-    gated_by: Required checks passed
-    reason: >-
-      Unconditional lane, folded into `Required checks passed` (in its
-      `needs:`), where a failure blocks the merge — the aggregator is the gate.
-      Not a required context in its own right: develop requires the stable
-      `Required checks passed` name, because a job that does not report on
-      every PR can never be required (GitHub blocks forever on a status that
-      never arrives). The check itself cannot read the live secret listings
-      from a workflow, so it compares the workflow reads against the committed
-      names-only manifest `.github/secret-names.json`; see DIG-4717.
-
   - context: Workflow secret references (PR reporter)
     workflow: security-workflow-secret-refs.yml
     job: check
@@ -319,9 +303,8 @@ checks:
       `.github/required-contexts.txt` is a human-only repo-settings write
       (DIG-1952 child B), so it stays advisory. It exists as its own workflow
       because ci.yml is disabled on GitHub by the cost lock of 2026-10-14
-      (DIG-4364): a lane inside ci.yml reports nothing today. The same
-      command runs as the `workflow-secret-refs` lane in ci.yml, and that copy
-      is the one that gates a merge once CI is re-enabled.
+      (DIG-4364). The duplicate `workflow-secret-refs` lane in ci.yml was
+      removed with the GHA exit ledger, so this workflow is the only copy.
 
   - context: wrangler deploy --dry-run
     workflow: ci.yml
