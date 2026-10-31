@@ -30,10 +30,27 @@ function logLine(fields: Record<string, unknown>): void {
  * secret. A blank reason is no reason.
  */
 export function reasonFrom(parsed: TwelveXAccept): string | null {
-  if (typeof parsed.reason !== "string") return null;
-  const one = parsed.reason.replace(/\s+/g, " ").trim();
-  if (!one) return null;
-  return one.slice(0, REASON_LIMIT);
+  if (typeof parsed.reason === "string") {
+    const one = parsed.reason.replace(/\s+/g, " ").trim();
+    if (one) return one.slice(0, REASON_LIMIT);
+  }
+  if (typeof parsed.log_tail !== "string") return null;
+  const tail = parsed.log_tail;
+  const token = "MARKET_CONTEXT_VERDICT=";
+  const at = tail.lastIndexOf(token);
+  if (at !== -1) {
+    const line = tail.slice(at + token.length).split("\n")[0].replace(/\s+/g, " ").trim();
+    if (line) return line.slice(0, REASON_LIMIT);
+  }
+  const rows = tail.split("\n");
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const marker = "market_context:";
+    const pos = rows[index].lastIndexOf(marker);
+    if (pos === -1) continue;
+    const rest = rows[index].slice(pos + marker.length).replace(/\s+/g, " ").trim();
+    if (rest) return rest.slice(0, REASON_LIMIT);
+  }
+  return null;
 }
 
 export async function dispatchTwelvex(
