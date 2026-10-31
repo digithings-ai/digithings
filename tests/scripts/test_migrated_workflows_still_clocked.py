@@ -50,7 +50,7 @@ JOBS_SOURCE = REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts"
 BUILDERS = ("wd", "rd", "cj", "pj", "wj", "tw", "tx")
 
 # tx(id, cron, route, workflow, ...) names its workflow fourth, after the
-# twelve-x runner route. Every other builder names it third.
+# external runner route. Every other builder names it third.
 WORKFLOW_ARG_INDEX = {"tx": 3}
 
 # workflow file -> job id(s) in jobs.ts that must carry its clock, enabled.

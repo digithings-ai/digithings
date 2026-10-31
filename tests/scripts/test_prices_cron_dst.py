@@ -64,7 +64,7 @@ def worker_jobs() -> dict[str, str]:
     # this regex cannot name is a cron wrangler.toml declares and JOBS does not,
     # which is exactly what the parity assertion below is there to catch.
     # ow = worker-native rows for the weekly help-docs recrawl (DIG-3576).
-    # tx = twelve-x runner rows (POST /run/{route}); their crons are in wrangler.toml.
+    # tx = external runner rows (POST /run/{route}); their crons are in wrangler.toml.
     pairs = re.findall(
         r'(?:wd|rd|cj|pj|wj|tw|ow|tx)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
         JOBS_SOURCE.read_text(encoding="utf-8"),

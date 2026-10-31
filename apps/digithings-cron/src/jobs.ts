@@ -271,8 +271,8 @@ export const JOBS: readonly Job[] = [
   // out: the deployed Worker still carries these three triggers until the next
   // digithings-cron deploy, and the deployed-trigger contract
   // (src/trigger-contract.ts) fails a deployed cron that no job row claims (see
-  // datatap-answer-check below). Their wrangler.toml cron lines are commented
-  // out, so the next deploy drops the triggers.
+  // the retired answer-check row below). Their wrangler.toml cron lines are
+  // commented out, so the next deploy drops the triggers.
   // Disabled: stale CORE_POSTGRES_URI on the runner; re-enable after S7.
   cj(
     "market-data-refresh-morning",
