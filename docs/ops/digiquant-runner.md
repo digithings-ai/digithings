@@ -200,23 +200,16 @@ printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
 
 ## Phase 3 Task 7 — house secret sync
 
-Put the house `DIGIQUANT_DIGIKEY_API_KEY` on Worker
-`digiquant-runner` from an existing GitHub Actions secret without printing
-values. Prefer `.github/workflows/sync-digiquant-runner-digikey-secret.yml`
-(`workflow_dispatch`) over a workstation `wrangler secret put`.
-
-This workflow lives on `develop` (the default branch). After it merges:
+The house `DIGIQUANT_DIGIKEY_API_KEY` already lives on Worker
+`digiquant-runner`. The two GitHub Actions copy workflows (house and mail
+secrets) were deleted with the GHA exit ledger: they only copied a GitHub
+secret onto the Worker. A future write is a workstation
+`wrangler secret put`, with Chris's go, using the no-print pattern above:
 
 ```bash
-gh workflow run "Ops: sync digiquant-runner house secrets"
+printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put DIGIQUANT_DIGIKEY_API_KEY
 ```
 
-The job PUTs `secret_text` at `workers/scripts/digiquant-runner/secrets`:
-
-- `DIGIQUANT_DIGIKEY_API_KEY`
-
-It logs the name and length only (`putting NAME on digiquant-runner (len=N)`).
-An empty Actions secret fails closed (`FAIL empty NAME`).
 `apps/digiquant-runner/wrangler.toml` has no env blocks, so each put is once
 on script `digiquant-runner` (develop/prod are not split). `env.ts`
 `dataPlaneEnv` forwards those names into the container; house-run's command

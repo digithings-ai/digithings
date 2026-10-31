@@ -37,8 +37,6 @@ APPROVED: tuple[tuple[str, str], ...] = (
     ("R2", ".github/workflows/pipeline-digiquant-onchain.yml"),
     ("R2", ".github/workflows/pipeline-digiquant-tearsheets.yml"),
     ("R2", ".github/workflows/pipeline-digiquant-allocation-shadow.yml"),
-    ("R2", ".github/workflows/sync-digiquant-runner-digikey-secret.yml"),
-    ("R2", ".github/workflows/sync-digiquant-runner-mail-secrets.yml"),
     ("R2", ".github/workflows/test-digiquant.yml"),
     ("R3", ".github/workflows/deploy-digiquant-cloudflare.yml"),
     ("R3", ".github/workflows/test-dashboard.yml"),
