@@ -208,8 +208,8 @@ export function catalogSlashId(id: string): string {
 
 /**
  * The house services whose backend id is also their only public name. A
- * deployment used to label them "Search"/"Vault"; a tenant document (or an
- * OCC row) that still does must not leak that vocabulary into `/tools`, `/mcp`
+ * deployment used to label them "Search"/"Vault"; a tenant document (or a
+ * legacy registry row) that still does must not leak that vocabulary into `/tools`, `/mcp`
  * or the menu summaries. Individual tools already render raw backend ids
  * (digivault_get_note), so the group cannot use a different vocabulary.
  */

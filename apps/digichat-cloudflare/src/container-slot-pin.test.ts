@@ -20,22 +20,23 @@ const CONTRACT = join(repoRoot, "config/contract/contract.yaml");
  * "Maximum number of running container instances exceeded" (27 error rows and
  * 34 failed client requests on 2026-10-19).
  *
- * Two slots give the rollout a free slot. The second one is only used while a
- * previous id's instance drains: in steady state the Worker addresses one id
- * and runs one instance.
+ * Ten slots (owner call, t1702u; was two) give the rollout free slots. The extra
+ * ones are only used while previous ids' instances drain: in steady state the
+ * Worker addresses one id and runs one instance, so this is rollover headroom,
+ * not per-user capacity.
  */
 describe("the digichat container slot", () => {
-  it("wrangler.toml allows two instances, so a rollout cannot starve a cold start", () => {
-    expect(readFileSync(WRANGLER, "utf8")).toMatch(/^max_instances = 2$/m);
+  it("wrangler.toml allows ten instances, so a rollout cannot starve a cold start", () => {
+    expect(readFileSync(WRANGLER, "utf8")).toMatch(/^max_instances = 10$/m);
   });
 
   it("keeps the reason next to the number", () => {
     const lines = readFileSync(WRANGLER, "utf8").split("\n");
-    const at = lines.findIndex((line) => line === "max_instances = 2");
+    const at = lines.findIndex((line) => line === "max_instances = 10");
     expect(at).toBeGreaterThan(-1);
     const why = lines.slice(Math.max(0, at - 12), at).join("\n");
     // The why travels with the number: a future edit that drops the comment
-    // loses the reason the slot is two.
+    // loses the reason for the slot count.
     expect(why).toContain("DIG-4487");
     expect(why).toContain("drain");
     expect(why).toContain("deploy");
@@ -52,7 +53,7 @@ describe("the digichat container slot", () => {
           chunk.includes("DigiChatContainer"),
       );
     expect(block, "the digichat container binding row in contract.yaml").toBeTruthy();
-    expect(block).toMatch(/max_instances: 2/);
+    expect(block).toMatch(/max_instances: 10/);
   });
 });
 

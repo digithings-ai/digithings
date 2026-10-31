@@ -67,8 +67,11 @@ export {
   disabledCatalogIds,
   catalogToolsFromClient,
   extraOffFromCatalog,
+  committedChatPrefs,
+  slashRowPreview,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
+  type EmbedChatPrefsPreview,
   type CatalogToolRow,
 } from "./embed-chat-prefs";
 export {

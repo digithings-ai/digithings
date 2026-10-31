@@ -340,3 +340,280 @@ describe("chat palette parity with digithings.ai", () => {
     expect((occThread["--bg"] ?? "").toLowerCase()).toBe(declared!.toLowerCase());
   });
 });
+
+/**
+ * The thread column has no canvas of its own on a site chat. The footer that
+ * holds the welcome, the examples and the composer used to paint
+ * `bg-surface` in every named palette (and on the top-level OCC page in every
+ * palette), which drew a tinted box around the welcome block that the rest of
+ * the page did not share. It must resolve to the page canvas for every
+ * palette, on /chat and on the top-level embed.
+ */
+function footerTokens(theme: string, id: string | null, surface: "app" | "occ"): Record<string, string> {
+  document.documentElement.setAttribute("data-theme", theme);
+  if (id) document.documentElement.setAttribute("data-palette", id);
+  else document.documentElement.removeAttribute("data-palette");
+  if (surface === "occ") document.documentElement.setAttribute("data-site-theme", "1");
+  else document.documentElement.removeAttribute("data-site-theme");
+  const mode = surface === "app" ? "app" : "embed";
+  document.body.innerHTML = `<div data-stock-product data-thread-skin="digichat" data-chrome-mode="${mode}"><div class="digichat-thread"><div class="digichat-thread__footer bg-surface"></div></div></div>`;
+  const host = document.querySelector("[data-stock-product]")!;
+  const thread = document.querySelector(".digichat-thread")!;
+  const footer = document.querySelector(".digichat-thread__footer")!;
+  const maps = cascade(chatRules, [document.documentElement, document.body, host, thread, footer]);
+  return maps[maps.length - 1];
+}
+
+describe("chat thread column sits on the page canvas", () => {
+  const all = [null, ...PALETTE_IDS].flatMap((id) =>
+    (["light", "dark"] as const).flatMap((theme) =>
+      (["app", "occ"] as const).map((surface) => [id ?? "default", theme, surface] as const),
+    ),
+  );
+
+  it.each(all)("%s %s %s: the footer paints no surface", (id, theme, surface) => {
+    const footer = footerTokens(theme, id === "default" ? null : id, surface);
+    expect(footer["--bg"]).toBe("transparent");
+    expect(footer["--surface"]).toBe("transparent");
+  });
+
+  it("the site-chat rule clears the footer background with no palette gate", () => {
+    const css = stripComments(
+      readFileSync(path.join(ROOT, "apps/digichat/src/styles/site-chat.css"), "utf8"),
+    );
+    const rule = css.match(/[^{}]*\.digichat-thread__footer[^{}]*\{[^}]*\}/g) ?? [];
+    const canvas = rule.find((r) => /background:\s*transparent/.test(r));
+    expect(canvas, "site-chat.css footer canvas rule").toBeTruthy();
+    expect(canvas).not.toMatch(/data-palette/);
+    expect(canvas).toMatch(/data-site-theme="1"/);
+  });
+});
+
+/**
+ * The command palette and the composer (settings) menu sit inside that
+ * footer, so they inherit its cleared tokens. Their background is var(--bg),
+ * which made both menus see-through on the top-level OCC page in every
+ * palette. They must get the palette's canvas and surface back.
+ */
+function menuTokens(
+  theme: string,
+  id: string | null,
+  surface: "app" | "occ",
+  menuClass: string,
+): { thread: Record<string, string>; menu: Record<string, string> } {
+  document.documentElement.setAttribute("data-theme", theme);
+  if (id) document.documentElement.setAttribute("data-palette", id);
+  else document.documentElement.removeAttribute("data-palette");
+  if (surface === "occ") document.documentElement.setAttribute("data-site-theme", "1");
+  else document.documentElement.removeAttribute("data-site-theme");
+  const mode = surface === "app" ? "app" : "embed";
+  // OCC mounts inside .dc-embed-shell, and the composer menu carries its own
+  // data-thread-skin (embed-composer-menu.tsx), so product-chrome.css re-points
+  // --term-bg on the menu element itself (#08090b in dark).
+  const skin = menuClass.includes("dc-composer-menu") ? ' data-thread-skin="digichat"' : "";
+  const product = `<div data-stock-product data-thread-skin="digichat" data-chrome-mode="${mode}"><div class="digichat-thread"><div class="digichat-thread__footer"><div class="aui-composer-root"><div class="${menuClass}"${skin}></div></div></div></div></div>`;
+  document.body.innerHTML = surface === "occ" ? `<div class="dc-embed-shell">${product}</div>` : product;
+  const host = document.querySelector("[data-stock-product]")!;
+  const thread = document.querySelector(".digichat-thread")!;
+  const footer = document.querySelector(".digichat-thread__footer")!;
+  const root = document.querySelector(".aui-composer-root")!;
+  const menu = root.firstElementChild!;
+  const shell = document.querySelector(".dc-embed-shell");
+  const chain = [document.documentElement, document.body, ...(shell ? [shell] : []), host, thread, footer, root, menu];
+  const maps = cascade(chatRules, chain);
+  return { thread: maps[chain.indexOf(thread)], menu: maps[maps.length - 1] };
+}
+
+describe("chat menus keep the palette canvas inside the clear footer", () => {
+  const menus = ["aui-composer-trigger-popover", "dc-composer-menu aui-composer-trigger-popover"];
+  const all = [null, ...PALETTE_IDS].flatMap((id) =>
+    (["light", "dark"] as const).flatMap((theme) =>
+      (["app", "occ"] as const).flatMap((surface) =>
+        menus.map((menu) => [id ?? "default", theme, surface, menu] as const),
+      ),
+    ),
+  );
+
+  it.each(all)("%s %s %s: .%s paints the page canvas", (id, theme, surface, menuClass) => {
+    const { thread, menu } = menuTokens(theme, id === "default" ? null : id, surface, menuClass);
+    expect(thread["--bg"]).toMatch(/^#[0-9a-fA-F]{3,8}$/);
+    expect(menu["--bg"]).not.toBe("transparent");
+    expect(menu["--bg"]?.toLowerCase()).toBe(thread["--bg"].toLowerCase());
+    expect(menu["--surface"]?.toLowerCase()).toBe(thread["--surface"].toLowerCase());
+    // The background itself is painted from --term-bg / --site-menu-canvas;
+    // both must resolve to the thread canvas on the menu element.
+    expect(menu["--term-bg"]?.toLowerCase()).toBe(thread["--bg"].toLowerCase());
+  });
+
+  it("site-chat.css paints the menus with the thread's canvas on every site chat", () => {
+    const css = stripComments(
+      readFileSync(path.join(ROOT, "apps/digichat/src/styles/site-chat.css"), "utf8"),
+    );
+    const rule = (css.match(/[^{}]*\.dc-composer-menu[^{}]*\{[^}]*\}/g) ?? []).find((r) =>
+      /background:\s*var\(--site-menu-canvas\)/.test(r),
+    );
+    expect(rule, "site-chat.css menu canvas rule").toBeTruthy();
+    expect(rule).toMatch(/\.aui-composer-trigger-popover/);
+    expect(rule).toMatch(/data-site-theme="1"/);
+    expect(rule).not.toMatch(/data-palette/);
+  });
+});
+
+/**
+ * The boot loader covers the chat with `.dboot-overlay bg-surface`. On a
+ * site chat the chat sits on --bg, so the loader painted a lighter frame and
+ * then jumped to a different grey when the chat appeared. It must paint the
+ * same canvas as the chat it hands off to.
+ */
+describe("boot loader paints the chat canvas on a site chat", () => {
+  it("site-chat.css gives the overlay var(--bg), keeping wide embeds transparent", () => {
+    const css = stripComments(
+      readFileSync(path.join(ROOT, "apps/digichat/src/styles/site-chat.css"), "utf8"),
+    );
+    const rule = (css.match(/[^{}]*\.dboot-overlay[^{}]*\{[^}]*\}/g) ?? []).find((r) =>
+      /background:\s*var\(--bg\)/.test(r),
+    );
+    expect(rule, "site-chat.css boot overlay canvas rule").toBeTruthy();
+    expect(rule).toMatch(/data-site-theme="1"/);
+    expect(rule).toMatch(/data-chrome-mode="app"/);
+    expect(rule).toMatch(/:not\(\[data-embed-wide="1"\]\)/);
+    expect(rule).not.toMatch(/data-palette/);
+  });
+
+  it.each([null, ...PALETTE_IDS].flatMap((id) => (["light", "dark"] as const).map((t) => [id ?? "default", t] as const)))(
+    "%s %s: the overlay's --bg is the thread's canvas on /chat and OCC",
+    (id, theme) => {
+      for (const surface of ["app", "occ"] as const) {
+        const { thread } = menuTokens(theme, id === "default" ? null : id, surface, "x");
+        document.querySelector("[data-stock-product]")!.insertAdjacentHTML("afterbegin", '<div class="dboot-overlay bg-surface"></div>');
+        const host = document.querySelector("[data-stock-product]")!;
+        const overlay = document.querySelector(".dboot-overlay")!;
+        const shell = document.querySelector(".dc-embed-shell");
+        const maps = cascade(chatRules, [document.documentElement, document.body, ...(shell ? [shell] : []), host, overlay]);
+        expect(maps[maps.length - 1]["--bg"]?.toLowerCase(), `${surface} overlay --bg`).toBe(thread["--bg"].toLowerCase());
+      }
+    },
+  );
+});
+
+/**
+ * Stock skins on the embed route sit in a wrapper that carries shadcn's
+ * `.dark` class and paints bg-background. `.dark` redeclares --background as
+ * zinc, so with a named palette the base skin's chat area showed near-black
+ * instead of the palette canvas (lucent-orng dark: #2a1a15). The wrapper's
+ * --background must resolve to the palette's dark --bg for every palette, and
+ * stay on the shadcn zinc when no palette is set.
+ */
+function embedWrapperBackground(id: string | null, skin = "base"): string {
+  document.documentElement.setAttribute("data-theme", "dark");
+  document.documentElement.setAttribute("data-site-theme", "1");
+  if (id) document.documentElement.setAttribute("data-palette", id);
+  else document.documentElement.removeAttribute("data-palette");
+  document.body.className = "accent-digichat bg-background";
+  document.body.innerHTML = `<div class="dc-embed-shell bg-background"><div class="dark accent-digichat bg-background"><div data-stock-product data-thread-skin="${skin}" data-chrome-mode="embed"></div></div></div>`;
+  const shell = document.querySelector(".dc-embed-shell")!;
+  const wrapper = shell.firstElementChild!;
+  const maps = cascade(chatRules, [document.documentElement, document.body, shell, wrapper]);
+  document.body.className = "";
+  return (maps[maps.length - 1]["--background"] ?? "").toLowerCase();
+}
+
+describe("base skin embed wrapper paints the palette canvas in dark", () => {
+  it.each(PALETTE_IDS.map((id) => [id] as const))("%s dark: wrapper --background is the palette --bg", (id) => {
+    const declared = declaredBg(id, "dark");
+    expect(declared, `${id} dark is missing from palettes.css`).toMatch(/^#[0-9a-fA-F]{3,8}$/);
+    expect(embedWrapperBackground(id)).toBe(declared!.toLowerCase());
+  });
+
+  it("lucent-orng dark resolves to its brown canvas, not the zinc", () => {
+    expect(embedWrapperBackground("lucent-orng")).toBe("#2a1a15");
+  });
+
+  it("no palette: the wrapper keeps the shadcn dark background", () => {
+    expect(embedWrapperBackground(null)).toBe("oklch(0.141 0.005 285.823)");
+  });
+});
+
+/**
+ * The chatgpt skin paints its own dark canvas (thread root and composer
+ * footer) through --chat-skin-canvas, #000 when unset. With a named palette in
+ * dark, the embed sets that token (and the wrapper --background) to the
+ * palette --bg, as for the base skin. No palette, light, or another skin
+ * leaves the token unset, so the skin keeps its #000.
+ */
+function chatgptCanvas(id: string | null, theme: "dark" | "light" = "dark", skin = "chatgpt"): string | undefined {
+  document.documentElement.setAttribute("data-theme", theme);
+  document.documentElement.setAttribute("data-site-theme", "1");
+  if (id) document.documentElement.setAttribute("data-palette", id);
+  else document.documentElement.removeAttribute("data-palette");
+  document.body.className = "accent-digichat bg-background";
+  document.body.innerHTML = `<div class="dc-embed-shell bg-background"><div class="${theme === "dark" ? "dark " : ""}accent-digichat bg-background"><div data-stock-product data-thread-skin="${skin}" data-chrome-mode="embed"></div></div></div>`;
+  const shell = document.querySelector(".dc-embed-shell")!;
+  const wrapper = shell.firstElementChild!;
+  const stock = wrapper.firstElementChild!;
+  const maps = cascade(chatRules, [document.documentElement, document.body, shell, wrapper, stock]);
+  document.body.className = "";
+  return maps[maps.length - 1]["--chat-skin-canvas"]?.toLowerCase();
+}
+
+describe("chatgpt skin paints the palette canvas in dark", () => {
+  it("the skin reads its dark canvas from --chat-skin-canvas with a #000 fallback", () => {
+    const tsx = readFileSync(path.join(ROOT, "packages/ui/src/components/chat/skins/chatgpt.tsx"), "utf8");
+    expect(tsx).not.toMatch(/dark:bg-black\b/);
+    expect(tsx.match(/dark:bg-\[color:var\(--chat-skin-canvas,#000\)\]/g)).toHaveLength(2);
+  });
+
+  it.each(PALETTE_IDS.map((id) => [id] as const))("%s dark: chatgpt canvas and wrapper are the palette --bg", (id) => {
+    const declared = declaredBg(id, "dark");
+    expect(declared, `${id} dark is missing from palettes.css`).toMatch(/^#[0-9a-fA-F]{3,8}$/);
+    expect(chatgptCanvas(id)).toBe(declared!.toLowerCase());
+    expect(embedWrapperBackground(id, "chatgpt")).toBe(declared!.toLowerCase());
+  });
+
+  it("lucent-orng dark resolves to its brown canvas, not black", () => {
+    expect(chatgptCanvas("lucent-orng")).toBe("#2a1a15");
+  });
+
+  it("no palette, light, or another skin: the token stays unset (skin keeps #000)", () => {
+    expect(chatgptCanvas(null)).toBeUndefined();
+    expect(chatgptCanvas("lucent-orng", "light")).toBeUndefined();
+    expect(chatgptCanvas("lucent-orng", "dark", "claude")).toBeUndefined();
+    expect(embedWrapperBackground(null, "chatgpt")).toBe("oklch(0.141 0.005 285.823)");
+    expect(embedWrapperBackground("lucent-orng", "claude")).toBe("oklch(0.141 0.005 285.823)");
+  });
+});
+
+/**
+ * The embed wrapper carries `.dark`, whose shadcn --accent is a grey hover
+ * tint. With a named palette painted, the wrapper keeps the palette accent so
+ * the send button and links take the theme colour in every dark palette.
+ */
+function embedWrapperAccent(id: string | null, skin = "base"): string {
+  document.documentElement.setAttribute("data-theme", "dark");
+  document.documentElement.setAttribute("data-site-theme", "1");
+  if (id) document.documentElement.setAttribute("data-palette", id);
+  else document.documentElement.removeAttribute("data-palette");
+  document.body.innerHTML = `<div class="dc-embed-shell bg-background"><div class="dark bg-background"><div data-stock-product data-thread-skin="${skin}" data-chrome-mode="embed"></div></div></div>`;
+  const shell = document.querySelector(".dc-embed-shell")!;
+  const wrapper = shell.firstElementChild!;
+  const maps = cascade(chatRules, [document.documentElement, document.body, shell, wrapper]);
+  return (maps[maps.length - 1]["--accent"] ?? "").toLowerCase();
+}
+
+function declaredAccent(id: string): string | null {
+  const palettes = readFileSync(path.join(ROOT, "packages/design/palettes.css"), "utf8");
+  const block = palettes.match(new RegExp(`:root\\[data-palette="${id}"\\]\\[data-theme="dark"\\][^{]*\\{([^}]*)\\}`));
+  return block?.[1].match(/--accent:\s*([^;]+)/)?.[1].trim().toLowerCase() ?? null;
+}
+
+describe("dark embed wrapper keeps the palette accent", () => {
+  it.each(PALETTE_IDS.map((id) => [id] as const))("%s dark: wrapper --accent is the palette accent", (id) => {
+    const declared = declaredAccent(id);
+    expect(declared, `${id} dark has no --accent`).toBeTruthy();
+    expect(embedWrapperAccent(id)).toBe(declared);
+  });
+
+  it("no palette: the wrapper keeps the shadcn dark accent", () => {
+    expect(embedWrapperAccent(null)).toBe("oklch(0.274 0.006 286.033)");
+  });
+});

@@ -430,6 +430,19 @@ thead th { border-bottom-color: var(--accent) !important; }
    and the blocks at the page edges. Only the page background should paint. */
 .pagedjs_page, .pagedjs_page * { background-color: transparent !important; }
 
+/* The same clones are also empty, and here they cost more than paint: the site
+   gives body a height of 100%, so on paper an empty clone resolves against the
+   page's content box and measures a whole page tall. In the page's multi-column
+   flow that claims an entire column, which pushed the first page's cover into a
+   column parked beyond the sheet — a first sheet holding nothing but the field.
+   The pagination step removes the clones; this keeps a stray one from taking a
+   column if the cleanup ever runs late. */
+.pagedjs_page html, .pagedjs_page body {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
 /* ── Print-edition typography ─────────────────────────────────────────────
    The MDX components carry the web's utility classes, and those classes still
    exist in the paginated document. Element-level print rules are not enough:
@@ -541,6 +554,16 @@ thead th { border-bottom-color: var(--accent) !important; }
   border: 0 !important;
 }
 .pagedjs_page .book-figure__viewport > div { width: 100% !important; transform: none !important; }
+
+/* The 549px pin above is the READER's column, and on paper it made every figure
+   a narrower box than the text: a drawing wide enough to fill that box (chapter
+   15's credential chain) ended about 27mm short of the text's right edge and
+   read as jammed left, while a short one (chapter 02's three homes) centred
+   inside the narrow box and hid it. The A4 pixel box is 174mm wide, so on the
+   page the figure takes the full measure: a wide drawing starts and ends with
+   the body text, a narrow one centres on the text's centre, and the caption
+   stays flush with the column's left edge in both cases. */
+.pagedjs_page .book-figure { max-width: none !important; }
 
 
 /* The welcome page's field, behind the cover. It fades out before the

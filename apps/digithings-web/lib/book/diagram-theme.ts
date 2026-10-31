@@ -8,7 +8,14 @@
  *
  * Rather than rendering 32 palettes × 2 themes, the file is fetched once, its
  * baked colours are swapped for the live tokens, and the result is served to the
- * <img> as a blob. It is the same drawing, drawn in whatever the reader chose.
+ * <img> as a `data:` URL. It is the same drawing, drawn in whatever the reader
+ * chose.
+ *
+ * A `data:` URL and not a `blob:` one: the site's CSP allows `img-src 'self'
+ * data: https:` and nothing else, so every recoloured `blob:` drawing was
+ * refused and the book showed an empty frame where each figure should be. A
+ * `data:` URL is also self-contained, so the HTML export can carry it as is
+ * instead of re-fetching an object URL that the CSP blocks too.
  */
 
 /**
@@ -65,7 +72,6 @@ function sourceText(original: string): Promise<string> {
   }
   return pending;
 }
-const objects = new Set<string>();
 
 function tokensFor(mode: Mode): Tokens {
   // A probe carrying the same attributes as <html> resolves the palette's
@@ -88,6 +94,11 @@ function tokensFor(mode: Mode): Tokens {
   };
   probe.remove();
   return tokens;
+}
+
+/** The recoloured drawing as an `<img>`-ready `data:` URL (see the header). */
+export function svgDataUrl(svg: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 /** Mermaid writes most fills as rgb() triples and a few as hex; both appear. */
@@ -116,7 +127,7 @@ function recolour(svg: string, mode: Mode): string {
 }
 
 async function sourceFor(original: string, mode: Mode): Promise<string> {
-  // The palette is part of the key: a cached blob made for monokai is the wrong
+  // The palette is part of the key: a cached drawing made for monokai is the wrong
   // drawing the moment the reader picks matrix, and the page boxes are not
   // re-rendered when that happens.
   const palette = document.documentElement.getAttribute("data-palette") ?? "default";
@@ -125,42 +136,32 @@ async function sourceFor(original: string, mode: Mode): Promise<string> {
   if (cached) return cached;
   const text = await sourceText(original);
   if (!text) return original;
-  const url = URL.createObjectURL(new Blob([recolour(text, mode)], { type: "image/svg+xml" }));
-  objects.add(url);
+  const url = svgDataUrl(recolour(text, mode));
   cache.set(key, url);
   return url;
 }
 
 /**
- * Point every diagram at the current palette's drawing. Returns a cleanup that
- * releases the blob URLs this run created.
+ * Point every diagram at the current palette's drawing. Resolves once every
+ * image has its new source; the returned function is kept for callers that
+ * expect a cleanup, and has nothing to release.
  */
 export async function applyDiagramTheme(root: ParentNode = document): Promise<() => void> {
   const images = Array.from(root.querySelectorAll<HTMLImageElement>("img[data-diagram-src]"));
-  const created: string[] = [];
   await Promise.all(
     images.map(async (image) => {
       const original = image.dataset.diagramSrc;
       if (!original) return;
       const mode: Mode = image.classList.contains("book-figure__light") ? "light" : "dark";
       const url = await sourceFor(original, mode);
-      if (url !== original && image.src !== url) {
-        image.src = url;
-        created.push(url);
-      }
+      if (url !== original && image.getAttribute("src") !== url) image.src = url;
     }),
   );
-  return () => {
-    // The cache keeps these alive across a theme flip; nothing to release per
-    // run, but the hook below may drop them when the figure unmounts.
-    void created;
-  };
+  return () => {};
 }
 
-/** Release every blob this module has made. For tests and hard resets. */
+/** Forget every drawing this module has made. For tests and hard resets. */
 export function releaseDiagramObjects(): void {
-  for (const url of objects) URL.revokeObjectURL(url);
-  objects.clear();
   cache.clear();
   sources.clear();
 }

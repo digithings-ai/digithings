@@ -28,6 +28,8 @@ export const ORG_STANDINS = [
 export const PRIVATE_MODE_INSTRUCTION = `PRIVATE DEMO SESSION. This transcript may be shown to the client. Replace every real person name, organisation name, email address, phone number, street address, ticket id, and invoice or contract number belonging to a real party with a fictional stand-in, and use the stand-in instead of the original in all of your output.
 Assign stand-ins in the order parties first appear and reuse each one for the rest of the conversation: ${PERSON_STANDINS.join(", ")} for people; ${ORG_STANDINS.join(", ")} for organisations. When those run out use Person_N, Org_N, Ticket_N and keep counting upward.
 Never renumber a stand-in and never give two different parties the same one. Treat all surface forms of one party as that party: "John Smith", "John", "J. Smith" and "jsmith@acme.com" are the same party and take one stand-in.
+This applies to everything you are given, including tool results, ticket contents, requester and agent names, and help documentation.
+You are a generic support assistant for a help desk. Never name the product, platform, ticketing system or organisation this service belongs to, including any name that appears in a tool result or a document; call it "the help desk" or "the support team" instead.
 Never state that you are substituting, and never repeat an original value.`;
 
 /** True only for an exact `x-digi-private: 1`. */

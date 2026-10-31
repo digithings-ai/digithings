@@ -59,6 +59,9 @@ export default function BookLive({
   // shows page-shaped placeholders at the exact size, so nothing moves when the
   // real thing arrives.
   const [ready, setReady] = useState(false);
+  // Whether the engine has finished laying the book out. The stage is only
+  // scaled once it has — see the fit effect below for why that is not cosmetic.
+  const [paged, setPaged] = useState(false);
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The document is paginated outside the reader's own markup. pagedjs reflows
@@ -94,6 +97,18 @@ export default function BookLive({
   // Fit the fixed-width pages into the column. The stage keeps its natural A4
   // width and is scaled visually, so the layout — and therefore the pagination
   // and the page numbers — never depend on the window.
+  //
+  // The scale is applied only after pagination has finished, and that ordering
+  // is the fix for a measured defect rather than a flourish. pagedjs sets each
+  // page's column width from the MEASURED rect of its content box
+  // (Page -> area.getBoundingClientRect().width). The reader moves the growing
+  // .pagedjs_pages into this stage while the engine is still working, so a
+  // transformed stage made that measurement come back scaled: 549px at a 1280px
+  // window, 257px at 390. The column width then disagreed with the 658px content
+  // box, the engine fitted a different amount of text per page, and the book
+  // came out 19 pages on a phone against the printed 20 — one page short from
+  // chapter ten on. Paginating inside an untransformed stage makes the
+  // measurement the real A4 content width at every window.
   useEffect(() => {
     const fit = () => {
       const width = frame.current?.clientWidth ?? PAGE_WIDTH;
@@ -121,6 +136,13 @@ export default function BookLive({
         if (settle.current) clearTimeout(settle.current);
         settle.current = setTimeout(() => setReady(true), 320);
       }
+
+      // The engine stamps its own count on the document when the last page is
+      // laid out. That is the moment the stage may be scaled: from here on
+      // nothing measures the page boxes again. Read it off <html>, not off the
+      // source: pagedjs replaces the node it paginates, so a marker written
+      // there lives on a detached copy.
+      if (document.documentElement.dataset.bookPaginated) setPaged(true);
 
       // pagedjs clones the source wrapper with the content, so a page box can
       // arrive holding a copy of the portal host — and with it the inline style
@@ -254,7 +276,7 @@ export default function BookLive({
           <div
             className="book-live__stage"
             ref={stage}
-            style={{ width: PAGE_WIDTH, transform: `scale(${scale})` }}
+            style={{ width: PAGE_WIDTH, transform: paged ? `scale(${scale})` : "none" }}
           >
             <div className="book-live__skeleton" data-ready={ready ? "true" : undefined}>
               {/* One placeholder, where page one will land. The rest of the book

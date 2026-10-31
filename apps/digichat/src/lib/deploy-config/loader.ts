@@ -170,8 +170,13 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       title: cfg.title,
       welcome,
       suggestions: cfg.suggestions,
+      ...(cfg.chatSlug ? { slug: cfg.chatSlug } : {}),
+      ...(typeof cfg.productChat === "boolean" ? { productChat: cfg.productChat } : {}),
       placeholder: cfg.placeholder,
+      ...(cfg.locales ? { locales: cfg.locales } : {}),
       accent: cfg.accent,
+      ...(cfg.fonts ? { fonts: cfg.fonts } : {}),
+      ...(cfg.colors ? { colors: cfg.colors } : {}),
       attribution: cfg.attribution,
       defaultLanguage: cfg.defaultLanguage ?? DEFAULT_LANGUAGE_CODE,
       toolbar: cfg.toolbar !== false,
@@ -212,6 +217,9 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
         : {}),
       ...(cfg.models?.catalog === true ? { catalog: true as const } : {}),
       ...(typeof cfg.models?.occPicker === "boolean" ? { occPicker: cfg.models.occPicker } : {}),
+      ...(typeof cfg.models?.premiumMeter === "boolean"
+        ? { premiumMeter: cfg.models.premiumMeter }
+        : {}),
       ...(typeof cfg.models?.priceCapUsdPerMillion === "number"
         ? { priceCapUsdPerMillion: cfg.models.priceCapUsdPerMillion }
         : {}),
@@ -242,8 +250,14 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
     backend: cfg.backend,
     ...(cfg.guardrails ? { guardrails: cfg.guardrails } : {}),
     ...(cfg.limits ? { limits: cfg.limits } : {}),
-    ...(catalog.length
-      ? { tools: { allowUserToggle: cfg.tools?.allowUserToggle ?? true, catalog } }
+    ...(catalog.length || cfg.tools?.exclusive === true
+      ? {
+          tools: {
+            allowUserToggle: cfg.tools?.allowUserToggle ?? true,
+            catalog,
+            ...(cfg.tools?.exclusive === true ? { exclusive: true } : {}),
+          },
+        }
       : {}),
     mcp: {
       servers: cfg.mcp?.servers ?? [],
@@ -267,6 +281,7 @@ export function embedTenantToDeployment(cfg: EmbedTenantConfig): DigichatDeploym
       requiredPlanTier: cfg.requiredPlanTier,
     },
     token: cfg.token,
+    ...(cfg.access ? { access: structuredClone(cfg.access) } : {}),
   };
 }
 
@@ -282,12 +297,20 @@ export function deploymentToEmbedTenant(dep: DigichatDeployment): EmbedTenantCon
     theme: dep.chrome.theme,
     skin: dep.chrome.skin,
     accent: dep.chrome.accent,
+    ...(dep.chrome.fonts ? { fonts: dep.chrome.fonts } : {}),
+    ...(dep.chrome.colors ? { colors: dep.chrome.colors } : {}),
     attribution: dep.chrome.attribution !== false,
     title: dep.chrome.title,
     welcome: welcomeTitle(dep.chrome.welcome),
     welcomeBody: welcomeBodyLines(dep.chrome.welcome),
     suggestions: dep.chrome.suggestions,
+    ...(dep.chrome.slug ? { chatSlug: dep.chrome.slug } : {}),
+    ...(typeof dep.chrome.productChat === "boolean"
+      ? { productChat: dep.chrome.productChat }
+      : {}),
+    ...(dep.access ? { access: dep.access } : {}),
     placeholder: dep.chrome.placeholder,
+    ...(dep.chrome.locales ? { locales: dep.chrome.locales } : {}),
     lockedContact: dep.gate.lockedContact,
     activityDetail: dep.gate.activityDetail,
     showByok: dep.gate.showByok,
@@ -512,8 +535,19 @@ function mergeEmbedTenantIntoDeployment(
     delete models.catalog;
   }
 
+  // Tenant chrome identity and the server-only access block come from the
+  // registry row when it sets them, so a baked file for the same host cannot
+  // drop a gate or a chat slug the live row declares.
+  const chrome: DigichatDeployment["chrome"] = {
+    ...dep.chrome,
+    ...(cfg.chatSlug ? { slug: cfg.chatSlug } : {}),
+    ...(typeof cfg.productChat === "boolean" ? { productChat: cfg.productChat } : {}),
+  };
+
   return {
     ...dep,
+    chrome,
+    ...(cfg.access ? { access: structuredClone(cfg.access) } : {}),
     models,
     gate: {
       ...dep.gate,
@@ -549,7 +583,7 @@ function mergeEmbedTenantsOverlay(
 
   // Index the config hosts by NORMALISED host. `matchHostDeployment` looks a
   // host up the same way, so a config key written as an origin
-  // (`https://occ.digithings.ai`) or with a port has to merge with the
+  // (`https://tenant.example.com`) or with a port has to merge with the
   // registry key for the same host. Without this index one host ended up with
   // two entries and the lookup returned the registry-only duplicate, so the
   // deployment's own gate and model list were silently dropped (DIG-4589).
