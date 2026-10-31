@@ -89,10 +89,10 @@ vault-check:
 # cannot carry the script's exit 1 on its own. The recipe therefore echoes the
 # real status on a `datatap-answer-check: exit N` line and still fails, so make
 # never reports success for a check that found something. Anything that schedules
-# this must run `python3 scripts/datatap_answer_integrity_check.py` directly and
+# this must run `python3 scripts/answer_integrity_check.py` directly and
 # branch on its exit code, not on make's.
 datatap-answer-check:
-	@python3 scripts/datatap_answer_integrity_check.py; \
+	@python3 scripts/answer_integrity_check.py; \
 	code=$$?; \
 	echo "datatap-answer-check: exit $$code"; \
 	exit $$code

@@ -25,7 +25,7 @@ an event stream, any answer not fully parseable, any discovery failure.
 One secret, no local persistence
 --------------------------------
 The embed token is read out of the public ``/chat`` page on every client run —
-DataTap's own by default, the one the operator names otherwise. A first-party
+the default surface when the operator names nothing else. A first-party
 page publishes no token at all, and none is presented; see "Two published
 shapes" below. Where a token is read it is not a credential and it is not
 treated as one: it is a client-published identifier scraped from a public page,
@@ -132,7 +132,7 @@ Usage
 ::
 
     make datatap-answer-check
-    python3 scripts/datatap_answer_integrity_check.py --timeout 45
+    python3 scripts/answer_integrity_check.py --timeout 45
 """
 
 from __future__ import annotations

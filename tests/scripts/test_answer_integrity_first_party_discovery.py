@@ -51,12 +51,12 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "datatap_answer_integrity_check.py"
+SCRIPT = REPO_ROOT / "scripts" / "answer_integrity_check.py"
 
 
 def _load_module():
     spec = importlib.util.spec_from_file_location(
-        "datatap_answer_integrity_check_first_party", SCRIPT
+        "answer_integrity_check_first_party", SCRIPT
     )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -78,13 +78,12 @@ def _restore_the_http_request_seam() -> None:
     mod.http_request = _REAL_HTTP_REQUEST
 
 
-MONITOR_TOKEN_ENV_VAR = "DATATAP_ANSWER_CHECK_MONITOR_TOKEN"
 EMBED_HOSTS_ENV_VAR = "ANSWER_CHECK_EMBED_HOSTS"
 TARGET_ENV_VARS = ("ANSWER_CHECK_DISCOVERY_URL", "ANSWER_CHECK_EMBED_HOST")
 
 # Spelled out here rather than imported from the module: the value is what the
 # zone allowlists, so the test pins the value and not whatever the script
-# happens to hold. Same reasoning as the environment variable names above.
+# happens to hold.
 HOUSE_USER_AGENT = "digithings-site-smoke/1.0 (+https://github.com/digithings-ai/digithings)"
 
 # The page and the embed target are separate things on a first-party surface.
@@ -132,7 +131,7 @@ def _a_pinned_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     # Both hosts the fixtures put on the wire are in the allowlist, so a run in
     # this suite is a run with the allowlist configured. A developer shell may
     # hold a different value; this one is pinned rather than inherited.
-    monkeypatch.delenv(MONITOR_TOKEN_ENV_VAR, raising=False)
+    monkeypatch.delenv(mod.MONITOR_TOKEN_ENV_VAR, raising=False)
     for name in TARGET_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv(

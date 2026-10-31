@@ -186,7 +186,7 @@ RULES: list[tuple[str, str, str]] = [
     ("scripts/check_occ_rollout_auth_guard.py", "R6", "rollout tooling"),
     ("scripts/test_occ_rollout_scope_guard.sh", "R6", "rollout tooling"),
     ("scripts/test_verify_occ_invite_key.sh", "R6", "rollout tooling"),
-    ("scripts/datatap_answer_integrity_check.py", "R6", "answer-check tooling"),
+    ("scripts/answer_integrity_check.py", "R6", "answer-check tooling"),
     ("scripts/check_tenant_corpus_map.py", "R6", "tenant corpus map check"),
     # ---- R7: client desk + digidata-api ----
     ("apps/digidata-api/", "R7", "digidata-api (D1 twelvex)"),
