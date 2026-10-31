@@ -37,7 +37,7 @@ Answered by Chris on 2026-10-14.
 | **D-O2** [scope] | Which Origin namespace owns R1–R7? The name **cannot be changed during beta**. | **Chris's existing personal namespace.** | R1–R7 are private repos in that namespace, shared by collaborator invite. No Teams plan, so no `internal` visibility and no team bypass actors. |
 | **D-O3** [money] [external] | CI for Origin repos. | ~~**Buildkite**, Origin as repository provider, **self-hosted agents**~~ **STRUCK 23:18 — runner is local-ci on Chris's Mac** (DIG-3561 dispatcher + N §5); no Buildkite org, no CloneKit (`clone-fast` fails on Ultra — Matrix finding 6). Queues are local-ci job config, not Buildkite queues. |
 | **D-O4** [money] [security] | Which identity do agents use on Origin? | **Agents keep using Chris's account.** | 23:18 revision: the 'advisory' reading is struck — rulesets that must hold are **`active`**, and the agent identity is **not** a bypass actor (no agent seat holds bypass; Chris alone does). D-G6 is now mandatory (below), so the deploy control is technical (local-ci `verify-tag`), not merely procedural. No second Cursor plan. |
-| **D-O5** [client] [security] | twelve-x on Origin while Origin is in early beta. | **Move it to Origin.** Chris: no client contract applies, and he has full control of the codebase. | No contract check and no two-week soak. **ON HOLD 01:26 (call (c)): R7 / PR #5722 wait until Chris rules whether the twelve-x desk moves** — P4.7 struck, no detach scheduled. twelve-x stays as-is (GitHub private + existing inbound mirror). |
+| **D-O5** [client] [security] | `<client-slug>` on Origin while Origin is in early beta. | **Move it to Origin.** Chris: no client contract applies, and he has full control of the codebase. | No contract check and no two-week soak. **ON HOLD 01:26 (call (c)): R7 / PR #5722 wait until Chris rules whether the `<client-slug>` desk moves** — P4.7 struck, no detach scheduled. `<client-slug>` stays as-is (GitHub private + existing inbound mirror). |
 
 Unchanged by the move: D-G5 now runs the local-ci `deploy` job on Chris's Mac instead of a dedicated host (Buildkite struck 23:36). D-G6 is MANDATORY everywhere since 23:18 (Origin has no signed-tag rule type, so the check lives in local-ci `verify-tag`; an unsigned tag is refused).
 
@@ -49,7 +49,7 @@ Unchanged by the move: D-G5 now runs the local-ci `deploy` job on Chris's Mac in
 | **D-X2** | **No GitHub Packages, GHCR, or GitHub Actions dependence** in any moved repo. | R1/R2/R3/R4 registries move to non-GitHub homes (TBD, Chris); workflows become local-ci/cron jobs; deploys via per-package protected release branches (pending Chris approval). P2 steps 3–4 and P3 step 9 annotated accordingly. |
 | **D-X3** | Docs/code PRs into `develop` via feature branch stay fine; **no** Origin/GitHub repo creation, **no** history push, **no** Cloudflare config changes, **no** `main` merges, **no** production deploys. | Hard limits stand; anything needing those goes to Chris as a decision. Slices A–N, P deliver planning artefacts + develop PRs only. |
 
-| **D-R5-1..D-R5-6** [scope] | R5 image/parity/zammad/dead-rows/build/dispatch questions (+ added cron-transport item), asked on card `cd158e1f` (DIG-3566). | **Answered 2026-10-14T20:14:46Z, all six**: keep producing + build locally + non-GitHub registry; parity homes in R5 with R0-published contract; zammad private; delete both dead rows (follow-up H1); shared local-ci pipeline with repo arg; re-point 30 dispatch rows off GHA (new). Follow-ups H1–H6 routed incl. F15 (R0 digillm lane). |
+| **D-R5-1..D-R5-6** [scope] | R5 image/parity/helpdesk/dead-rows/build/dispatch questions (+ added cron-transport item), asked on card `cd158e1f` (DIG-3566). | **Answered 2026-10-14T20:14:46Z, all six**: keep producing + build locally + non-GitHub registry; parity homes in R5 with R0-published contract; helpdesk MCP private; delete both dead rows (follow-up H1); shared local-ci pipeline with repo arg; re-point 30 dispatch rows off GHA (new). Follow-ups H1–H6 routed incl. F15 (R0 digillm lane). |
 | **D-2318-1..5** [scope] | Send-back review (Chris 23:18, per DIG-3660 critique): R0-detach ban, P4.7 strike, Buildkite strike, no-fallback statement, order gates, local-ci merge rule. | **Applied same night**: R0 sentence added + P4.7 struck (§3 rewritten); Buildkite/`clone-fast`/'advisory' struck (§4 CI, §7 rulesets, D-O3/D-O4 rows); dark-Mac-blocks-merges stated; DIG-3605-before-DIG-3608 + develop-first + KV-proof gates added; skip-posts-failure + fork path + gated-lane list added. |
 | **D-N-1..D-5** | Deploy-map open items (DIG-3571 §7): corpus-index owner, Pages project names, dashboard actor, Mac always-on, repo names. | **Open** — recorded in §10; each needs Chris or the named seat. No code Cloudflare change is part of this wave. |
 
@@ -69,8 +69,8 @@ Unchanged by the move: D-G5 now runs the local-ci `deploy` job on Chris's Mac in
 
 D-1 (R5 and R6 separate) · D-Q1 (3 digiquant repos) · D-Q3 (`@digiquant/contract` from R2) ·
 D-Q4 (dashboard/profiles open) · D-Q5 (skills/templates open, research config private) ·
-D-S3 (SDCA optimiser → R1) · D-T1 (tenant map in KV, fallback = digithings) · D-T2 (zammad MCP open) ·
-D-X1 (twelve-x desk → R7, pluggable gate) · D-W1 (site + book private) · D-6 (brand private) ·
+D-S3 (SDCA optimiser → R1) · D-T1 (tenant map in KV, fallback = digithings) · D-T2 (helpdesk MCP open) ·
+D-X1 (`<client-slug>` desk → R7, pluggable gate) · D-W1 (site + book private) · D-6 (brand private) ·
 D-7 (hero-banner public) · D-8 (digiquant-tui open) · D-9 (digibot stays out) · D-14 (refactor on develop, promote, then split).
 
 ## Informational (no answer needed unless Chris disagrees)

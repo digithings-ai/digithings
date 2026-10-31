@@ -55,7 +55,7 @@ Modified times for the six Workers:
 
 `apps/digitrace-langfuse` and its Dockerfiles were **deleted** (DIG-5136): the Worker `digitrace-langfuse` was never created on the live account, so there was nothing to migrate and the code was dead. Its R2 bucket `digitrace-langfuse-events` **does not exist** on the account either (`wrangler r2 bucket info` → code 10006, 2026-10-27); nothing was ever created for this app, so there is nothing to empty or delete.
 
-`digidata-api` goes to R7 `twelve-x`. It needs no migration step for Cloudflare; it needs a decision about whether to deploy it or to delete it.
+`digidata-api` goes to R7 `<client-slug>`. It needs no migration step for Cloudflare; it needs a decision about whether to deploy it or to delete it.
 
 ### 2.3 The corpus-index finding: corrected, and the source is in the repository
 
@@ -68,15 +68,15 @@ Modified times for the six Workers:
 ```
 git log --all --oneline -S'FORBIDDEN_KEY'
   cfd3811a3  feat(corpus-index): add the daily multilingual index worker
-  60ea0c773  fix(corpus-index): Zammad range query for the ticket cursor; mask names, mail headers and organisations
+  60ea0c773  fix(corpus-index): helpdesk range query for the ticket cursor; mask names, mail headers and organisations
 ```
 
 **Where it lives.**
 
 | Branch | Pull request | State |
 |---|---|---|
-| `DIG-3269-occ-daily-index` | #5545 `feat(digisearch): add the bge-m3 daily corpus index` | OPEN, not merged |
-| `DIG-2203-census-deploy` | #5580 `feat(digichat): OCC cold-start warm-up, model picker tier and mobile polish` | OPEN, not merged |
+| `DIG-3269-<client-slug>-daily-index` | #5545 `feat(digisearch): add the bge-m3 daily corpus index` | OPEN, not merged |
+| `DIG-2203-census-deploy` | #5580 `feat(digichat): <client-slug> cold-start warm-up, model picker tier and mobile polish` | OPEN, not merged |
 
 Neither commit is an ancestor of `github/develop`. `merge-base --is-ancestor` returns false for both.
 

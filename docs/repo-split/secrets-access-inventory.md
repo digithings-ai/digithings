@@ -62,7 +62,7 @@ cutover; mono renamed private then archived):
 `DIGIKEY_ADMIN_TOKEN`, `DIGIKEY_BFF_TOKEN`, `DIGIKEY_DATABASE_URL`,
 `DIGIKEY_PRIVATE_KEY_PEM`, `DIGIKEY_LITELLM_PROXY_KEY`,
 `LITELLM_MASTER_KEY`, `LITELLM_PROXY_API_KEY`, `MCP_EDGE_KEY`,
-`ZAMMAD_API_TOKEN`, `GLOOMBERB_SESSION_COOKIE`, `STRIPE_SECRET_KEY`,
+`<HELPDESK>_API_TOKEN`, `GLOOMBERB_SESSION_COOKIE`, `STRIPE_SECRET_KEY`,
 `AUTH_SECRET`, `DIGICHAT_*_TOKEN` / `DIGICHAT_*_KEY` / `DIGICHAT_*_SECRET` /
 `DIGICHAT_*_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, `AZURE_SEARCH_API_KEY`,
 `BYOK_API_KEY`, `EXA_API_KEY`, `EXA_MONITOR_WEBHOOK_SECRET`, `XAI_API_KEY`,
@@ -128,7 +128,7 @@ pipelines for R2+R7 at the move; GitHub Actions dispatch retires),
 (token-canary), provider-review keys, `DIGIKEY_ADMIN_TOKEN`,
 `DIGIKEY_BFF_TOKEN`, `DIGIKEY_DATABASE_URL`, `DIGIKEY_PRIVATE_KEY_PEM`,
 `DIGIKEY_URL`, `DIGIGRAPH_INTERNAL_URL`, `MCP_EDGE_KEY`,
-`ZAMMAD_API_TOKEN` (stack-edge path; live Zammad uses `ZAMMAD_API_TOKEN` via
+`<HELPDESK>_API_TOKEN` (stack-edge path; the live helpdesk uses `<HELPDESK>_API_TOKEN` via
 `tokenEnv`, never committed), `AUTH_SECRET`, `DATABASE_URL`,
 `DIGICHAT_MONITOR_TOKENS`, `DIGICHAT_PLAN_PROOF_SECRET`,
 `DIGICHAT_EMBED_TENANTS` (runtime read; source of truth moves to KV via R6,
@@ -145,45 +145,45 @@ Tenant-data repo: schema + sources only, **no live keys in the repo**.
 `CLOUDFLARE_API_TOKEN` (KV + R2 write scoped, held on the Mac, used by the
 `kv-sync` script), `DIGICHAT_EMBED_TENANTS` content (pushed to KV namespace
 `TENANT_CONFIG`, never committed with live values), R2 seed objects (pushed,
-not stored as secrets), `OCC_INVITE_KEY` (see below), `ZAMMAD_API_TOKEN`
-(server-side only). `config/examples/occ-embed.yaml` keeps `tokenEnv` **names**
+not stored as secrets), `<CLIENT_SLUG>_INVITE_KEY` (see below), `<HELPDESK>_API_TOKEN`
+(server-side only). `config/examples/<client-slug>-embed.yaml` keeps `tokenEnv` **names**
 only. `DIGI_TENANT_CORPUS_MAP` fallback is removed from the stack Worker at
-the move (D-T1); `seed/occ_help` + `seed/vault/clients/*` sources live here
+the move (D-T1); `seed/<client-slug>_help` + `seed/vault/clients/*` sources live here
 and are fetched from R2 at boot.
 
-## R7 — `twelve-x` (private, Origin, exists)
+## R7 — `<client-slug>` (private, Origin, exists)
 
 Moves in P4.7 with full history (D-O5: no client gate; GitHub repo archived
 read-only 90 days, then deleted). Needs: anon Supabase URL + anon key,
-`D1_API_TOKEN` (twelvex D1 API), Pages/desk deploy via Mac agent. No
+`D1_API_TOKEN` (`<client-slug>` D1 API), Pages/desk deploy via Mac agent. No
 service-role, no strategies keys, no tenant keys. Client desk pages
-(`apps/dashboard` twelve-x paths + `apps/digidata-api`) land here; the desk
+(`apps/dashboard` `<client-slug>` paths + `apps/digidata-api`) land here; the desk
 gate/palette become pluggable (D-X1).
 
-## OCC invite key + tenant tokens + edge keys (Keychain, names only)
+## Client invite key + tenant tokens + edge keys (Keychain, names only)
 
 Live human-held names (Keychain service names, values never touched):
-`digithings.occ-invite-key`,
+`digithings.<client-slug>-invite-key`,
 `digithings.mcp-edge-key`,
-`digithings.zammad-edge-key`, `digithings.tenant-token-digiquant-io`,
+`digithings.<helpdesk>-edge-key`, `digithings.tenant-token-digiquant-io`,
 `digithings.tenant-token-digithings-ai`.
 These stay in Keychain + Cloudflare Worker secrets + KV. They are **never
 committed** to any repo (R0/R5/R6 hold procedure and `tokenEnv` names only,
 per DIG-1612/#5308). Rotation is a human/Keymaster action, not part of the
 file move.
 
-`digithings.occ-invite-key` (account `DIG-1474`) **had no copy between 2026-10-18
+`digithings.<client-slug>-invite-key` (account `DIG-1474`) **had no copy between 2026-10-18
 and 2026-10-21**. The item was destroyed on 2026-10-18 (DIG-3524), on the
-reasoning that the key gated nothing at the time — the 2026-10-14 measurement found the OCC
+reasoning that the key gated nothing at the time — the 2026-10-14 measurement found the first client
 tenant resolving at no credential (DIG-1381) — and that the token was being echoed into served
 HTML (DIG-3523). The production copies were not revoked: the Worker secret, the Pages secret and
-the OCC tenant `token` still held the value, and all of those surfaces are write-only, so the
+the first client tenant `token` still held the value, and all of those surfaces are write-only, so the
 live value could not be read back from them. The value survived in the local host
 secret store (`~/.config/digithings/secrets/`), and on 2026-10-21 the sanctioned
 copy was restored to the Keychain and proved against production (DIG-4810:
-`EXPECT_B2=1 bash scripts/verify_occ_invite_key.sh` → 7/7 PASS). **No rotation
+`EXPECT_B2=1 bash scripts/verify_<client-slug>_invite_key.sh` → 7/7 PASS). **No rotation
 was performed** — the value that is live is the value that was installed on
-2026-10-11. Runbook `docs/ops/OCC_INVITE_KEY.md`; inventory row `OCC_INVITE_KEY`
+2026-10-11. Runbook `docs/ops/<CLIENT_SLUG>_INVITE_KEY.md`; inventory row `<CLIENT_SLUG>_INVITE_KEY`
 and risk `R19` in `docs/ops/SECRETS_INVENTORY.md`.
 
 ## Local-only Keychain (`digithings-local/*`, never moves)

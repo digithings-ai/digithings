@@ -589,26 +589,6 @@
       "count": 10,
       "ticket": "DIG-4043"
     },
-    "docs/repo-split/cloudflare-deploy-map.md": {
-      "count": 1,
-      "ticket": "DIG-3895"
-    },
-    "docs/repo-split/decisions.md": {
-      "count": 2,
-      "ticket": "DIG-3895"
-    },
-    "docs/repo-split/migration-plan.md": {
-      "count": 2,
-      "ticket": "DIG-3895"
-    },
-    "docs/repo-split/r2-digiquant-stack-inventory.md": {
-      "count": 2,
-      "ticket": "DIG-3895"
-    },
-    "docs/repo-split/secrets-access-inventory.md": {
-      "count": 5,
-      "ticket": "DIG-3895"
-    },
     "infra/local-proxy/Caddyfile": {
       "count": 2,
       "ticket": "DIG-3689"
