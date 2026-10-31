@@ -24,7 +24,7 @@ needing those goes to Chris as a decision. Slices A–N, P are folded in
 open inputs (no draft yet: A, K, L, M, N) are listed there, not invented.
 
 **Revised again 2026-10-14 23:18 (Chris, send-back, released):** R0 stays on GitHub, inbound
-Origin mirror only. **Detach is forbidden for R0**, and **no twelve-x detach is scheduled
+Origin mirror only. **Detach is forbidden for R0**, and **no `<client-slug>` detach is scheduled
 (P4.7 struck)**. Only the R0 public repo stays on GitHub; moving CI and crons off GitHub stays
 top priority (local-ci, Cloudflare crons) — the suggestion to keep GitHub primary until 1 Nov
 was NOT taken.
@@ -35,7 +35,7 @@ Naming used below:
 - **R0** = the new public repo. Staged privately as `digithings-ai/digithings-next`; renamed to
   `digithings-ai/digithings` and made public at cutover.
 - R1 `digiquant-strategies`, R2 `digiquant-stack`, R3 `digiquant-web`, R4 `digithings-web`,
-  R5 `digithings-stack`, R6 `digichat-tenants`, R7 `twelve-x` (exists).
+  R5 `digithings-stack`, R6 `digichat-tenants`, R7 `<client-slug>` (exists).
 
 ```
 P0 Prepare ─► P1 Decouple (in mono) ─► P2 Release plumbing + deploy gate ─► P3 Cutover (R0 public, mono private)
@@ -83,7 +83,7 @@ Placeholders: `<ns>` = Chris's personal Origin namespace (D-O2). Clone URL `http
 |---|---|---|---|
 | R0 `digithings` | **GitHub** `digithings-ai/digithings` primary + Origin inbound mirror `<ns>/digithings` (D-O1). | GitHub: public. Origin: private (only option). | Chris runs `origin repo create-mirrored` after P3. |
 | R1–R6 | Origin `<ns>/<repo>` | private | Empty repo; filtered history pushed in P4 (`git push` of `main`, `develop`, release tags only). |
-| R7 `twelve-x` | stays as-is (call (c)) | private | **ON HOLD 01:26** — no move until Chris rules whether the twelve-x desk moves. PR #5722 on hold. See §3. |
+| R7 `<client-slug>` | stays as-is (call (c)) | private | **ON HOLD 01:26** — no move until Chris rules whether the `<client-slug>` desk moves. PR #5722 on hold. See §3. |
 | mono after P3 | **Stays on GitHub** (private, then archived in P5). Not moved to Origin. | private | — |
 
 - Names are **the same as on GitHub** and are permanent while Origin is in beta, so they are fixed in P0 and not changed later.
@@ -100,11 +100,11 @@ PyPI trusted publishing keeps working unchanged. External PRs: native on GitHub,
 This keeps one source of truth with only documented features, and it differs from Chris's first
 direction only for R0. The Origin-primary option with a push mirror built by us was not chosen.
 
-### 3. twelve-x — STRUCK 2026-10-14 23:18 (Chris)
+### 3. `<client-slug>` — STRUCK 2026-10-14 23:18 (Chris)
 
-No twelve-x detach is scheduled and P4.7 is struck: `chrizefan/twelve-x` is already a private
+No `<client-slug>` detach is scheduled and P4.7 is struck: `chrizefan/<client-slug>` is already a private
 inbound mirror (Matrix finding 9, live since the 2026-08-18 initial sync), and Chris forbids any
-detach. twelve-x stays as-is (GitHub private + existing inbound mirror). **Call (c) 01:26: R7 / PR #5722 ON HOLD until Chris rules whether the twelve-x desk moves.** The R7 twelve-x-path move
+detach. `<client-slug>` stays as-is (GitHub private + existing inbound mirror). **Call (c) 01:26: R7 / PR #5722 ON HOLD until Chris rules whether the `<client-slug>` desk moves.** The R7 `<client-slug>`-path move
 (desk surface + `digidata-api`) is undecided — it needs a new ruling, not this section. A later
 "move" would be a detach or a gated outbound transition, never a first create.
 
@@ -231,10 +231,10 @@ each PR is independently shippable. Lane in brackets (operating rules).
 | 1.6 (DIG-3695) | npm packages: tsup builds, `exports` maps, `private: false`, `license: MIT`; PixelWordmark → `@digithings-ai/ui`; `@digithings-ai/catalog` (byok-providers + openapi); apps import only via package exports (lint rule bans `../../packages/*/src`). | R3, R4 | M |
 | 1.7 (DIG-3699) | Tenant data out of code: `TENANT_CONFIG` KV read path with `digithings`-only fallback; seeds fetched from R2 at container boot; suggestion pools/looks from KV; production model list from KV/env. **Call (b) 01:26: tenant configs live in KV ONLY — no repo files synced to KV (no `kv-sync` from repo files).** Prove on staging tenant first. | R5, R6 | M |
 | 1.8 (DIG-3696) | Dockerfiles consume packages/images, not sibling paths (runner, stack, digichat). | R2, R5 | M |
-| 1.9 (DIG-3697) | Deploy workflows for every Worker (stack, digichat, langfuse, cron, runner, dashboard-api, corpus-index, digidata-api) — tag/dispatch-triggered, clean checkout, **local-ci only (call 01:26: no "same file runs on GitHub-hosted" — deploy jobs run on the Mac `deploy` job without an environment).** Retire manual `wrangler deploy`; `occ_invite_key_rollout.sh` split into "write secret/KV" (R6) and "deploy" (R5). | R5, R6 | M |
+| 1.9 (DIG-3697) | Deploy workflows for every Worker (stack, digichat, langfuse, cron, runner, dashboard-api, corpus-index, digidata-api) — tag/dispatch-triggered, clean checkout, **local-ci only (call 01:26: no "same file runs on GitHub-hosted" — deploy jobs run on the Mac `deploy` job without an environment).** Retire manual `wrangler deploy`; `<client-slug>_invite_key_rollout.sh` split into "write secret/KV" (R6) and "deploy" (R5). | R5, R6 | M |
 | 1.10 (DIG-3698) | Rotate any secret found by P0 gitleaks; move deploy tokens to per-target scoped Cloudflare tokens. | all | S |
 | 1.11 (DIG-3700) | Guard workflow `moved-paths-guard`: fails a PR touching a path whose manifest destination is already extracted (populated in P4). | P4 | S |
-| 1.12 (DIG-3689) | R0 client-name scrub before D-12′: remove client-identifying names/paths from the R0 allowlist so the fresh public repo never carries them. | R0 | S |
+| 1.12 (DIG-3689) | R0 client-name scrub before D-12′: remove client-identifying names/paths from the R0 allowlist so the fresh public repo never carries them. Scope includes `docs/repo-split/` (current text scrubbed to the `<client-slug>` pattern in #6679; older mono history stays out of R0 because the export starts fresh, with no force-push to mono). | R0 | S |
 
 Exit check: manifest has zero unassigned paths; no import crosses a repo boundary
 (`scripts/split/check_boundaries.py`: Python imports, TS relative imports, Dockerfile COPY, workflow `paths`);
@@ -245,7 +245,7 @@ every deployed Worker has exactly one deploy workflow; `develop` → `main` prom
 it disagree with the extraction move-lists on 294 paths, and `--check` was red at 113 (now 126)
 unassigned paths with no CI invocation. Repair status as of this update:
 - (b) unassigned paths resolved: rules added for `.python-version`, `.sctl.yml`, `apps/corpus-index/`,
-  `apps/digiquant-app/`, `apps/twelvex-runner/`, `packages/catalog/`, `packages/durable-object-reconnect/`,
+  `apps/digiquant-app/`, `apps/<client-slug>-runner/`, `packages/catalog/`, `packages/durable-object-reconnect/`,
   `packages/tui-frame/`. `--check` is now green (0 unassigned).
 - (d) `r0.paths` emitter added: `python3 scripts/split/manifest.py --emit-r0 r0.paths` (P3 input).
 - (e) `scripts/split/manifest.py --check` wired into the local-ci scan list.
@@ -347,7 +347,7 @@ Cutover day (Chris does the renames and visibility changes; agents prepare):
 8. Rename `digithings-next` → `digithings`; make it **public**. Apply rulesets from P2 step 7; install DCO; add CODEOWNERS, LICENSE (MIT), TRADEMARKS, SECURITY; `production`-style environment `pypi` with Chris as required reviewer.
 8b. Origin for R0 (D-O1): Chris runs `origin repo create-mirrored` for the public R0 (inbound mirror).
 9. Publish v0.x of PyPI modules and `@digithings-ai/*` npm, and `digichat` / `digillm` images, from R0.
-   Images are NOT covered by c7256004 — the image registry is OPEN in R5 (recommendation: Cloudflare registry, not DataTap ACR); `@digithings-ai/*` per decision c7256004 Option A.
+   Images are NOT covered by c7256004 — the image registry is OPEN in R5 (recommendation: Cloudflare registry, not a client-owned ACR); `@digithings-ai/*` per decision c7256004 Option A.
 10. In mono: R0 paths frozen (`moved-paths-guard` lists them). Development on public code moves to R0. Open mono PRs that touch only R0 paths are re-opened against R0 by their owners (list posted on the tracking issue).
 11. Update every remote: `~/Code/digithings*` worktrees, Paperclip project repositories, merge queue config, run-watch, worktree sweep, seat instructions that name the repo.
 
@@ -383,7 +383,7 @@ Validation and rollback per target:
 | 4.4 | R5 digithings-stack | stack, digichat, langfuse, cron, corpus-index each deployed once from a Chris-cut `stack-v*` tag; health checks on all routes listed in the proposal; cron dispatches R2/R7 workflows with the App token; tenant chat smoke per tenant. | `wrangler rollback` per Worker; cron rollback restores old dispatch targets. |
 | 4.5 | R3 digiquant-web | New Pages project `digiquant-io-r3` direct-uploaded by the Mac agent from a Chris-cut `web-v*` tag; preview checked against R2; move custom domain `digiquant.io`. Old project's Git builds disabled (production branch set to an unused name). | Move domain back to old project (minutes). |
 | 4.6 | R4 digithings-web | Same as R3 for `digithings.ai`; routes to R5 (`/api/*`, `/embed*`) checked. | Move domain back. |
-| 4.7 | R7 twelve-x — STRUCK 23:18 | No detach scheduled; twelve-x stays as-is. The desk-surface move is undecided (needs a new ruling). | n/a (struck). |
+| 4.7 | R7 `<client-slug>` — STRUCK 23:18 | No detach scheduled; `<client-slug>` stays as-is. The desk-surface move is undecided (needs a new ruling). | n/a (struck). |
 
 Why this order: R6 first removes the most sensitive data from the platform images; R1 before R2
 because R2 pins it; R2 before R5 because R5's cron binds to R2's Workers by name; web last because
@@ -474,7 +474,7 @@ never the self-hosted runner on R0, never the Cloudflare Cursor app.
   `config/contract/` + `compose-contract.env` + parity-baseline ownership,
   `deploy-digiquant-cloudflare.yml` home, 68 untriaged `research/` files.
 - R3 (G): PixelWordmark + deploy-models copy + entrypoint imports rewired pre-extraction;
-  **call (a) 01:26: R3 absorbs `apps/dashboard` (minus the R7 twelve-x paths); R2 absorbs the digiquant core pipeline (house pipeline, `execution/staging_secrets.py`, `vendor_secret_*`, gloomberb/luxalgo clients, `research/docs/RUNBOOK.md`, `config/contract/secrets.yaml`). Both are PRIVATE — the R0 definition excludes them.**
+  **call (a) 01:26: R3 absorbs `apps/dashboard` (minus the R7 `<client-slug>` paths); R2 absorbs the digiquant core pipeline (house pipeline, `execution/staging_secrets.py`, `vendor_secret_*`, gloomberb/luxalgo clients, `research/docs/RUNBOOK.md`, `config/contract/secrets.yaml`). Both are PRIVATE — the R0 definition excludes them.**
   `apps/digiquant-web/` moves to R3 root.
 - R4 (H): 246 + brand 22 files; **PixelWordmark moves to shared UI/brand BEFORE extraction**
   (R3 imports it).
@@ -487,7 +487,7 @@ never the self-hosted runner on R0, never the Cloudflare Cursor app.
   **D-R5-4: delete both dead `pj()` rows** (`jobs.ts` L336/L376 — follow-up H1, not performed in
   the inventory ticket); **D-R5-5: one shared local-ci pipeline with a repo argument**
   (no per-repo copy; R2 globs become a second argument value); **new D-R5-6 (R5 send-back rule 02:06): anything that must run while the Mac is off goes to a
-  Cloudflare cron/Workflow — Mac-only triggers fail visibly instead of silently; 12 twelve-x rows unverified).**
+  Cloudflare cron/Workflow — Mac-only triggers fail visibly instead of silently; 12 `<client-slug>` rows unverified).**
   Sequencing: steps 1–2 (local CI + registry; shared-closure artifacts) parallel, everything below
   step 3 waits on both; **step 9 (dispatch re-point) is what keeps the estate running — R5 can cut
   over before it, but the clocks stop when GHA retires without a Mac-off path — that path is a
@@ -559,11 +559,11 @@ in the job matrix — a lane that reports "all local checks passed" without them
   `internal` needs no Teams plan (live `chrizefan/digithings` is `internal`); live inbound mirror
   already carries `evaluate` rulesets (`active` untested); "advisory" fails as a product claim
   (enforcement can be `active`); outbound mirroring gated-off, do not plan a push mirror — detach
-  is the documented path (but forbidden for R0, struck for twelve-x); GHA minutes exhausted
+  is the documented path (but forbidden for R0, struck for `<client-slug>`); GHA minutes exhausted
   (matrix finding 5, = 22:09); **CloneKit fails on Ultra** (plain clone + short-lived token);
   fork heads never mirror; local check posts need an app token and **403 on mirrors** (local PR-body
   record is the working path); no signed-tag rule type (local `verify-tag` only); no native runner;
-  no package registry (git tag pins stand); **`chrizefan/twelve-x` already a private inbound
+  no package registry (git tag pins stand); **`chrizefan/<client-slug>` already a private inbound
   mirror** (finding 9 — the fact behind striking P4.7).
 - **L (DIG-3569, in_review): extraction scripts, PR #5726 open** into `develop`
   (branch `DIG-3569-repo-split-extraction-scripts` @ `7f18d256f`, +507/-0, signed). Dry run at
@@ -590,7 +590,7 @@ Each file has exactly one owner. No `overlaps-known.txt` whitelist exists or is 
 
 - **R1:** `digiquant/scripts/export_sdca_macro.py`, `digiquant/scripts/plot_sdca_tearsheet.py`, SDCA parts of `optimize.py` (`_run_sdca_optimize`, SDCA imports).
 - **R2:** `digiquant/scripts/generate_tearsheets.py` (production job) after its SDCA imports (:66, :161-162) go through the plugin hook (refactor 1.2); generic `optimize.py` shell (private with the digiquant core, per call (a)).
-- **R6:** `scripts/verify_occ_invite_key.sh`, `occ_invite_key_fixture_server.mjs`, `occ_invite_key_rollout.sh` (write-secret/KV half, per refactor 1.9 split), `check_occ_rollout_auth_guard.py`, `index_occ_tickets.py`, `test_occ_rollout_scope_guard.sh`, `docs/ops/OCC_INVITE_KEY.md`.
+- **R6:** `scripts/verify_<client-slug>_invite_key.sh`, `<client-slug>_invite_key_fixture_server.mjs`, `<client-slug>_invite_key_rollout.sh` (write-secret/KV half, per refactor 1.9 split), `check_<client-slug>_rollout_auth_guard.py`, `index_<client-slug>_tickets.py`, `test_<client-slug>_rollout_scope_guard.sh`, `docs/ops/<CLIENT_SLUG>_INVITE_KEY.md`.
 - **R5:** `apps/digithings-stack-cloudflare/container/seed_chroma.sh` (generic container infra; tenant seeds come from R2/KV at boot).
 
 **Global rule (all repo-split leaves):** no `.github/workflows` file moves into any private repo. Each workflow maps to a Cloudflare cron, a local-ci job on Chris's Mac, or deletion — recorded in DIG-3605 (crons/jobs off GitHub). Move lists drop every `.github/*` path. No Buildkite, no GitHub Packages/GHCR; signed release tags mandatory for private-repo deploys; no merges to main, no deploys, no repo creation.

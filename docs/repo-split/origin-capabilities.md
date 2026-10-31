@@ -10,7 +10,7 @@ Confidence labels: **CONFIRMED** (primary doc or a read-only live call), **LIKEL
 - Origin CLI `2026.09.24-20-34-11-8ed25e0`, already signed in on this Mac. Read-only commands only: `origin repo list`, `origin repo view`, `origin repo mirror status`, `origin ruleset list`, and `--help` for `repo mirror transition`, `repo edit`, `repo access`, `pr checks`. No `create`, `transition`, `detach`, `sync`, or `push`.
 - Live read, namespace `chrizefan`:
   - `chrizefan/digithings` — `mirrorStatus: inbound`, `visibility: internal`, `defaultBranch: develop`. Last transition `initial-to-inbound` succeeded (drain time 2026-08-18).
-  - `chrizefan/twelve-x` — `mirrorStatus: inbound`, `visibility: private`, `defaultBranch: develop`. Same transition shape, succeeded the same minute.
+  - `chrizefan/<client-slug>` — `mirrorStatus: inbound`, `visibility: private`, `defaultBranch: develop`. Same transition shape, succeeded the same minute.
 - At check time, `develop` was `d227b6ed526202aaa095b8e645804ef308dde813` on the Origin remote and on `github.com/digithings-ai/digithings`.
 - Origin MCP (`https://api.origin.cursor.com/mcp`) is not connected in this run. The tool list below is from the MCP tool reference, not a live `tools/list`.
 
@@ -21,7 +21,7 @@ Confidence labels: **CONFIRMED** (primary doc or a read-only live call), **LIKEL
 | Host a repo on Origin | **supported** | Create, clone, push, pull. Origin-hosted repos: Origin is the source of truth and GitHub is not in the path. [changelog](https://cursor.com/changelog/origin-code-hosting) |
 | Public repo on Origin | **not supported** | `origin repo edit --visibility` accepts only `internal` or `private`. No public value. |
 | `internal` on a personal namespace | **supported** | Live `chrizefan/digithings` is `internal`. The CLI offers `internal` with no team flag. |
-| Private repo | **supported** | Live `chrizefan/twelve-x` is `private`. |
+| Private repo | **supported** | Live `chrizefan/<client-slug>` is `private`. |
 | Inbound mirror (GitHub → Origin) | **supported** | Both live repos are inbound. GitHub stays the source of truth. A push to `https://origin.cursor.com/{owner}/{repo}.git` is forwarded to GitHub; Origin updates after GitHub accepts it. [mirror](https://cursor.com/docs/origin/mirror-github), [git](https://cursor.com/docs/origin/git) |
 | Outbound mirror (Origin → GitHub) | **not supported** for a new plan | The current API reference dropped outbound. The changelog says `inbound_to_outbound` returns `FailedPrecondition` unless outbound is enabled for that repo; repos already outbound keep working. The CLI still prints `--to outbound`. Both live repos are inbound. This check did not start a transition. |
 | Detach (Origin becomes primary, GitHub stops receiving pushes) | **supported**, one-way | Settings → Detach, or `origin repo mirror detach`. The GitHub repo is left as it is. Pushes no longer flow to GitHub. [mirror](https://cursor.com/docs/origin/mirror-github) |
@@ -55,7 +55,7 @@ The plan's own correction still stands: **R0 is GitHub-primary with an inbound O
 6. **`origin repo clone-fast` as the Buildkite checkout (if P0 copies the CloneKit recipe).** Fails on Ultra. CloneKit is Enterprise-only. Buildkite itself can still connect a native Origin repo and post checks. Checkout is a normal git clone with a short-lived token.
 7. **Fork pull requests arrive on the Origin copy.** Fails. Fork heads are not mirrored. External review and CI for those pulls stay on GitHub (D-O1 already says this; the Origin copy will not contain the fork branch).
 8. **A local Mac job can post an Origin check on today's inbound mirrors with the user CLI.** Fails. Check writes need an app installation token, and a mirror rejects them. The working record today is the local test pass in the pull-request body. On a future **native** private repo, an Origin App or Buildkite can post the check.
-9. **twelve-x is not on Origin until P4.7.** Fails. `chrizefan/twelve-x` is already a private inbound mirror (since the 2026-08-18 initial sync). A later "move" is a detach or a gated outbound transition, not a first create. Detach stops GitHub from receiving new pushes.
+9. **`<client-slug>` is not on Origin until P4.7.** Fails. `chrizefan/<client-slug>` is already a private inbound mirror (since the 2026-08-18 initial sync). A later "move" is a detach or a gated outbound transition, not a first create. Detach stops GitHub from receiving new pushes.
 
 ## Assumptions that hold
 
