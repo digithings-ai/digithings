@@ -960,6 +960,17 @@ the sandbox layer in the component diagram.
 
 ---
 
+## PIT web snapshot
+
+Online-data backtests that fetch the web pin the page body to the sim date.
+The contract (clock, fail-closed, ranking honesty, `DIGISEARCH_SNAPSHOT_BACKEND`,
+telemetry) is
+[`docs/superpowers/specs/2026-11-06-pit-web-snapshot-contract.md`](../docs/superpowers/specs/2026-11-06-pit-web-snapshot-contract.md).
+`digiquant/src/digiquant/research/docs/RUNBOOK.md` is not in this tree; this
+section is the pointer. A historical `run_date` passes `snapshot_as_of`. A
+`run_date` of today with no `as_of` stays on the live `web_grounding` path.
+Do not send the model a live page body when the pin is set.
+
 ## More
 
 Extension patterns, anti-patterns, and integration boundaries live in [`ARCHITECTURE.md`](ARCHITECTURE.md). Update that doc when changing interfaces or behavior.
