@@ -13,6 +13,14 @@ baseline payload for this segment) plus a ``PhaseError`` the caller merges into
 ``state.errors`` for the diagnostics audit row — instead of raising. A data gap
 thus yields a *more conservative* book (one stale segment), never a crashed run.
 
+LLM output that fails Pydantic validation (or does not parse as JSON) takes a
+narrower path. :func:`invoke_llm_output` retries that call **once** with a repair
+prompt built from the validator errors, then raises :class:`LlmValidationSkipped`.
+``run_segment_fail_soft`` turns that into a carry whose reason is
+:data:`VALIDATION_SKIP_REASON` — a skip marker, not ``node_failed_no_data`` —
+so one bad ``SectorReport`` / ``DocumentPatch`` / ``SentimentNewsReport`` does
+not abort the graph. Provider errors stay on the failure-carry path.
+
 This is a **deliberate, observable** degrade boundary, not a silent swallow: every
 failure is logged at WARNING with the exception type and recorded as a structured
 ``PhaseError`` that surfaces in ``run_diagnostics``. ``KeyboardInterrupt`` /
@@ -21,11 +29,13 @@ failure is logged at WARNING with the exception type and recorded as a structure
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
 from datetime import date
+from typing import Any, TypeVar  # score:allow untyped any — phase_inputs JSON dict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from digiquant.research.state import (
     Carried,
@@ -36,8 +46,92 @@ from digiquant.research.state import (
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T", bound=BaseModel)
+
 NODE_FAILED_REASON = "node_failed_no_data"
 """``Carried.reason`` marker distinguishing a node FAILURE carry from a triage carry."""
+
+VALIDATION_SKIP_REASON = "llm_validation_skipped"
+"""``Carried.reason`` / digest ``continuity`` marker for a validation skip.
+
+Distinct from :data:`NODE_FAILED_REASON`: diagnostics counts only the failure
+reason as ``segments_failed``. A schema miss after the repair retry is a
+per-node skip, not a crashed run.
+"""
+
+_REPAIR_ERROR_LIMIT = 12
+_REPAIR_PROMPT_MAX = 2000
+_PARSE_FAILURES = (ValidationError, json.JSONDecodeError, ValueError)
+
+
+class LlmValidationSkipped(Exception):
+    """The LLM output failed validation after one repair retry.
+
+    Callers degrade the node (skip marker + ``PhaseError``) instead of letting
+    this escape LangGraph and kill the run.
+    """
+
+    def __init__(self, schema_name: str, detail: str) -> None:
+        self.schema_name = schema_name
+        self.detail = detail
+        super().__init__(f"{schema_name}: {detail}"[:500])
+
+
+def format_repair_prompt(schema_name: str, exc: BaseException) -> str:
+    """Repair prompt for one failed validation. Locations and messages only.
+
+    Pydantic ``errors()`` also carries the rejected ``input``. That value is
+    omitted: a SectorReport failure can be dozens of nested errors, and the
+    input can echo the whole body back into the next prompt.
+    """
+    lines = [f"Your previous response did not validate against {schema_name}."]
+    if isinstance(exc, ValidationError):
+        errors = exc.errors()
+        lines.append(f"{len(errors)} validation error(s):")
+        for err in errors[:_REPAIR_ERROR_LIMIT]:
+            loc = ".".join(str(part) for part in err.get("loc", ()))
+            lines.append(f"- {loc or '<root>'}: {err.get('msg', 'invalid')}")
+        extra = len(errors) - _REPAIR_ERROR_LIMIT
+        if extra > 0:
+            lines.append(f"- … {extra} more")
+    else:
+        lines.append(f"Error: {type(exc).__name__}: {exc}"[:400])
+    lines.append(
+        "Re-emit a single JSON object that validates against the schema. "
+        "No prose, no code fences. Include every required field."
+    )
+    return "\n".join(lines)[:_REPAIR_PROMPT_MAX]
+
+
+def with_validation_repair(phase_inputs: dict[str, Any], repair: str | None) -> dict[str, Any]:
+    """Return phase inputs, attaching ``validation_repair`` only on the retry."""
+    if repair is None:
+        return phase_inputs
+    return {**phase_inputs, "validation_repair": repair}
+
+
+def invoke_llm_output(call: Callable[[str | None], T], *, schema_name: str) -> T:
+    """Run ``call(None)``, then once ``call(repair_prompt)`` on a parse/validation miss.
+
+    ``call`` receives the repair prompt (or ``None`` on the first attempt) and
+    must perform exactly one LLM call — pass ``max_retries=0`` into
+    ``run_research_agent`` so this function owns the single repair retry.
+    Anything other than a parse/validation error propagates immediately.
+    """
+    try:
+        return call(None)
+    except _PARSE_FAILURES as exc:
+        prompt = format_repair_prompt(schema_name, exc)
+        logger.info(
+            "LLM output for %s failed validation (%s); retrying with repair prompt",
+            schema_name,
+            type(exc).__name__,
+        )
+        try:
+            return call(prompt)
+        except _PARSE_FAILURES as retry_exc:
+            detail = f"{type(retry_exc).__name__}: {retry_exc}"
+            raise LlmValidationSkipped(schema_name, detail[:400]) from retry_exc
 
 
 def run_segment_fail_soft(
@@ -76,6 +170,26 @@ def run_segment_fail_soft(
             )
         )
         return slot, []
+    except LlmValidationSkipped as exc:
+        logger.warning(
+            "research node %r (phase %s) skipped after LLM validation failed (%s)",
+            segment_slug,
+            phase,
+            exc.detail,
+        )
+        slot = SegmentSlot(
+            payload=Carried(
+                baseline_date=baseline_date or run_date,
+                reason=VALIDATION_SKIP_REASON,
+            )
+        )
+        error = PhaseError(
+            phase=phase,
+            node=segment_slug,
+            message=str(exc)[:500],
+            retryable=True,
+        )
+        return slot, [error]
     except Exception as exc:  # deliberate fail-soft boundary; see module docstring
         logger.warning(
             "research node %r (phase %s) failed (%s: %s); carrying baseline forward",
@@ -97,4 +211,12 @@ def run_segment_fail_soft(
         return slot, [error]
 
 
-__all__ = ["NODE_FAILED_REASON", "run_segment_fail_soft"]
+__all__ = [
+    "NODE_FAILED_REASON",
+    "VALIDATION_SKIP_REASON",
+    "LlmValidationSkipped",
+    "format_repair_prompt",
+    "invoke_llm_output",
+    "run_segment_fail_soft",
+    "with_validation_repair",
+]
