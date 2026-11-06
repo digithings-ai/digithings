@@ -4,15 +4,24 @@ This repository enforces a specific branch taxonomy **client-side only**, via
 `scripts/hooks/pre-push.sh` (installed by `make hooks-install`). Pushes of
 branches whose names don't match the taxonomy are rejected before they leave
 your machine — but a clone that never ran `make hooks-install` has no name
-enforcement at all. There is no branch-naming ruleset on GitHub. The last
-ruleset, `module-branch-protection` (on `module/**`), goes with the retired
-module tier (#6751); check with `gh api
-repos/digithings-ai/digithings/rulesets?includes_parents=true`.
+enforcement at all. There is no branch-naming ruleset on GitHub.
+`module-branch-protection` (id 15270439, on `module/**`) is absent from the
+ruleset list; it went with the retired module tier (#6751).
 
-Rulesets are not the whole picture. `main` and `develop` also carry **classic
-branch protection**, which the rulesets endpoint does not report at all — see the
-table below, and query `…/branches/<name>/protection` before concluding a branch
-is unguarded.
+One ruleset is live. `Public CI` (id **26699837**), created 2026-11-06, targets
+`refs/heads/main` and `refs/heads/develop` with enforcement `active`. Read it
+with:
+
+```
+gh api repos/digithings-ai/digithings/rulesets?includes_parents=true
+gh api repos/digithings-ai/digithings/rules/branches/develop
+gh api repos/digithings-ai/digithings/rules/branches/main
+```
+
+Classic `GET …/branches/<name>/protection` is a separate API. A token without
+administration scope gets HTTP 403, which does not prove the classic rule is
+absent. The table below is the ruleset the rules API returned on 2026-11-06.
+Re-read both endpoints before treating the table as the whole policy.
 
 ## Origin drafts
 
@@ -39,18 +48,18 @@ The `module/<component>` integration tier was retired in November 2026 (#6751). 
 
 | Branch | Purpose | Protection |
 |--------|---------|------------|
-| `main` | What is actually deployed / released. | PR required (**0** approvals), no force-push, no deletion. One required status check: `Every commit reaching main was reviewed`. Linear history is **not** enforced. |
-| `develop` | Integration branch — merge target for every task PR. Also the repo's **default branch**. | No force-push, no deletion. **No PR gate** — `required_pull_request_reviews` is `null`, so unlike `main` a pull request is not required server-side. Three required checks, `strict: true` — so a PR that *is* opened must be up to date with `develop` before it can merge. |
-| `release/vX.Y.Z` | One per **released** version, cut from `main` at the release commit and tagged there. The maintenance line for that exact version — features accumulate on `develop`, not here, and the branch is never deleted. | No protection rule yet — force-push and deletion are *possible*; see [Enforcement gaps](#enforcement-gaps-verified-2026-08-19). Treat them as append-only regardless. |
+| `main` | What is actually deployed / released. | Ruleset `Public CI`: pull request required, **0** approving reviews, `require_extra_approval_for_unattributed_changes: true`. Required checks `lint`, `secrets`, `unit`, **`strict_required_status_checks_policy: true`**. No force-push, no deletion. Linear history is **not** a rule on this ruleset. |
+| `develop` | Integration branch — merge target for every task PR. Also the repo's **default branch**. | The same ruleset, including a required pull request and strict up-to-date checks. |
+| `release/vX.Y.Z` | One per **released** version, cut from `main` at the release commit and tagged there. The maintenance line for that exact version — features accumulate on `develop`, not here, and the branch is never deleted. | Not included in `Public CI`. No ruleset in the list covers `release/**`, so force-push and deletion are possible; see [Enforcement gaps](#enforcement-gaps). Treat them as append-only regardless. |
 
 Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
-(belt-and-suspenders on top of the PR gate).
+(belt-and-suspenders on top of the ruleset, which requires a pull request).
 
 Local pushes to `develop` require `ALLOW_DEVELOP_PUSH=1` as an environment
-variable. Unlike `main`, `develop` has no server-side PR gate
-(`required_pull_request_reviews` is `null`), so the client pre-push hook is the
-only guard. The usual accident is a branch tracking `develop` upstream, so a
-bare `git push` lands there — repair it with
+variable. `Public CI` applies the same `pull_request` rule to `develop` as to
+`main` (zero approving reviews). The hook is the client-side guard; the ruleset
+is the server-side one. The usual accident is a branch tracking `develop`
+upstream, so a bare `git push` lands there — repair it with
 `git branch --set-upstream-to=github/<branch> <branch>`, then push that branch.
 
 ## Short-lived branches
@@ -257,27 +266,71 @@ to it, so it needs the same `ALLOW_MAIN_PUSH=1`. The `develop` guard works the
   refs this document calls legal.
 - Force-pushes to `main` or `develop` — blocked server-side.
 
-## Enforcement gaps (verified 2026-08-19)
+## Release-please and strict up-to-date
+
+Issue #19 (private monorepo #32) asked whether branch protection should change
+so a release-please pull request would stop sitting `BEHIND` on `develop`.
+Leave ruleset `Public CI` (26699837) as it is. Strict up-to-date stays on for
+`main` and `develop`. Merging an `autorelease: pending` pull request stays a
+human release decision ([AGENTS.md](AGENTS.md#release-cadence-release-please)).
+
+Read-only check on 2026-11-06:
+
+- `strict_required_status_checks_policy` is `true` on **both** `main` and
+  `develop`. A release pull request retargeted at `main` still has to be up to
+  date. The 2026-09-24 snapshot in #19, where `main` had `strict: false`, does
+  not describe this ruleset.
+- `release-please-digichat.yml` and `release-please-digiskills.yml` were removed
+  in #4919 ([CI_CONVENTIONS.md](docs/agents/CI_CONVENTIONS.md)). Nothing under
+  `.github/workflows/` opens those pull requests. `AGENTS.md` still says to keep
+  any future release-please target on `develop`: a squash promotion of a bump
+  that landed only on `main` reads as a no-op and the changelog empties.
+- `GET /git/matching-refs/heads/release-please` returned no refs, and the open
+  pull request list was empty. Nothing is parked `BEHIND` by this ruleset today.
+- `bypass_actors` on 26699837 is empty (`current_user_can_bypass: never`).
+- Ruleset 15270439 (`module-branch-protection`) is not in the list, so it does
+  not block the retired `module/*` path.
+
+These options were considered and declined. None of them were sent to the API:
+
+| Option | Why it stays declined |
+|--------|------------------------|
+| Retarget release-please at `main` | Strict is on there too, the workflows are gone, and `AGENTS.md` forbids that retarget. |
+| Clear strict on `develop`, or on ruleset 26699837 | One flag covers `main` and `develop`. Clearing it drops up-to-date for every pull request, and no release-please actor remains to benefit. |
+| Bypass the release-please app or `release-please--branches--*` | The app no longer pushes those refs. |
+| A scheduled workflow that updates the release branch | There is no such branch, and this dispatch does not add workflows. |
+| Automerge on `autorelease: pending` | A release merge stays Chris's decision. |
+
+Before reopening the question, re-read the live ruleset and the refs:
+
+```
+gh api repos/digithings-ai/digithings/rulesets/26699837 \
+  --jq '{strict: [.rules[] | select(.type=="required_status_checks") | .parameters.strict_required_status_checks_policy], bypass: .bypass_actors, refs: .conditions.ref_name.include}'
+gh api repos/digithings-ai/digithings/git/matching-refs/heads/release-please --jq '.[].ref'
+```
+
+Settings UI: **Rules → Rulesets → Public CI**. Leave strict required status
+checks enabled and the bypass list empty. Save nothing from that screen for
+this issue. Classic protection, if it still sits beside the ruleset, was not
+re-read (HTTP 403). Leave `…/branches/develop/protection` unpatched.
+
+## Enforcement gaps
 
 Two protections this document previously asserted are not actually configured.
 Both are a human call to close — changing branch protection is a settings
-change, not a docs change:
+change, not a docs change. Re-checked against the rules API on 2026-11-06:
 
-- **`release/v*` has no protection rule.** Only the `main` and `develop`
-  patterns exist, so a release branch can be force-pushed or deleted by anyone
-  with write access — and that now matters more than it used to: since a
-  release branch is a shipped version's only maintenance line, losing one means
-  a pinned client can no longer be patched at all. Protecting `release/**`
-  (no force-push, no deletion) is intended, and the payload already exists in
-  `scripts/github-rulesets/04-protect-releases.json`; applying it is a
-  repo-settings change, so it needs a human, not this document.
-- **`main` requires no *approval*.** `required_approving_review_count` is `0`, so
-  a PR into `main` can be merged by whoever opened it. Its one required status
-  check is `Every commit reaching main was reviewed` — the review-coverage gate in
-  `scripts/check_review_coverage.py` — which asserts each commit in the range was
-  reviewed at its own task PR, and clears on a label. Nothing requires CI green
-  beyond that check.
-
-  (This bullet previously said `main` requires no status checks at all, on the
-  strength of `gh api …/rulesets` returning nothing for it. That endpoint does not
-  report classic protection; `…/branches/main/protection` does.)
+- **`release/v*` has no protection rule.** `Public CI` includes only `main` and
+  `develop`, so a release branch can be force-pushed or deleted by anyone
+  with write access. A release branch is a shipped version's only maintenance
+  line, so losing one means a pinned client can no longer be patched at all.
+  Protecting `release/**` (no force-push, no deletion) is intended, and the
+  payload already exists in `scripts/github-rulesets/04-protect-releases.json`.
+  Applying it is a repo-settings change, so it needs a human, not this document.
+- **`main` requires no *approval*.** `required_approving_review_count` is `0`
+  on `Public CI`, so a pull request into `main` can be merged by whoever opened
+  it. The same ruleset does require `lint`, `secrets`, and `unit`, all strict.
+  An older classic-protection read (issue #19, 2026-09-24) named a different
+  check, `Every commit reaching main was reviewed`, and recorded `strict: false`
+  on `main`. That classic endpoint returned 403 on 2026-11-06 and was not
+  re-verified. `require_extra_approval_for_unattributed_changes` is `true`.
