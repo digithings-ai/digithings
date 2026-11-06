@@ -42,6 +42,7 @@ def test_backend_error_type_is_not_a_backend_error_member() -> None:
 
 @pytest.mark.unit
 def test_chroma_query_raises_instead_of_returning_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("chromadb")
     from digisearch.indexes.backends import chroma as chroma_mod
     from digisearch.indexes.backends.backend_errors import SearchBackendError
 
@@ -59,6 +60,7 @@ def test_chroma_query_raises_instead_of_returning_empty(monkeypatch: pytest.Monk
 @pytest.mark.unit
 def test_chroma_healthy_empty_result_still_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     """A healthy backend with no matches must keep returning an empty list."""
+    pytest.importorskip("chromadb")
     from digisearch.indexes.backends import chroma as chroma_mod
 
     monkeypatch.setattr(chroma_mod, "_CHROMA_AVAILABLE", True)

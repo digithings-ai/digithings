@@ -2,7 +2,7 @@
 
 **Last reviewed:** 2026-04-18
 
-High-level phases. Vision and strategy: [docs/VISION.md](docs/VISION.md). Architecture: [ARCHITECTURE.md](ARCHITECTURE.md). Shipping history: [RELEASES.md](RELEASES.md). Per-component depth: each folder's `DIGIxxx.md`. Open work: [GitHub Project](https://github.com/users/chrizefan/projects) and docs/agent-backlog/.
+High-level phases. Vision and strategy: [docs/VISION.md](docs/VISION.md). Architecture: [ARCHITECTURE.md](ARCHITECTURE.md). Shipping history: the release history. Per-component depth: each folder's `DIGIxxx.md`. Open work: [GitHub Project](https://github.com/users/chrizefan/projects) and docs/agent-backlog/.
 
 ---
 

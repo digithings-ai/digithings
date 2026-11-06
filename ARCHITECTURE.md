@@ -1,6 +1,6 @@
 # digithings Architecture
 
-> **For vision and strategy, see [docs/VISION.md](docs/VISION.md) and [ROADMAP.md](ROADMAP.md). For per-component details, read each service's own `ARCHITECTURE.md` (linked in the topology table below). For release history, see [RELEASES.md](RELEASES.md).**
+> **For vision and strategy, see [docs/VISION.md](docs/VISION.md) and [ROADMAP.md](ROADMAP.md). For per-component details, read each service's own `ARCHITECTURE.md` (linked in the topology table below). For release history, see the release history.**
 
 ---
 

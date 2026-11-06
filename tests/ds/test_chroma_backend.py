@@ -8,6 +8,8 @@ import pytest
 from digisearch.core.models import Chunk
 from digisearch.indexes.backends.chroma import ChromaBackend
 
+pytest.importorskip("chromadb")
+
 
 @pytest.mark.unit
 def test_add_keeps_canonical_doc_id_over_spoofed_metadata() -> None:

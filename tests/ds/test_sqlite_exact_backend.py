@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from digisearch.core.models import Chunk, Query
+from digisearch.indexes.backends.backend_errors import SearchBackendError
 from digisearch.indexes.backends.sqlite_exact import SQLiteExactBackend
 
 
@@ -134,8 +135,55 @@ def test_delete_update_snapshot_and_health(tmp_path: Path) -> None:
 def test_query_embedding_dimension_mismatch_raises(tmp_path: Path) -> None:
     backend = _backend(tmp_path)
     backend.add(_chunks())
-    with pytest.raises(ValueError, match="dimension mismatch"):
+    with pytest.raises(SearchBackendError, match="dimension mismatch"):
         backend.query(Query(text="", embedding=[1.0, 0.0], top_k=1))
+
+
+@pytest.mark.unit
+def test_add_rejects_a_different_dimension_and_leaves_collection_usable(
+    tmp_path: Path,
+) -> None:
+    backend = _backend(tmp_path)
+    backend.add(_chunks())
+    with pytest.raises(SearchBackendError, match="dimension mismatch"):
+        backend.add([Chunk(id="bad", content="bad", doc_id="d", embedding=[1.0, 0.0])])
+    assert backend.count() == 3
+    assert backend.query(Query(text="", embedding=[1.0, 0.0, 0.0], top_k=1))[0].chunk.id == "a"
+
+
+@pytest.mark.unit
+def test_add_rejects_a_mixed_dimension_batch_without_writing(tmp_path: Path) -> None:
+    backend = _backend(tmp_path)
+    with pytest.raises(SearchBackendError, match="same non-zero dimension"):
+        backend.add(
+            [
+                Chunk(id="a", content="alpha", doc_id="d", embedding=[1.0, 0.0, 0.0]),
+                Chunk(id="b", content="beta", doc_id="d", embedding=[1.0, 0.0]),
+            ]
+        )
+    assert backend.count() == 0
+
+
+@pytest.mark.unit
+def test_delete_all_allows_reindexing_with_a_new_dimension(tmp_path: Path) -> None:
+    backend = _backend(tmp_path)
+    backend.add(_chunks())
+    backend.delete(["a", "b", "c"])
+    assert backend.count() == 0
+    backend.add([Chunk(id="d", content="delta", doc_id="d", embedding=[1.0, 0.0])])
+    assert backend.count() == 1
+
+
+@pytest.mark.unit
+def test_dimension_survives_reopen(tmp_path: Path) -> None:
+    first = _backend(tmp_path)
+    first.add(_chunks())
+    first.close()
+
+    second = _backend(tmp_path)
+    with pytest.raises(SearchBackendError, match="dimension mismatch"):
+        second.add([Chunk(id="bad", content="bad", doc_id="d", embedding=[1.0, 0.0])])
+    assert second.count() == 3
 
 
 @pytest.mark.unit
