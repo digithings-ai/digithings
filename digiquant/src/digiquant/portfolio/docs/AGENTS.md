@@ -1,6 +1,6 @@
 # portfolio — agent operator guide
 
-> Sibling of [`digiquant/src/digiquant/research/docs/AGENTS.md`](../../research/docs/AGENTS.md).
+> Sibling of `digiquant/src/digiquant/research/docs/AGENTS.md`.
 > research owns research (A0–A4); portfolio owns thesis-aware portfolio loop (thesis–commit).
 > Boundary: [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md) · Spec §9–§11:
 > `docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`
@@ -100,5 +100,5 @@ portfolio tests gate on `tests/dq/portfolio/conftest.py` (full set in `test-rese
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — thesis–commit topology (canonical)
 - [`PORTFOLIO_SUBGRAPH.md`](PORTFOLIO_SUBGRAPH.md) — historical Wave 2 spec
-- [research operator guide](../../research/docs/AGENTS.md)
+- the research operator guide
 - research runbook

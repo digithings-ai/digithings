@@ -68,7 +68,7 @@ Every FastAPI service serves Swagger at `http://127.0.0.1:<port>/docs`.
 
 | Goal | Command |
 |---|---|
-| Use prebuilt images from GHCR (no local build) | `make pull-ghcr && make up-ghcr` |
+| Build and run locally with Docker | `make up` |
 | Chat UI with hot reload against a running stack | `make up` then `make digichat-dev` (port 3000) |
 | Python services without Docker | `make stack-local`, stop with `make stack-local-stop` |
 | Stop everything | `make down` |

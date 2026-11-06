@@ -13,7 +13,7 @@ Paperclip is the live work tracker. Do not add new task lists here.
 | [LOCAL_STACK.md](LOCAL_STACK.md) | Local stack |
 | [SELF_HOST.md](SELF_HOST.md) | Self-hosting |
 | MERGE_QUEUE.md | How `develop` merges |
-| [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md) | Branch rules |
+| Branch protection | Private runbook |
 | [LLM_PROVIDERS.md](LLM_PROVIDERS.md) | Model providers used by the product |
 | [MODEL_CATALOG.md](MODEL_CATALOG.md) | Model catalog |
 | [LICENSING.md](LICENSING.md) | Licensing |
