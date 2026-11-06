@@ -559,6 +559,20 @@ parallel fast→fast/thorough→advanced; firecrawl/tinyfish/internal ignore it)
 | Orchestrator `web_search` | always advertised; the `provider` enum lists only *configured* providers so an operator is never offered a choice that would 503 |
 | MCP `web_search` | JSON `WebSearchResponse`; fail-closed answers are `[web_search disabled: …]` / `[web_search unavailable: …]` / `[web_search error: …]` strings (MCP never raises) |
 
+#### Point-in-time archive fetch (`web_search/snapshot.py`)
+
+Free historical page body for a URL the caller already has (a prior hit, a watchlist, a citation). This is the in-house counterpart to a paid snapshot API: it reads a public web archive, not the live site.
+
+`fetch_markdown_at(url, as_of)` returns `SnapshotPage {markdown, ref}`. `ref` is `SnapshotRef {original_url, archive_url, captured_at, source, timestamp}` with `source` of `wayback` (CDX or availability) or `memento` (TimeGate). `as_of` must be timezone-aware. The resolver asks CDX with `to=as_of` and `limit=-1`, then the availability API, then a Memento TimeGate. It keeps the latest HTTP 200 capture at or before `as_of` and drops anything later, including a "closest" hit the endpoint offered from the future. No such capture raises `SnapshotUnavailable`. Replay uses `https://web.archive.org/web/{timestamp}id_/{url}` (raw bytes). A redirect whose archive timestamp is missing or later than `as_of` raises; the original URL is never requested.
+
+`run_web_search(req, *, as_of=...)` still ranks with the live searxng→ddgs result list — that list is not a historical SERP — then enriches `fetch_max_pages` hits through `fetch_markdown_at`. A miss, an empty extract, or a hit outside `req.fence` replaces the snippet with `[snapshot unavailable: …]`. The live provider snippet is not kept on those hits, and `HttpFetcher` is not opened on them. Hits past `fetch_max_pages` are not snapshot-fetched; their snippets stay the live SERP text and `output.captures[].fetched` is false. `output` is `{as_of, ranking: "live_serp_not_historical", captures: [...]}`. `search_web` does not fetch. `WebSearchRequest` has no `as_of` field, so `POST /v1/web_search`, MCP, and the orchestrator tool stay on the live extract path until a later change threads the argument through.
+
+SSRF: the HTTP client allow-lists `web.archive.org`, `archive.org`, and `wayback.archive.org` only, and passes that set to digifetch `validate_fetch_url` so those hosts are not DNS-resolved as a condition of the request. Literal internal addresses and non-http URLs are refused before any archive lookup. The default client waits `DIGISEARCH_SNAPSHOT_MIN_INTERVAL_S` seconds (default 1) between archive requests and sends a `digisearch-snapshot` User-Agent. Nothing here is indexed.
+
+Robots and terms: the original site is not contacted, so this path does not re-read its `robots.txt`. The archive applied robots when it crawled; a disallowed URL often has no capture and comes back as `SnapshotUnavailable`. Replay and CDX are Internet Archive services — stay inside their published terms of use. This module does not record that terms decision.
+
+Coverage against a paid snapshot index (rolling window of about five months, request cap, denser on news): the archive is sparse. JavaScript applications often survive as an empty shell, robots-blocked URLs are missing, and a page can go years between captures. This path will miss pages a recent paid snapshot still has, and it will have older captures that a five-month window does not. Treat a hit as the archived body at `captured_at`, not as proof the live SERP looked like that on `as_of`.
+
 #### Optional EXA live web search (`digisearch/web_exa.py`)
 
 Thin wrapper over the EXA neural web-search API (https://exa.ai) — an *alternative*
@@ -1383,6 +1397,7 @@ digisearch/src/digisearch/
 │   ├── extractor.py           # fetch HTML → markdown (trafilatura, readability fallback)
 │   ├── citation.py            # Citation{url,title,excerpt} + normalize_url() (#4064 Task 0)
 │   ├── fetch.py               # fetch_markdown(): digifetch + extractor, never indexes (#4064 Task 0)
+│   ├── snapshot.py            # fetch_markdown_at(): archive capture ≤ as_of, never the live URL
 │   └── service.py             # run_web_search / search_web: searxng→ddgs failover + enrich
 │
 ├── web/                       # Phase B web research branch (#4064; [agent] + [rerank])
@@ -2349,6 +2364,7 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_WEB_SEARCH_BACKEND` | `auto` | `auto` (searxng→ddgs failover) \| `searxng` \| `ddgs` (#3853) |
 | `DIGISEARCH_SEARXNG_URL` | `http://127.0.0.1:8080` | searxng sidecar base URL (compose sets `http://searxng:8080` in-container; #3853) |
 | `DIGISEARCH_FETCH_ALLOWED_HOSTS` | _(unset)_ | Comma-separated operator-trusted hostnames exempted from the digifetch SSRF address refusal (e.g. an egress proxy). Also accepted per-call via `WebSearchConfig.fetch_allowed_hosts`; passed to `HttpFetcher(allowed_hosts=…)` (#3934) |
+| `DIGISEARCH_SNAPSHOT_MIN_INTERVAL_S` | `1` | Minimum seconds between point-in-time archive requests (`web_search/snapshot.py`). Read when the default archive client is built, not at import. `0` disables the wait. A non-numeric or negative value raises `SnapshotError`. |
 | `DIGISEARCH_WEB_SEARCH_LIVE` | _(unset)_ | Set `1` to run the live-sampled legs of `digisearch/tests/test_web_search_eval.py` (provider suite, real backends, p50 fetch+extract < 5s) and `tests/ds/test_web_eval_live.py` (Phase B research-turn cases, p50 stage ms + citation coverage scaffolding, never SLOs); default runs fully mocked offline (#3853, #4064) |
 | `DIGISEARCH_WEBSETS_LIVE` | _(unset)_ | Set `1` to run the live leg of `tests/ds/test_websets_live.py` (real searxng/ddgs recall + digillm verify/enrich; prints the Phase D record — timings, event multiset, s5 funding deltas, CSV shape — never SLOs); also needs `DIGISEARCH_VERIFY_MODEL`/`DIGISEARCH_ENRICH_MODEL` + a provider key; default runs fully offline (#4066) |
 | `DIGISEARCH_WEBSETS_DB` | _(unset)_ | Explicit SQLite path for the Phase D webset store; wins over the `DIGI_WORKSPACE` default and the cwd fallback (#4066) |
