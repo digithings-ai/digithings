@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import threading
+from datetime import datetime
 from typing import Literal
 
 import httpx
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from digisearch.web_search.ddgs_provider import DdgsWebSearchProvider
 from digisearch.web_search.extractor import extract_markdown
+from digisearch.web_search.fence import fence_guard, url_in_fence
 from digisearch.web_search.models import (
     WebSearchConfigError,
     WebSearchProviderError,
@@ -23,6 +25,7 @@ from digisearch.web_search.models import (
 )
 from digisearch.web_search.page_corpus import corpus_page_text, is_challenge_page
 from digisearch.web_search.searxng_provider import SearXNGWebSearchProvider
+from digisearch.web_search.snapshot import SnapshotError, fetch_markdown_at, require_aware
 
 logger = logging.getLogger(__name__)
 
@@ -206,19 +209,97 @@ def _from_corpus(hit: WebSearchResult, corpus_id: str) -> WebSearchResult:
     return hit.model_copy(update={"snippet": text[:2000]}) if text else hit
 
 
-def run_web_search(
-    req: WebSearchRequest, config: WebSearchConfig | None = None
+def _snapshot_miss(
+    hit: WebSearchResult, detail: str
+) -> tuple[WebSearchResult, dict[str, str | bool]]:
+    """Replace a hit's snippet with an explicit miss.
+
+    The provider snippet is live-index copy. Keeping it would present today's
+    blurb as the page at ``as_of``.
+    """
+    text = f"[snapshot unavailable: {detail}]"
+    return hit.model_copy(update={"snippet": text}), {"url": hit.url, "error": detail}
+
+
+def _enrich_at_snapshot(
+    resp: WebSearchResponse,
+    config: WebSearchConfig,
+    as_of: datetime,
+    fence: list[str] | None,
 ) -> WebSearchResponse:
+    """Search-result enrichment from archive captures. Never fetches the live URL."""
+    as_of = require_aware(as_of)
+    enriched: list[WebSearchResult] = []
+    captures: list[dict[str, str | bool]] = []
+    pins = fence or []
+    for hit in resp.results[: config.fetch_max_pages]:
+        if pins and not url_in_fence(hit.url, pins):
+            row, record = _snapshot_miss(hit, "outside fence")
+            enriched.append(row)
+            captures.append(record)
+            continue
+        try:
+            page = fetch_markdown_at(hit.url, as_of, timeout=config.fetch_timeout)
+        except SnapshotError as exc:
+            row, record = _snapshot_miss(hit, str(exc))
+            enriched.append(row)
+            captures.append(record)
+            continue
+        text = page.markdown.strip()
+        snippet = (
+            text[:2000]
+            if text
+            else (
+                f"[snapshot unavailable: capture at {page.ref.captured_at.isoformat()} "
+                "extracted no text]"
+            )
+        )
+        enriched.append(hit.model_copy(update={"snippet": snippet}))
+        captures.append(
+            {
+                "url": hit.url,
+                "source": page.ref.source,
+                "captured_at": page.ref.captured_at.isoformat(),
+                "archive_url": page.ref.archive_url,
+                "original_url": page.ref.original_url,
+                "fetched": True,
+            }
+        )
+    for hit in resp.results[config.fetch_max_pages :]:
+        enriched.append(hit)
+        captures.append({"url": hit.url, "fetched": False})
+    return WebSearchResponse(
+        query=resp.query,
+        results=enriched,
+        provider=resp.provider,
+        output={
+            "as_of": as_of.isoformat(),
+            "ranking": "live_serp_not_historical",
+            "captures": captures,
+        },
+    )
+
+
+def run_web_search(
+    req: WebSearchRequest,
+    config: WebSearchConfig | None = None,
+    *,
+    as_of: datetime | None = None,
+) -> WebSearchResponse:
+    """Search, then enrich.
+
+    ``as_of`` switches enrichment to archive captures at or before that instant
+    and refuses the live page fetch. Ranking stays the live OSS result list:
+    it is not a historical SERP.
+    """
     config = config or WebSearchConfig.from_env()
     resp = _search_only(req, config)
+    if as_of is not None:
+        return _enrich_at_snapshot(resp, config, as_of, req.fence)
     policy = RetryPolicy(attempts=2, base_delay=1.0, factor=2.0, max_delay=5.0)
     limiter = _limiter_for(config.min_interval_s)
     enriched: list[WebSearchResult] = []
-    guard = None
-    if req.fence:
-        from digisearch.web_search.fence import fence_guard
-
-        guard = fence_guard(req.fence)
+    guard = fence_guard(req.fence) if req.fence else None
     with HttpFetcher(
         timeout=config.fetch_timeout, allowed_hosts=config.fetch_allowed_hosts
     ) as fetcher:
