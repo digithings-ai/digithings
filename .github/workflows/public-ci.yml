@@ -54,8 +54,8 @@ jobs:
         with:
           version: "0.12.24"
           enable-cache: true
-      - name: Install from lockfile
-        run: uv sync --frozen --all-packages --all-extras --no-extra chroma
+      - name: Install lint tooling from lockfile
+        run: uv sync --frozen --all-packages
       - name: Ruff
         run: |
           uv run --frozen --no-sync ruff check \
@@ -125,7 +125,7 @@ jobs:
           version: "0.12.24"
           enable-cache: true
       - name: Install from lockfile
-        run: uv sync --frozen --all-packages --all-extras --no-extra chroma
+        run: uv sync --frozen --all-packages --all-extras
       - name: Git identity for hook tests
         run: |
           git config --global user.name "digithings CI"
@@ -150,3 +150,32 @@ jobs:
             tests/dq/test_honesty_series.py tests/dq/test_nautilus_runner.py \
             tests/dq/test_pipeline_graph.py tests/dq/test_v1_jobs.py \
             tests/dq/data/test_levels_nautilus.py tests/dq/replay
+
+  no-chroma:
+    needs: scope
+    if: needs.scope.outputs.public == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.24"
+          enable-cache: true
+      - name: Install the public runtime without Chroma
+        # `all` re-adds Chroma through digisearch[chroma], so exclude both the
+        # named extra and the meta-extra. This is the supported public install.
+        run: |
+          uv sync --frozen --all-packages --all-extras \
+            --no-extra chroma --no-extra all
+      - name: Assert Chroma is not installed
+        run: |
+          uv run --frozen --no-sync python - <<'PY'
+          import importlib.util
+          import sys
+          if importlib.util.find_spec("chromadb") is not None:
+              sys.exit("chromadb is installed in the public no-chroma job")
+          PY
+      - name: Public digisearch tests without Chroma
+        run: |
+          uv run --frozen --no-sync pytest tests/ds -m unit --tb=short -o addopts="" -q

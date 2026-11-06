@@ -76,7 +76,7 @@ When a task PR is merge-ready, **merge it**. Independent of further user input. 
 ### `develop` merges go through the merge queue
 
 A merge into `develop` is **not** the authoring agent's `gh pr merge`. It goes through
-[`scripts/merge_queue.py`](docs/MERGE_QUEUE.md) under a role on the merge-authority roster:
+`scripts/merge_queue.py` under a role on the merge-authority roster:
 
 | Role | Key |
 |---|---|
@@ -212,7 +212,7 @@ The broker is how a seat gets GitHub access: a daemon on a dedicated account min
 - **`gh api -f body=@file` sends the literal `@file`.** The shim expands a `@path` field value for both `-f` and `-F`, and refuses a body that is a bare path; read the file yourself if you write the call without the shim.
 - **A PR outside the `digithings-ai` org is refused**, by the shim and by the git credential helper. There is no upstream PR, under any identity.
 
-Install, policy, rollback and the limits of this control: [`docs/ops/dt-broker.md`](docs/ops/dt-broker.md).
+Install, policy, rollback and the limits of this control: `docs/ops/dt-broker.md`.
 
 ---
 
@@ -293,7 +293,7 @@ The Copilot request job was removed from `ci.yml` when that subscription lapsed
 (#1894). Usage-limit `neutral` is not a review — run `/review` instead.
 
 **CodeRabbit is optional / sunset.** Keep the CodeRabbit Cursor plugin **disabled**
-in [`.cursor/settings.json`](.cursor/settings.json); [`.cursor/rules/no-coderabbit.mdc`](.cursor/rules/no-coderabbit.mdc)
+in `.cursor/settings.json`; `.cursor/rules/no-coderabbit.mdc`
 counter-instructs agents to ignore plugin alwaysApply routing if it is re-enabled. While the GitHub App
 still runs, it auto-reviews only bases listed in [`.coderabbit.yaml`](.coderabbit.yaml)
 (`develop` default plus `main`, `module/*`, `release/*`). Do **not** run CodeRabbit
@@ -660,7 +660,7 @@ Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced b
 
 **Issue linkage is a convention, not a CI gate.** Prefer a `task/<N>-slug` branch (created by `make task ISSUE=N`, implicitly linking to issue #N), or a `Fixes #N` / `Closes #N` / `Resolves #N` line in the PR body for anything else, so shipped work traces back to the backlog. Nothing in CI enforces this — a `check-linkage` job used to run on every PR, but it was never a required status check on `main` or `develop`, so a failure never blocked a merge; it just produced rework when a PR had to be re-edited to satisfy it, and merged unchanged when it wasn't. Removed 2026-08; see [docs/adr/0024-drop-pr-linkage-enforcement.md](docs/adr/0024-drop-pr-linkage-enforcement.md) for the audit and the full historical bypass logic. `ci-review-coverage.yml`'s "every commit reaching main was reviewed" check is unrelated and still required — that one asserts review happened, not that an issue is linked.
 
-**PR titles into `develop` are linted.** Use Conventional Commits with a **required scope** (e.g. `feat(digillm): …`, `ci(root): …`). Scope allow-list and exemptions (release-please, develop→main promote) are in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml); short contributor note in [CONTRIBUTING.md](CONTRIBUTING.md).
+**PR titles into `develop` are linted.** Use Conventional Commits with a **required scope** (e.g. `feat(digillm): …`, `ci(root): …`). Scope allow-list and exemptions (release-please, develop→main promote) are in `.github/workflows/ci-pr-title.yml`; short contributor note in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
@@ -709,7 +709,7 @@ branched from `release/vX.Y.Z`); the fix is cherry-picked onto `develop` so the
 next promotion carries it, and a release branch (or its version bump) is never
 merged into `main`. Recipes:
 [BRANCHING.md](BRANCHING.md#cutting-a-release) § Cutting a release / Patching a
-release, and [RELEASES.md](RELEASES.md#patching-a-released-version).
+release, and RELEASES.md.
 
 ---
 

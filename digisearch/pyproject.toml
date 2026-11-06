@@ -66,7 +66,7 @@ minilm = ["onnxruntime>=1.17", "tokenizers>=0.21", "numpy>=1.24"]
 # pull this extra in, so a [web-search]-only install still reaches the lazy-import guard
 # at runtime and gets WebResearchError instead of a working client. The guards exist
 # precisely so base installs stay importable. The deployed digisearch image installs
-# [server,ingestion,azure,chroma,web-search] and not this extra, so digillm stays out of
+# [server,ingestion,azure,chroma,minilm,web-search] and not this extra, so digillm stays out of
 # the container: the board ruled that the image does not need the remote embedding path
 # (DIG-1407), and installing digillm would drag openai in with it and enable that path
 # for the first time. infra/docker/Dockerfile.digithings-stack-cloudflare, which does use digillm,

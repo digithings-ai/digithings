@@ -46,7 +46,7 @@ docker compose \
   up -d
 ```
 
-Or: `make up-ghcr` / `make up-ghcr-digichat`. Full notes: [templates/self-host/README.md](templates/self-host/README.md). Image publish: [RELEASES.md](../RELEASES.md).
+Or: `make up-ghcr` / `make up-ghcr-digichat`. Full notes: the self-host templates. Image publish: the release process.
 
 Swagger UI (auth-exempt): `http://127.0.0.1:<port>/docs` on each FastAPI service (8000–8005).
 
@@ -114,7 +114,7 @@ curl -s -X POST http://127.0.0.1:8000/workflow \
 1. Extract, copy `.env.example` to `.env`, set secrets.
 2. `make up` (optionally `make up-heartbeat`).
 
-The tarball is **not** versioned; for production shipping, use git tags or image digests per [RELEASES.md](../RELEASES.md).
+The tarball is **not** versioned; for production shipping, use git tags or image digests per the release process.
 
 ## Unattended run (multi-day)
 
