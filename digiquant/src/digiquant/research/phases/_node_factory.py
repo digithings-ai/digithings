@@ -36,7 +36,11 @@ from digiquant.dashboard.edit_mode.content_identity import (
 from digiquant.dashboard.edit_mode.merge import MergeError, merge_document_patch, section_index
 from digiquant.dashboard.envcompat import MACRO_STALE_DAYS, RESEARCH_DATA_TOOLS, env_lookup
 from digiquant.dashboard.research_retrieval.planner import AttentionRolloutMode
-from digiquant.research.phases.fail_soft import run_segment_fail_soft
+from digiquant.research.phases.fail_soft import (
+    invoke_llm_output,
+    run_segment_fail_soft,
+    with_validation_repair,
+)
 from digiquant.research.research_attention import (
     apply_segment_metric_patch,
     artifact_target_key,
@@ -65,6 +69,37 @@ from digiquant.research.triage import triage_decision_to_signal
 from digiquant.tool_rounds import run_digiquant_research_agent as run_research_agent
 
 logger = logging.getLogger(__name__)
+
+
+def _call_validated_output(
+    *,
+    skill_text: str,
+    phase_inputs: dict[str, Any],
+    shared_context: dict[str, Any],
+    output_model: type[BaseModel],
+    phase_slug: str,
+    tools: list[dict[str, Any]] | None,
+    execute_tool: Callable[[str, dict[str, Any]], str] | None,
+    model: str | None,
+) -> BaseModel:
+    """One research-agent call plus one repair retry. Validation misses raise
+    :class:`LlmValidationSkipped` for :func:`run_segment_fail_soft` to skip.
+    """
+
+    def _call(repair: str | None) -> BaseModel:
+        return run_research_agent(
+            skill_text=skill_text,
+            phase_inputs=with_validation_repair(phase_inputs, repair),
+            shared_context=shared_context,
+            output_model=output_model,
+            model=model,
+            phase_slug=phase_slug,
+            tools=tools,
+            execute_tool=execute_tool,
+            max_retries=0,
+        )
+
+    return invoke_llm_output(_call, schema_name=output_model.__name__)
 
 
 def _data_tools_enabled() -> bool:
@@ -833,7 +868,7 @@ def _run_edit_segment(
     )
 
     def _run_patch() -> DocumentPatch:
-        result = run_research_agent(
+        result = _call_validated_output(
             skill_text=skill_text,
             phase_inputs=edit_inputs,
             shared_context=shared,
@@ -1038,7 +1073,7 @@ def build_segment_node(
         # whole run. Only the LLM call is wrapped; the input prep above stays outside
         # the thunk so genuine wiring bugs still fail loud.
         slot, errors = run_segment_fail_soft(
-            run_fn=lambda: run_research_agent(
+            run_fn=lambda: _call_validated_output(
                 skill_text=skill_text,
                 phase_inputs=inputs,
                 shared_context=shared,

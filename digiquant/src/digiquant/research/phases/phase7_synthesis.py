@@ -31,6 +31,11 @@ from digiquant.research.phases._node_factory import (
     _edit_phase_inputs,
     _shared_context,
 )
+from digiquant.research.phases.fail_soft import (
+    VALIDATION_SKIP_REASON,
+    invoke_llm_output,
+    with_validation_repair,
+)
 from digiquant.research.research_attention import (
     apply_digest_metric_patch,
     artifact_target_key,
@@ -544,10 +549,31 @@ def _prior_is_valid_digest(prior: PriorPublished) -> bool:
     return True
 
 
-def _carry_prior_digest_or_raise(
-    state: ResearchState, document_key: str, exc: Exception
-) -> dict[str, Any]:
-    """Fail-soft degrade: carry a valid prior digest instead of aborting research."""
+def _run_validated(
+    *,
+    skill_text: str,
+    phase_inputs: dict[str, Any],
+    shared_context: dict[str, Any],
+    output_model: type[BaseModel],
+    phase_slug: str,
+) -> BaseModel:
+    """Digest LLM call: one repair retry, then :class:`LlmValidationSkipped`."""
+
+    def _call(repair: str | None) -> BaseModel:
+        return run_research_agent(
+            skill_text=skill_text,
+            phase_inputs=with_validation_repair(phase_inputs, repair),
+            shared_context=shared_context,
+            output_model=output_model,
+            phase_slug=phase_slug,
+            max_retries=0,
+        )
+
+    return invoke_llm_output(_call, schema_name=output_model.__name__)
+
+
+def _degrade_digest(state: ResearchState, document_key: str, exc: Exception) -> dict[str, Any]:
+    """Carry a valid prior digest, or skip with a marker. Never abort the run."""
     prior = _DigestPriorLoader(state, document_key).load(("digest", document_key), state.run_date)
     if prior is not None and _prior_is_valid_digest(prior):
         logger.warning(
@@ -574,7 +600,31 @@ def _carry_prior_digest_or_raise(
                 )
             ],
         }
-    raise exc
+    logger.warning(
+        "master-digest failed (%s: %s); no prior digest to carry — skipping with marker",
+        type(exc).__name__,
+        exc,
+    )
+    return {
+        "phase7_digest": {
+            "segment": "master-digest",
+            "date": state.run_date.isoformat(),
+            "body": (
+                "*Note: master digest skipped after LLM output failed validation "
+                f"({type(exc).__name__}).*\n"
+            ),
+            "regime_label": _regime_label_from_phase3(state),
+            "continuity": VALIDATION_SKIP_REASON,
+        },
+        "errors": [
+            PhaseError(
+                phase="phase7_synthesis",
+                node="master-digest",
+                message=f"{type(exc).__name__}: {exc}"[:500],
+                retryable=True,
+            )
+        ],
+    }
 
 
 def _digest_skips_llm(state: ResearchState) -> bool:
@@ -608,7 +658,7 @@ def _subsection_node(slug: str):
             return {}
         skill_text = load_skill("digest-subsection")
         try:
-            result = run_research_agent(
+            result = _run_validated(
                 skill_text=skill_text,
                 phase_inputs=_subsection_phase_inputs(slug, state),
                 shared_context=_digest_shared_context(state),
@@ -686,7 +736,7 @@ def _stitch_node(state: ResearchState) -> dict[str, Any]:
                 triage_reason="digest_edit",
             )
             try:
-                patch = run_research_agent(
+                patch = _run_validated(
                     skill_text=skill_text,
                     phase_inputs=edit_inputs,
                     shared_context=shared,
@@ -694,7 +744,7 @@ def _stitch_node(state: ResearchState) -> dict[str, Any]:
                     phase_slug="master-digest",
                 )
             except Exception as exc:  # observable degrade, not a swallow
-                return _carry_prior_digest_or_raise(state, document_key, exc)
+                return _degrade_digest(state, document_key, exc)
             if not isinstance(patch, DocumentPatch):
                 msg = f"digest edit expected DocumentPatch, got {type(patch).__name__}"
                 raise TypeError(msg)
@@ -714,7 +764,7 @@ def _stitch_node(state: ResearchState) -> dict[str, Any]:
 
     skill_text = load_skill("digest")
     try:
-        result = run_research_agent(
+        result = _run_validated(
             skill_text=skill_text,
             phase_inputs=phase_inputs,
             shared_context=shared,
@@ -722,7 +772,7 @@ def _stitch_node(state: ResearchState) -> dict[str, Any]:
             phase_slug="master-digest",
         )
     except Exception as exc:  # observable degrade, not a swallow
-        return _carry_prior_digest_or_raise(state, document_key, exc)
+        return _degrade_digest(state, document_key, exc)
     return {"phase7_digest": _finalize_digest(state, result.model_dump(mode="json"))}
 
 

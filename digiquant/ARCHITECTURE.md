@@ -710,6 +710,8 @@ All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extr
 
 Research and portfolio sub-graphs, evidence bundles, and the lineage ledger are in [Research and portfolio](docs/architecture/research-portfolio.md).
 
+A research node's LLM output that fails Pydantic validation is retried once with a repair prompt (`digiquant.research.phases.fail_soft.invoke_llm_output`, `max_retries=0` on the inner agent so the retry is not doubled). A second failure skips that node: segment slots carry `reason=llm_validation_skipped`, and a master digest with no prior publishes a continuity marker of the same name. The graph continues. Provider errors still carry as `node_failed_no_data`.
+
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 
 The strategy store and shared market-data tables are in [Data layer](docs/architecture/data-layer.md).
