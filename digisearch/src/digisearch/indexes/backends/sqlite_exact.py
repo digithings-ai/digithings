@@ -13,7 +13,6 @@ import json
 import logging
 import math
 import os
-import shutil
 import sqlite3
 import threading
 import time
@@ -45,6 +44,10 @@ CREATE TABLE IF NOT EXISTS chunks (
     PRIMARY KEY (collection, id)
 );
 CREATE INDEX IF NOT EXISTS idx_chunks_collection ON chunks(collection);
+CREATE TABLE IF NOT EXISTS collection_dimensions (
+    collection TEXT PRIMARY KEY,
+    dimension INTEGER NOT NULL
+);
 """
 
 
@@ -114,17 +117,58 @@ class SQLiteExactBackend(DigiIndex):
         if all(have):
             return [[float(v) for v in chunk.embedding or []] for chunk in chunks]
         provider = self._resolved_provider()
-        raw = provider.embed([chunk.content for chunk in chunks])  # type: ignore[attr-defined]
-        embeddings = [[float(v) for v in vec] for vec in raw]
-        for chunk, embedding in zip(chunks, embeddings, strict=True):
-            chunk.embedding = embedding
-        return embeddings
+        try:
+            raw = provider.embed([chunk.content for chunk in chunks])  # type: ignore[attr-defined]
+        except Exception as exc:
+            raise SearchBackendError(f"embedding provider failed for {self.name!r}: {exc}") from exc
+        if len(raw) != len(chunks):
+            raise SearchBackendError(
+                f"embedding provider returned {len(raw)} vectors for {len(chunks)} chunks "
+                f"in {self.name!r}"
+            )
+        return [[float(v) for v in vec] for vec in raw]
+
+    def _stored_dimension(self) -> int | None:
+        """Return the collection's embedding width, including legacy databases.
+
+        New databases record the width in ``collection_dimensions``. A database
+        written before that table existed is inferred from the stored float32
+        blobs; mixed widths there are refused rather than silently scored.
+        """
+        row = self._conn.execute(
+            "SELECT dimension FROM collection_dimensions WHERE collection = ?",
+            (self.name,),
+        ).fetchone()
+        if row:
+            return int(row[0])
+        row = self._conn.execute(
+            "SELECT MIN(length(embedding)), MAX(length(embedding)) "
+            "FROM chunks WHERE collection = ?",
+            (self.name,),
+        ).fetchone()
+        if not row or row[0] is None:
+            return None
+        low, high = int(row[0]), int(row[1])
+        if low != high or low % 4:
+            raise SearchBackendError(
+                f"collection {self.name!r} contains mixed or malformed embeddings; "
+                "re-index it with one embedding model"
+            )
+        return low // 4
 
     def add(self, chunks: list[Chunk]) -> None:
         if not chunks:
             return
         start = time.perf_counter()
         embeddings = self._embed(chunks)
+        dimension = len(embeddings[0])
+        if dimension == 0 or any(len(vec) != dimension for vec in embeddings):
+            raise SearchBackendError(
+                f"sqlite index refused batch for {self.name!r}: every embedding "
+                "must have the same non-zero dimension"
+            )
+        for chunk, embedding in zip(chunks, embeddings, strict=True):
+            chunk.embedding = embedding
         rows = [
             (
                 self.name,
@@ -142,6 +186,30 @@ class SQLiteExactBackend(DigiIndex):
         ]
         try:
             with self._lock, self._conn:
+                stored = self._stored_dimension()
+                if stored is not None and stored != dimension:
+                    raise SearchBackendError(
+                        f"sqlite index dimension mismatch for {self.name!r}: "
+                        f"collection uses {stored}, batch uses {dimension}"
+                    )
+                if stored is not None:
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO collection_dimensions(collection, dimension) "
+                        "VALUES (?, ?)",
+                        (self.name, stored),
+                    )
+                else:
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO collection_dimensions(collection, dimension) "
+                        "VALUES (?, ?)",
+                        (self.name, dimension),
+                    )
+                    stored = self._stored_dimension()
+                    if stored != dimension:
+                        raise SearchBackendError(
+                            f"sqlite index dimension mismatch for {self.name!r}: "
+                            f"collection uses {stored}, batch uses {dimension}"
+                        )
                 self._conn.executemany(
                     """
                     INSERT INTO chunks(collection, id, doc_id, content, metadata, embedding)
@@ -154,6 +222,8 @@ class SQLiteExactBackend(DigiIndex):
                     """,
                     rows,
                 )
+        except SearchBackendError:
+            raise
         except (OSError, sqlite3.Error, TypeError, ValueError) as exc:
             logger.exception("sqlite index failed")
             raise SearchBackendError(f"sqlite index failed for {self.name!r}: {exc}") from exc
@@ -178,39 +248,56 @@ class SQLiteExactBackend(DigiIndex):
         provider = self._resolved_provider()
         embedding = query.embedding
         if embedding is None:
-            embedding = provider.embed([query.text])[0]  # type: ignore[attr-defined]
+            try:
+                embedding = provider.embed([query.text])[0]  # type: ignore[attr-defined]
+            except Exception as exc:
+                raise SearchBackendError(
+                    f"embedding provider failed for {self.name!r}: {exc}"
+                ) from exc
         vector = [float(v) for v in embedding]
 
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT id, doc_id, content, metadata, embedding FROM chunks WHERE collection = ?",
-                (self.name,),
-            ).fetchall()
+        try:
+            with self._lock:
+                stored = self._stored_dimension()
+                if stored is not None and stored != len(vector):
+                    raise SearchBackendError(
+                        f"sqlite query dimension mismatch for {self.name!r}: "
+                        f"index uses {stored}, query uses {len(vector)}"
+                    )
+                rows = self._conn.execute(
+                    "SELECT id, doc_id, content, metadata, embedding "
+                    "FROM chunks WHERE collection = ?",
+                    (self.name,),
+                ).fetchall()
 
-        matches: list[tuple[float, str, str, str, dict[str, Any]]] = []
-        for chunk_id, doc_id, content, raw_meta, blob in rows:
-            meta = json.loads(raw_meta)
-            if structured and not chunk_metadata_matches(structured, meta):
-                continue
-            if not chunk_matches_workspace(meta, query.workspace_id):
-                continue
-            score = (1.0 + _cosine(vector, _decode(blob))) / 2.0
-            matches.append((score, chunk_id, doc_id, content, meta))
+            matches: list[tuple[float, str, str, str, dict[str, Any]]] = []
+            for chunk_id, doc_id, content, raw_meta, blob in rows:
+                meta = json.loads(raw_meta)
+                if structured and not chunk_metadata_matches(structured, meta):
+                    continue
+                if not chunk_matches_workspace(meta, query.workspace_id):
+                    continue
+                score = (1.0 + _cosine(vector, _decode(blob))) / 2.0
+                matches.append((score, chunk_id, doc_id, content, meta))
 
-        matches.sort(key=lambda item: (-item[0], item[1]))
-        total = len(matches)
-        page = matches[offset : offset + n] if n else []
-        out: list[Result] = []
-        for rank, (score, chunk_id, doc_id, content, meta) in enumerate(page, start=1):
-            chunk = Chunk(
-                id=chunk_id,
-                content=content,
-                doc_id=doc_id,
-                embedding=None,
-                metadata=meta,
-            )
-            out.append(Result(chunk=chunk, score=score, rank=rank))
-        return out, total
+            matches.sort(key=lambda item: (-item[0], item[1]))
+            total = len(matches)
+            page = matches[offset : offset + n] if n else []
+            out: list[Result] = []
+            for rank, (score, chunk_id, doc_id, content, meta) in enumerate(page, start=1):
+                chunk = Chunk(
+                    id=chunk_id,
+                    content=content,
+                    doc_id=doc_id,
+                    embedding=None,
+                    metadata=meta,
+                )
+                out.append(Result(chunk=chunk, score=score, rank=rank))
+            return out, total
+        except SearchBackendError:
+            raise
+        except (OSError, sqlite3.Error, TypeError, ValueError) as exc:
+            raise SearchBackendError(f"sqlite query failed for {self.name!r}: {exc}") from exc
 
     def query(self, query: Query) -> list[Result]:
         return self._query(query)[0]
@@ -223,14 +310,24 @@ class SQLiteExactBackend(DigiIndex):
     def delete(self, ids: list[str]) -> None:
         if not ids:
             return
-        with self._lock, self._conn:
-            for start in range(0, len(ids), 500):
-                batch = ids[start : start + 500]
-                placeholders = ",".join("?" for _ in batch)
-                self._conn.execute(
-                    f"DELETE FROM chunks WHERE collection = ? AND id IN ({placeholders})",
-                    (self.name, *batch),
-                )
+        try:
+            with self._lock, self._conn:
+                for start in range(0, len(ids), 500):
+                    batch = ids[start : start + 500]
+                    placeholders = ",".join("?" for _ in batch)
+                    self._conn.execute(
+                        f"DELETE FROM chunks WHERE collection = ? AND id IN ({placeholders})",
+                        (self.name, *batch),
+                    )
+                remaining = self._conn.execute(
+                    "SELECT COUNT(*) FROM chunks WHERE collection = ?", (self.name,)
+                ).fetchone()
+                if remaining and int(remaining[0]) == 0:
+                    self._conn.execute(
+                        "DELETE FROM collection_dimensions WHERE collection = ?", (self.name,)
+                    )
+        except sqlite3.Error as exc:
+            raise SearchBackendError(f"sqlite delete failed for {self.name!r}: {exc}") from exc
 
     def update(self, chunks: list[Chunk]) -> None:
         self.add(chunks)
@@ -244,14 +341,23 @@ class SQLiteExactBackend(DigiIndex):
 
     def snapshot(self, path: str) -> None:
         target = Path(path).expanduser()
-        with self._lock:
-            self._conn.execute("PRAGMA wal_checkpoint(FULL)")
-        if target.suffix in (".db", ".sqlite", ".sqlite3"):
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(self._db_path, target)
-            return
-        target.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(self._db_path, target / self._db_path.name)
+        try:
+            with self._lock:
+                if target.suffix in (".db", ".sqlite", ".sqlite3"):
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    destination = target
+                else:
+                    target.mkdir(parents=True, exist_ok=True)
+                    destination = target / self._db_path.name
+                # sqlite3.Connection.backup() takes a consistent snapshot while
+                # other HTTP/MCP readers and writers share the live database.
+                dest = sqlite3.connect(str(destination))
+                try:
+                    self._conn.backup(dest)
+                finally:
+                    dest.close()
+        except (OSError, sqlite3.Error) as exc:
+            raise SearchBackendError(f"sqlite snapshot failed for {self.name!r}: {exc}") from exc
 
     def count(self) -> int:
         with self._lock:

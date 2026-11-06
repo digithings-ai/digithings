@@ -6,9 +6,7 @@ Proposed — 2026-09-17. The vendor is a human decision: this ADR records the
 recommendation and the plan, not an adopted one. Until accepted, nothing here
 authorises deleting a live secret or creating a vendor account.
 
-**Deciders:** repo owner (vendor + spend). **Evidence base:** [secrets
-inventory](../ops/SECRETS_INVENTORY.md) (names, locations, R1–R15) and [secrets
-rotation runbook](../ops/SECRETS_ROTATION.md) (what rotation costs today).
+**Deciders:** repo owner (vendor + spend). **Evidence base:** the private secrets inventory (names, locations, R1–R15) and the private rotation runbook (what rotation costs today).
 
 ## Context
 

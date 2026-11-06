@@ -17,7 +17,7 @@ across all repos in `digithings-ai`), not a failing test.
 
 | Check / workflow | Required for merge? | Path-filtered? | Notes |
 |------------------|--------------------:|----------------|-------|
-| `CI` → `changes` + gated jobs | Intended (`ruff-and-scripts`, baseline) — see [BRANCH_PROTECTION.md](../BRANCH_PROTECTION.md) | Yes — `ci.yml` `dorny/paths-filter` gates component installs | Orchestrator only; component tests are `workflow_call`-only |
+| `CI` → `changes` + gated jobs | Intended (`ruff-and-scripts`, baseline) — see the branch-protection runbook | Yes — `ci.yml` `dorny/paths-filter` gates component installs | Orchestrator only; component tests are `workflow_call`-only |
 | `PR hygiene` → `Require Fixes` | Yes (when protection applied) | Linkage: no; TSV coverage: `project_fields.tsv` + workflow only | Merged from former `pr-linkage` + `project-fields-coverage` |
 | `gitleaks` → `gitleaks-scan` | Recommended security gate | PR: skips doc-only (`**.md`, `docs/**`) | Full history still scanned on `develop`/`main` push |
 | `Docs` | Optional | Yes — markdown, `agents.yml`, agent surface | Single job (link check + agents-init) |
@@ -73,4 +73,4 @@ run `python3 scripts/generate_ci_path_filters.py` (or `--check` in CI). See
 ## Related docs
 
 - [CI_CONVENTIONS.md](CI_CONVENTIONS.md) — full workflow inventory
-- [BRANCH_PROTECTION.md](../BRANCH_PROTECTION.md) — required check names and `set-branch-protection.sh`
+- the branch-protection runbook — required check names and `set-branch-protection.sh`
