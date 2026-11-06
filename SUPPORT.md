@@ -16,7 +16,7 @@ Search [existing issues](https://github.com/digithings-ai/digithings/issues?q=is
 Use the [Bug report form](https://github.com/digithings-ai/digithings/issues/new?template=bug_report.yml). A good report has:
 
 - the module and the version or commit SHA;
-- how you run it (`make up`, `make up-ghcr`, `make stack-local`, or your own setup);
+- how you run it (`make up`, `make stack-local`, or your own setup);
 - the smallest steps that reproduce it, and what you expected instead;
 - logs with secrets removed.
 

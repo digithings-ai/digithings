@@ -11,8 +11,8 @@ digiquant is the **deterministic quant engine** of digithings. It owns and execu
 In this order, before writing any code:
 
 1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — full pipeline, API surface, data models, Nautilus integration notes
-2. [`docs/NAUTILUS_NAVIGATION.md`](docs/NAUTILUS_NAVIGATION.md) — **required** before any Nautilus strategy or backtest change
-3. [`docs/NAUTILUS_QUICK_REF.md`](docs/NAUTILUS_QUICK_REF.md) — Nautilus Actor/Bar/Order quick reference
+2. `docs/NAUTILUS_NAVIGATION.md` — **required** before any Nautilus strategy or backtest change
+3. `docs/NAUTILUS_QUICK_REF.md` — Nautilus Actor/Bar/Order quick reference
 4. [`../AGENTS.md`](../AGENTS.md) — non-negotiable stack-wide rules
 5. [`../ROADMAP.md`](../ROADMAP.md) — do not implement VectorBT/Qlib/FinRL until Phase 3
 6. `../docs/agent-backlog/INDEX.md` — current task queue
@@ -118,7 +118,7 @@ When touching `digiquant/src/digiquant/dashboard/` **or** `apps/dashboard/` Grou
 2. Read **house book scope**: `docs/ops/HOUSE_BOOK_SCOPE.md` —
    omitted `workspace_id` = house; dashboard uses `houseBook()`; MCP `query_research`
    stamps `HOUSE_BOOK_READ_TABLES`.
-3. Read component guides: [`src/digiquant/research/docs/AGENTS.md`](src/digiquant/research/docs/AGENTS.md),
+3. Read component guides: `src/digiquant/research/docs/AGENTS.md`,
    [`src/digiquant/portfolio/docs/AGENTS.md`](src/digiquant/portfolio/docs/AGENTS.md).
 4. **One graph, one daily cadence** — do not add a portfolio-lite env fork, `run_type` graph forks,
    or `monthly` synthesis paths. Cost control = `DIGIQUANT_MODEL_TIER` + per-artifact `skip`/`edit`/`full`.
