@@ -1,8 +1,8 @@
 # GitHub rulesets (source of truth)
 
-Branch-protection rulesets for `digithings-ai/digithings`. Apply these to
-the GitHub repo to enforce the branch taxonomy defined in `BRANCHING.md`
-(`origin` is the cursor mirror, not GitHub — see DIG-3425).
+Branch-protection rulesets for `digithings-ai/digithings`. Apply them to the
+GitHub repo to enforce the branch taxonomy defined in `BRANCHING.md` (`origin`
+is the cursor mirror, not GitHub — see DIG-3425).
 
 **Desired state, not live state.** `"enforcement": "active"` in a file says
 nothing about the live repo. None of these four is applied there: no *ruleset*
@@ -47,13 +47,13 @@ refs `agent-backlog-snapshot.yml` and `pipeline-provider-review.yml` push are
 legal on the way in. `project-stub-fields.yml` was removed in #4919. These
 names were a cleanup backlog (#2465, now closed), never a rejection risk.
 
-## Apply all four
+## Apply the branch rulesets
 
 Read the two caveats below before running this — as written it changes `main`'s
 merge policy.
 
 ```
-for f in scripts/github-rulesets/*.json; do
+for f in scripts/github-rulesets/0[1-4]-*.json; do
   gh api -X POST repos/digithings-ai/digithings/rulesets --input "$f"
 done
 ```
