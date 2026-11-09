@@ -2,6 +2,53 @@
 
 This document describes the security posture of digithings and how to report vulnerabilities. See [ARCHITECTURE.md](ARCHITECTURE.md) for the system diagram and [docs/agents/CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) for the review policy.
 
+## Release signing keys
+
+Release tags are signed by an OpenSSH Ed25519 software key held by the release
+agent on the build host. A valid signature attests that the tag was cut by that
+agent through the release script; it does **not** attest a human review. The tag
+ruleset, the signer policy in [`scripts/deploy/allowed_signers`](scripts/deploy/allowed_signers),
+the release ledger and the nightly audit carry that accountability.
+
+Every tag is signed by one principal, `release@digithings`. Two keys are
+enrolled; `valid-before` is compared against the **tagger time of the tag being
+verified**, so an older key keeps verifying the tags it cut. It cannot sign a
+tag dated after its bound, but the tag date is chosen by the signer.
+
+| Key | SHA256 fingerprint | Signing window ends (`valid-before`) |
+|-----|--------------------|--------------------------------------|
+| K1 | `SHA256:Chsn3YHmj/fgmLR6MpDLe3S+zGpNXsiT5FBh3PvAQZo` | 2026-12-01 (`20261201Z`) |
+| K2 | `SHA256:WwoXS26H5hX2jDb9WRjuq7F0ZHn1luXV+pMQhrat6GM` | 2027-06-01 (`20270601Z`) |
+
+K1 covers tags cut before 2026-12-01, including `r0-v0.1.1` and
+`strategies-v0.1.0`. K2 is the current rotating key and signs every new tag.
+
+**Trust the fingerprints published here, not the copy of
+`scripts/deploy/allowed_signers` inside the tagged tree.** Anyone able to write
+the tag can also write the tree it points at, so a file that vouches for itself
+is not evidence. Read this document from the release page, or from a checkout
+you already trust, and compare the fingerprint shown by `ssh-keygen -lf` for
+that key before you verify.
+
+Anonymous verification needs no GitHub account and no key of your own:
+
+```bash
+git clone --no-tags https://github.com/digithings-ai/digithings.git
+cd digithings
+git fetch --depth=1 origin refs/tags/r0-v0.1.1:refs/tags/r0-v0.1.1
+git -c gpg.ssh.allowedSignersFile=scripts/deploy/allowed_signers verify-tag r0-v0.1.1
+```
+
+A pass prints a line naming the principal and the key fingerprint, for example:
+
+```text
+Good "git" signature for release@digithings with ED25519 key SHA256:Chsn3YHmj/fgmLR6MpDLe3S+zGpNXsiT5FBh3PvAQZo
+```
+
+Compare that fingerprint with the table above. A fingerprint that is not listed
+is a refusal, not a warning, even if `verify-tag` reports a good signature
+against the in-tree file.
+
 ## Client data under `projects/`
 
 Every agent runs as the same unix user, so filesystem permissions cannot separate

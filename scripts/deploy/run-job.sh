@@ -8,8 +8,8 @@
 #   bash scripts/deploy/run-job.sh --job stack --tag stack-v1.2.3
 #
 # The default allowed-signers file is scripts/deploy/allowed_signers.
-# It ships with no keys, so a tag is refused until Chris adds his
-# public key. Tests pass --allowed-signers and --repo.
+# It carries the release public key; an empty file refuses every tag.
+# Tests pass --allowed-signers and --repo.
 set -euo pipefail
 
 JOB=""
