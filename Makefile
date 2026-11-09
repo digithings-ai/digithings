@@ -66,6 +66,9 @@ test-e2e:
 doc-check:
 	python3 scripts/check_doc_links.py
 
+moved-paths-guard:
+	python3 scripts/repo-split/moved_paths_guard.py --base github/develop --head HEAD
+
 brand-studio-check:
 	python3 packages/brand/build-studio.py --check
 
