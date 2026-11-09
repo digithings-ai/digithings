@@ -12,9 +12,8 @@ does not push an image.
 
 The stack image's tenant seed corpus is an R6 subject. It is staged from the
 mono tree by default; ``--tenant-seeds-dir`` (or ``DIGI_TENANT_SEEDS_DIR``)
-points it at a checkout of a verified ``tenants-v*`` tag produced by
-``scripts/fetch_tenant_seeds.sh``. The provenance records which source was
-used, the tag and commit, and a content digest.
+points it at a checkout of a verified ``tenants-v*`` tag. The provenance records
+which source was used, the tag and commit, and a content digest.
 """
 
 from __future__ import annotations
@@ -113,7 +112,7 @@ TENANT_SEEDS_SOURCE = Path("apps/digithings-stack-cloudflare/container/seed")
 TENANT_SEEDS_KEY = "payload:tenant-seeds"
 #: Where ``--tenant-seeds-dir`` can come from when the flag is absent.
 TENANT_SEEDS_ENV = "DIGI_TENANT_SEEDS_DIR"
-#: The provenance record ``scripts/fetch_tenant_seeds.sh`` writes into the
+#: The provenance record the tenant-seed staging step writes into the
 #: staged tree. It is build metadata, not seed content, so it is excluded from
 #: the digest: a tag-staged tree must fingerprint the same as the mono tree it
 #: replaced (T19 proves parity by digest equality).
@@ -340,11 +339,10 @@ def _combined(packages: dict[str, str]) -> str:
 def tenant_seeds_source(tenant_seeds_dir: Path | None = None) -> Path:
     """The tree the image's ``/seed`` is staged from, or refuse to build.
 
-    ``tenant_seeds_dir`` is the checkout ``scripts/fetch_tenant_seeds.sh``
-    produced from a verified ``tenants-v*`` tag; absent, the mono tree is the
-    source (the pre-cutover default). There is deliberately no third case: an
-    image built with no seed corpus starts and serves an empty tenant index,
-    which reads as a healthy deploy.
+    ``tenant_seeds_dir`` is a verified-tag checkout of a ``tenants-v*`` release;
+    absent, the mono tree is the source (the pre-cutover default). There is
+    deliberately no third case: an image built with no seed corpus starts and
+    serves an empty tenant index, which reads as a healthy deploy.
 
     A directory holding only metadata or a README is not a corpus either: it
     must carry at least one seed document (``.md`` other than ``README.md``,
@@ -366,15 +364,15 @@ def tenant_seeds_source(tenant_seeds_dir: Path | None = None) -> Path:
 
 
 def read_tenant_source(seed_dir: Path) -> dict[str, str]:
-    """The ``tag=``/``commit=`` record the fetcher writes, validated.
+    """The ``tag=``/``commit=`` record the staging step writes, validated.
 
-    **Self-attested by design.** The record is written by
-    ``scripts/fetch_tenant_seeds.sh`` after it verifies the tag; nothing in the
-    staged directory can prove that happened. Packaging has no tag object and no
-    history to re-run ``git verify-tag`` against — it holds a copy of the
-    corpus, not the repository — so this reader checks shape, not provenance.
-    The fetcher is the trust boundary; the record is evidence of what it did,
-    and a hand-written copy is indistinguishable from a fetched one. Provenance
+    **Self-attested by design.** The record is written by the deployment tooling
+    after it verifies the tag; nothing in the staged directory can prove that
+    happened. Packaging has no tag object and no history to re-run
+    ``git verify-tag`` against — it holds a copy of the corpus, not the
+    repository — so this reader checks shape, not provenance. The staging step
+    is the trust boundary; the record is evidence of what it did, and a
+    hand-written copy is indistinguishable from a fetched one. Provenance
     records ``source: tag`` on that basis.
     """
     source_file = seed_dir / TENANT_SOURCE_NAME
@@ -383,7 +381,7 @@ def read_tenant_source(seed_dir: Path) -> dict[str, str]:
     except OSError as exc:
         raise SystemExit(
             f"tenant seeds dir {seed_dir} has no {TENANT_SOURCE_NAME}; refusing "
-            f"an unverified seed tree (stage it with scripts/fetch_tenant_seeds.sh) ({exc})"
+            f"an unverified seed tree (stage it from a verified tenants-v* tag) ({exc})"
         ) from exc
     values: dict[str, str] = {}
     for line in lines:
@@ -827,8 +825,8 @@ def stack_input_paths(tenant_seeds_dir: Path | None = None) -> dict[str, Path]:
     corpus it bakes in. The digisearch seeds are the one payload input the
     stack image reads, and they are a source tree of their own.
 
-    ``tenant_seeds_dir`` is the verified-tag checkout from
-    ``scripts/fetch_tenant_seeds.sh``; absent, the mono tree is the source.
+    ``tenant_seeds_dir`` is a verified-tag checkout of a ``tenants-v*``
+    release; absent, the mono tree is the source.
     """
     paths = {package: REPO / package for package, _ in STACK_PACKAGES}
     paths["payload:digisearch/seeds"] = REPO / "digisearch" / "seeds"
@@ -868,9 +866,9 @@ def stack_only(tenant_seeds_dir: Path | None = None) -> int:
     workspaces the image never installs.
 
     The tenant seed corpus comes from ``tenant_seeds_dir`` when given — a
-    checkout ``scripts/fetch_tenant_seeds.sh`` verified against the release
-    signing key — and from the mono tree otherwise. The source is resolved
-    before ``OUT`` is removed, so a missing corpus cannot wipe a good tree.
+    checkout of a ``tenants-v*`` tag verified against the release signing key —
+    and from the mono tree otherwise. The source is resolved before ``OUT`` is
+    removed, so a missing corpus cannot wipe a good tree.
 
     The provenance written here covers ONLY these inputs and says so, so a full
     ``--check-only`` still refuses this tree: a partial tree must never read as
@@ -1011,7 +1009,7 @@ def main(argv: list[str] | None = None) -> int:
     _write_payload()
     _write_npm()
     # Last, so the record describes the artifacts on disk. DIG-4423: this is what
-    # lets deploy_worker.sh refuse a stale image-packages/ instead of trusting that
+    # lets the deploy lane refuse a stale image-packages/ instead of trusting that
     # the directory merely exists.
     _write_provenance(tenant_seeds_dir=tenant_seeds)
     print(f"wrote {OUT}")

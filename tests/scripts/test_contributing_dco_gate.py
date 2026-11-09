@@ -1,6 +1,6 @@
 """Pin the develop merge rule after DCO sign-off was dropped (DIG-3845).
 
-Chris dropped DCO on 15 Oct 2026. CONTRIBUTING must say sign-off is not
+the maintainer dropped DCO on 15 Oct 2026. CONTRIBUTING must say sign-off is not
 required, and the retired GitHub Actions workflow must stay deleted and
 out of the policy inventory. A wording change that brings the sign-off
 gate back fails these tests.
@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRIBUTING = REPO_ROOT / "CONTRIBUTING.md"
 INVENTORY = REPO_ROOT / ".github" / "policy-checks.yml"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci-dco-sign-off.yml"
-MERGE_HEADING = "## Develop merge rule (Chris, 15 Oct 2026)"
+MERGE_HEADING = "## Develop merge rule (the maintainer, 15 Oct 2026)"
 
 
 def _merge_section() -> str:

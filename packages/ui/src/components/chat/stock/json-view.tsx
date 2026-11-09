@@ -10,7 +10,7 @@ import { stockRadius, useStockShape } from "./stock-shape";
  * Highlighting is a small tokenizer over the formatted text: keys, strings,
  * numbers, booleans and null get their own class, everything stays text
  * nodes (no HTML injection). Nothing is ever cut: the block sits in a
- * max-height scroll area (18rem), no expand button (Chris, 21 Oct).
+ * max-height scroll area (18rem), no expand button (the maintainer, 21 Oct).
  */
 
 type JsonToken = {

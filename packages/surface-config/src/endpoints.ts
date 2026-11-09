@@ -21,7 +21,7 @@ const LOCAL: Record<SurfaceService, string | undefined> = {
 };
 
 const CLOUD: Record<SurfaceService, string | undefined> = {
-  desk: "https://dashboard-api.chris-stefan.workers.dev",
+  desk: "https://dashboard-api.example.workers.dev",
   chat: "https://digithings.ai",
   mcp: undefined,
   graph: "https://graph.digithings.ai",

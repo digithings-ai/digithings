@@ -1,6 +1,6 @@
 # Onboarding — Developing on digithings
 
-Welcome. This guide is how Chris develops on this monorepo with Claude Code. It's the companion to [AGENTS.md](AGENTS.md) (canonical repo-wide agent rules). [CLAUDE.md](CLAUDE.md) is a Claude Code loader stub that points at AGENTS.md — read AGENTS.md once, then come back here to see how the pieces connect day-to-day.
+Welcome. This guide is how the maintainer develops on this monorepo with Claude Code. It's the companion to [AGENTS.md](AGENTS.md) (canonical repo-wide agent rules). [CLAUDE.md](CLAUDE.md) is a Claude Code loader stub that points at AGENTS.md — read AGENTS.md once, then come back here to see how the pieces connect day-to-day.
 
 If you're a new human contributor, skim this front-to-back and run the one-time setup.
 If you're a Claude Code session picking this up fresh, the later sections are the playbook.

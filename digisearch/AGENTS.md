@@ -38,7 +38,7 @@ Before making any change to `digisearch/`:
 
 Beyond root `AGENTS.md`:
 
-- **No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).** tenantb, digichat, digisearch and Zammad ticket text is indexed as written. Do not add a masker, a redaction pass, or a PII fixture for that text. Secret scrubbing and gitleaks stay.
+- **No PII masking: the invite link is the only gate (the maintainer, 9 Oct, reaffirmed 16 Oct).** tenantb, digichat, digisearch and Zammad ticket text is indexed as written. Do not add a masker, a redaction pass, or a PII fixture for that text. Secret scrubbing and gitleaks stay.
 
 - **Backend registry only**: New index backends must register via `search/_stub.py` returning `None` when not configured. Never add `if backend == "x":` dispatch logic directly in the query path. The local SQLite exact-scan backend is the free default (`DIGISEARCH_INDEX_BACKEND=sqlite`); Chroma, Azure and Vectorize are optional selections.
 - **No production stub**: `DIGISEARCH_ALLOW_STUB=1` is for unit tests only. `_require_real_search_backend()` enforces this at startup — do not bypass it.
@@ -142,4 +142,4 @@ DIGISEARCH_ALLOW_STUB=1 digisearch query --index test --text "revenue growth"
 
 Extension patterns, anti-patterns, and integration boundaries live in [`ARCHITECTURE.md`](ARCHITECTURE.md). Update that doc when changing interfaces or behavior.
 
-**Grokopedia spike (HOLD):** `digisearch/grokipedia/` is an unofficial read-only JSON client (`grokipedia_search`, `grokipedia_get_page`) over grokipedia.com. Do not scrape `/page/{slug}` HTML. `robots.txt` currently `Disallow: /api/` — legal/product call sits with One/Chris; do not treat this as a production attach. Unit tests stay offline (`tests/ds/test_grokipedia.py`).
+**Grokopedia spike (HOLD):** `digisearch/grokipedia/` is an unofficial read-only JSON client (`grokipedia_search`, `grokipedia_get_page`) over grokipedia.com. Do not scrape `/page/{slug}` HTML. `robots.txt` currently `Disallow: /api/` — legal/product call sits with One/the maintainer; do not treat this as a production attach. Unit tests stay offline (`tests/ds/test_grokipedia.py`).

@@ -1378,7 +1378,7 @@ export function resolveEmbedTenantByHost(
 export const DIGIQUANT_DASHBOARD_EMBED_HOST = "digiquant.io";
 
 /**
- * Dashboard tenant contract (#3662, Chris lock: no free-3 quota on the
+ * Dashboard tenant contract (#3662, the maintainer lock: no free-3 quota on the
  * digiquant dashboard popup).
  *
  * - `gateMode: "ungated"` — entitled (Desk+) chat is never capped at 3. The
@@ -1396,7 +1396,7 @@ export const DIGIQUANT_DASHBOARD_EMBED_HOST = "digiquant.io";
 const DESK_PLUS_PLAN_TIERS = new Set(["desk", "studio", "enterprise"]);
 
 /**
- * Dashboard tenant contract (#3662, Chris lock: no free-3 quota on the
+ * Dashboard tenant contract (#3662, the maintainer lock: no free-3 quota on the
  * digiquant dashboard popup).
  *
  * - `gateMode: "ungated"` — entitled (Desk+) chat is never capped at 3. The

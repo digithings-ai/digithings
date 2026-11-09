@@ -106,7 +106,7 @@ Default stop-file: `~/Library/Application Support/digivoice/dict.stop`
 Optional: `export DIGIVOICE_BIN=/absolute/path/to/digivoice` if PATH lookup fails
 inside Hammerspoon's environment.
 
-## Refreshing the Mac after an update (Chris's runbook)
+## Refreshing the Mac after an update (the maintainer's runbook)
 
 After a digivoice change lands on `develop`:
 
@@ -167,7 +167,7 @@ macOS will not prompt until the tool first needs the grant. Expect two prompts:
 4. Reload Hammerspoon; press **Right Option** once, speak, press again → paste. Press **Esc** mid-take → discarded.
 5. Select a coding CLI reply, **double-tap Left Option** → Piper playback (nothing selected stays on the grid).
 
-## Piper voice on Chris's Mac
+## Piper voice on the maintainer's Mac
 
 `speak` needs a Piper `.onnx` voice (plus the matching `.onnx.json` beside it):
 

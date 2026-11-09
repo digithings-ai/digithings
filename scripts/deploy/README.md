@@ -26,7 +26,7 @@ Every job refuses unless all of these hold:
 1. The tag name is `<job>-vX.Y.Z`.
 2. `git verify-tag` passes against `scripts/deploy/allowed_signers`.
 3. That file contains at least one public key. It ships with none, so
-   every tag is refused until Chris adds his signing key.
+   every tag is refused until the maintainer adds his signing key.
 4. The checkout is clean and `HEAD` is the tagged commit.
 
 A live `wrangler deploy` is not in these scripts. `--live` exits 2.

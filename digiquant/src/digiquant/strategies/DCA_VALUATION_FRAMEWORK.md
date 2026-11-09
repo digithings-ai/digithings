@@ -2,7 +2,7 @@
 
 Design philosophy for the valuation/composite-risk indicator that drives a
 dollar-cost-averaging strategy's buy/sell rate. Scoped beyond BTC-SDCA on
-purpose: this is how Chris wants every DCA strategy's valuation indicator
+purpose: this is how the maintainer wants every DCA strategy's valuation indicator
 built, not a BTC-only note. The concrete implementation today lives under
 `sdca/` because SDCA is the only DCA strategy that exists yet (see
 "Generalizing beyond SDCA" below) — nothing here is BTC-specific in principle.
@@ -84,7 +84,7 @@ curve. Today there is exactly one composite risk index and one curve
 - **Curve/threshold optimization is untouched.** The dual-timeframe work
   below (steps 4-5) only optimizes the composite index itself. Buy/sell
   curve shape, thresholds, and risk-adjusted-return tuning against that index
-  is explicitly a separate, later problem per Chris's ordering (2026-09-04).
+  is explicitly a separate, later problem per the maintainer's ordering (2026-09-04).
 
 ## Proposed next steps, in order
 
@@ -124,7 +124,7 @@ curve. Today there is exactly one composite risk index and one curve
    reconciliation question before treating either weight set as a candidate.
 5. **Superseded and done (2026-09-05): single composite, dual-timeframe
    combined objective — not the two-composite layer step 4's diagnostic
-   pointed toward.** Chris rejected the two-independent-composites design
+   pointed toward.** the maintainer rejected the two-independent-composites design
    directly: he wants **one** composite whose sub-indicators are individually
    tuned so some fit long-term extremes and some fit medium-term pullbacks,
    combined into a single index that navigates both at once, rather than two
@@ -136,7 +136,7 @@ curve. Today there is exactly one composite risk index and one curve
      heavy weighting, not a hard gate — "never miss the long-term value
      areas" is enforced by making long-term dominate the objective, not by a
      pass/fail constraint.
-   - `weight_search.search_oscillator_periods_by_cycle_overlap()`: Chris's
+   - `weight_search.search_oscillator_periods_by_cycle_overlap()`: the maintainer's
      "optimize each indicator individually first" step — solos each tunable
      indicator (weight=1, everything else off, including power_law when
      tuning an extra) and grids its own `SdcaOscillatorSpec` period fields
@@ -146,11 +146,11 @@ curve. Today there is exactly one composite risk index and one curve
      stage, with an explicit diversification floor (`min_weight_floor`) —
      every surviving indicator's candidate weight grid excludes `0.0`
      (applies to `power_law` too), so the final mix can never collapse onto a
-     single indicator. This is the deliberate hedge Chris asked for against
+     single indicator. This is the deliberate hedge the maintainer asked for against
      the power-law model degrading later: diversify the bet even though it
      won't yield the single best in-sample result.
    - End-to-end runner: `scripts/run_dual_timeframe_composite_search.py`,
-     implementing Chris's exact staging — equal weights start → solo-optimize
+     implementing the maintainer's exact staging — equal weights start → solo-optimize
      each indicator's periods against the combined objective → recombine at
      equal weight → floor-diversified aggregate reweight → 2:1/3:1/5:1 ratio
      sensitivity. A diagnostic-only Stage 2b compares new
@@ -163,7 +163,7 @@ curve. Today there is exactly one composite risk index and one curve
      `build_extra_indicators()`/settings.json, so they never reach steps 3-5.
      See `RESEARCH_STATE.md` backlog item 6 for both real-data runs' numbers —
      **diagnostic only, not an accepted candidate**; curve/threshold
-     optimization against this index is a separate, later problem (Chris's
+     optimization against this index is a separate, later problem (the maintainer's
      explicit ordering).
 6. **Curve wiring for long-only / medium-only / combined stays open**, but
    now means switching which `CycleWindow` set(s) the *same* single composite
@@ -175,7 +175,7 @@ curve. Today there is exactly one composite risk index and one curve
    explicit accept before touching `settings.json`). Update
    `RESEARCH_STATE.md`'s backlog and "current best validated candidate" only
    on accept, per its existing rule. Buy/sell curve fitting and
-   risk-adjusted-return optimization against the dual-timeframe index (Chris's
+   risk-adjusted-return optimization against the dual-timeframe index (the maintainer's
    stage 5) hasn't started — the work so far only produces an index, not a
    trading candidate.
 

@@ -64,7 +64,7 @@ describe("RepoActivity snapshot render", () => {
         variant="activity"
         snapshot={REPO_ACTIVITY_DEMO}
         repoUrl={REPO_ACTIVITY_DEMO_URL}
-        contributor={{ name: "Chris", role: "maintainer" }}
+        contributor={{ name: "the maintainer", role: "maintainer" }}
       />,
     );
     expect(html).toContain('data-variant="activity"');
@@ -72,7 +72,7 @@ describe("RepoActivity snapshot render", () => {
     expect(html).toContain("// current backlog");
     expect(html).toContain("ra-heat");
     expect(html).toContain("// maintainer");
-    expect(html).toContain("Chris");
+    expect(html).toContain("the maintainer");
     // The version ledger was removed; nothing should render it.
     expect(html).not.toContain("// current versions");
     expect(html).not.toContain("ra-versions");

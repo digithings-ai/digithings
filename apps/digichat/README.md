@@ -86,7 +86,7 @@ Parent `frame-src` and iframe origin both come from `embedOriginForChat()` (defa
 
 Prod tenant (`host=digithings.ai`): `gateMode: ungated`, `llmAccess: free_then_byok`, `showByok: true`. Do **not** assert a 3-turn gate on that path. `turn_limited` remains for other tenants (unit tests lock it).
 
-Dashboard tenant (`host=digiquant.io`, #3662 / #3664 — Chris lock, no free-3 quota):
+Dashboard tenant (`host=digiquant.io`, #3662 / #3664 — the maintainer lock, no free-3 quota):
 `gateMode: ungated`, `llmAccess: operator`, no `gate` block,
 `showByok: true`, `requiredPlanTier: desk`. Entitled (Desk+) dashboard chat is
 never turn-capped and the trial quota is never consulted; baseline (free/brief)

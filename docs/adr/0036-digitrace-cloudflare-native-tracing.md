@@ -20,14 +20,14 @@ ships a second, OpenTelemetry leg (Phase 2 dual-export, #4931), so the shape of 
 OTel-first digitrace is already in the code — only the plumbing behind it is missing.
 
 The plan on the table until 2026-10-09 was self-hosted Langfuse on Cloudflare
-Containers with an external ClickHouse and Redis. Chris decided against it
+Containers with an external ClickHouse and Redis. the maintainer decided against it
 ("Tracing: Cloudflare hybrid with MLflow", 2026-10-09 21:34 CEST) because it means
 **new paid services**, and the whole point of the exercise is that the marginal cost
 of tracing stays at zero.
 
 The design this ADR records was reviewed end to end by the Claude bench
 (`docs/reviews/digitrace-tracing-architecture-review.md`,
-verdict "approve with changes"; DIG-2664). Chris accepted the must-fix items on
+verdict "approve with changes"; DIG-2664). the maintainer accepted the must-fix items on
 2026-10-09 at 22:28. This ADR is the written form of that decision and of the review's
 must-fix list. The scored candidate scan behind the decision is the v2.1 design
 summary attached to DIG-2664 (the file `/workspace/paperclip-review/free-tracing-options.md`
@@ -48,7 +48,7 @@ is not in this repository); the hybrid scored 31.5 against a runner-up at 29.
   other table in `public`. At roughly 1 GB per 1–2M spans, the 90-day index fills it at
   roughly 8–16M spans.
 - **The account must be on Workers Paid.** The Containers allowance above only exists on
-  that plan. Chris confirms the plan in the Cloudflare dashboard (Billing). This is a
+  that plan. the maintainer confirms the plan in the Cloudflare dashboard (Billing). This is a
   human step, and the plan is a premise of the cost facts above.
 
 ## Decision
@@ -408,7 +408,7 @@ buy capacity silently: anything that would turn into spend is a human step.
 
 | Option | Why it lost |
 |---|---|
-| Self-hosted Langfuse (Web + Worker) | needs external ClickHouse and Redis: two new paid services, which Chris ruled out |
+| Self-hosted Langfuse (Web + Worker) | needs external ClickHouse and Redis: two new paid services, which the maintainer ruled out |
 | Cloudflare native traces alone | no query layer, no tenant index, and stored traces bill from 1 December 2026 |
 | MLflow alone as the store | scores well on cost fit, but it cannot run on Workers (CF fit 1) and its everyday-UI story is a Mac-only process |
 | Phoenix | it stores in Postgres or SQLite, so there is no ClickHouse problem, but the Elastic 2.0 licence is source-available rather than OSI, and that is a commercial decision we do not need to make |
@@ -419,7 +419,7 @@ evaluations out of the box, and costs two always-on services to run. This design
 the bill at zero and costs us the polish: the everyday UI is ours to build (the Traces
 tab), and deep analysis takes one extra step — `digitrace replay` — plus a local setup
 (Docker, or a sleeping container). We buy "cheap, and eventually credible through MLflow"
-at the price of one-command setup and everyday UI polish. That is the trade Chris made
+at the price of one-command setup and everyday UI polish. That is the trade the maintainer made
 when he dropped Langfuse.
 
 ### 13. Acceptance criteria for this ADR
@@ -435,7 +435,7 @@ This ADR is done when all of the following hold. Each item names its owner.
 | AC5 | the architecture document and the vision document no longer state, unqualified, that digitrace has no database, no worker and no queue: the vision document retires the claim and the architecture document scopes it to the code as shipped today | CTO | the vision document in PR #6260, the architecture document in the amendment of 2026-10-22. The openwiki page repeats the same sentence; it is listed as superseded in this ADR and is corrected in the next openwiki run, because editing a page with claim sidecars is not safe here |
 | AC6 | a read-only `digitrace.mcp_server` exists with `get_trace`, `search_traces`, `get_cost_summary` | R&D Engineer | **DIG-5141** |
 | AC7 | the index tables live in `public` with per-table RLS, named `digitrace_*` | Backend Engineer, Core Services | **DIG-2658** |
-| AC8 | the LangSmith leg is removed from the code and `LANGSMITH_API_KEY` is unset | DevOps Lead, then Chris for the secret | **DIG-2663** |
+| AC8 | the LangSmith leg is removed from the code and `LANGSMITH_API_KEY` is unset | DevOps Lead, then the maintainer for the secret | **DIG-2663** |
 
 AC2, AC3, AC5 (the openwiki page), AC6, AC7 and AC8 are owned by other tickets or other
 runs and are **not** closed by this ADR. This ADR is accepted when AC1 and the amendment
@@ -452,7 +452,7 @@ in AC2 and AC3 is the retirement of the Langfuse app, nothing else.
    removed the Langfuse-named entries).
 4. **DIG-2658** — apply the index schema and the RLS policies.
 5. **DIG-2661** — the dashboard Traces tab; **DIG-2662** — `digitrace replay` and MLflow.
-6. **DIG-2663** — seven days of parity against LangSmith and the AI Gateway logs. Chris
+6. **DIG-2663** — seven days of parity against LangSmith and the AI Gateway logs. the maintainer
    approves the cut. The cut unsets `LANGSMITH_API_KEY` (a production secret) and removes
    the LangSmith leg, the `digitrace[langsmith]` and `digitrace[tracing]` extras and the
    `langsmith` mode of `export_backend()`. The `langsmith` mode appears in the same

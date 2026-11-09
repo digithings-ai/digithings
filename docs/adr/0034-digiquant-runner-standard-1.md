@@ -2,9 +2,9 @@
 
 **Status:** Accepted (2026-10-19).
 **Date:** 2026-10-19
-**Author:** Board (local session), on Chris's decision.
+**Author:** Board (local session), on the maintainer's decision.
 **Raised by:** DIG-2904. PR #5903 merged the class change without moving the lock; PR #5924 is this correction.
-**Supersedes:** the instance-type clause of the "Chris lock" in `docs/superpowers/plans/2026-09-30-digiquant-house-run-phase3.md` (`:15`, `:28`, `:849`) and `docs/superpowers/plans/2026-10-01-digiquant-phase4-gha-cutover.md` (`:25`, `:671`).
+**Supersedes:** the instance-type clause of the "the maintainer lock" in `docs/superpowers/plans/2026-09-30-digiquant-house-run-phase3.md` (`:15`, `:28`, `:849`) and `docs/superpowers/plans/2026-10-01-digiquant-phase4-gha-cutover.md` (`:25`, `:671`).
 **Amends:** `docs/ops/digiquant-runner.md`, `config/contract/contract.yaml`, `apps/digiquant-runner/container/exec_job_test.py`, and the class comment in the runner image Dockerfile (`infra/docker/Dockerfile.digiquant-runner`).
 
 ## Context
@@ -22,14 +22,14 @@ Two facts change the shape of the decision.
 1. **Production was already on `standard-1` before the merge.** `wrangler containers info`
    reported version 10, `vcpu 0.5`, `memory_mib 4096` at 2026-10-18T12:13Z. The code change
    caught up with the deployment; reverting it would have *upsized* production on the next
-   deploy, which is why this was put to Chris rather than fixed in the direction the guard
+   deploy, which is why this was put to the maintainer rather than fixed in the direction the guard
    pointed.
 2. **The class was never the cost driver.** DIG-2904's own measured note records that a
    30-minute idle tail was the cost (#5576), with container spend around $20/month. The
    class delta is a fraction of that, and it accrues only while the container is awake.
 
 The guard's authority was the plan lock at `phase3:849`, *"Instance type is **not** open. It
-is `standard-2` on `DigiQuantRunnerContainer`."* That is Chris's lock, so only Chris could
+is `standard-2` on `DigiQuantRunnerContainer`."* That is the maintainer's lock, so only the maintainer could
 move it; he chose to keep the cheaper class on 2026-10-19.
 
 ## Decision

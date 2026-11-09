@@ -15,6 +15,6 @@ wrapping public grokipedia.com JSON APIs. No HTML scrape of `/page/{slug}`.
 `https://grokipedia.com/robots.txt` currently has `User-agent: *` / `Disallow: /api/`.
 The public site JS still calls these APIs. This wrapper is unofficial/third-party,
 polite (min spacing ≥300ms + token bucket), and a **spike only**. HOLD hatch for a
-One/Chris legal/product call — do not attach in production from this PR.
+One/the maintainer legal/product call — do not attach in production from this PR.
 
 User-Agent: `digithings-digisearch-grokipedia/0.1 (+https://github.com/digithings-ai/digithings)`.

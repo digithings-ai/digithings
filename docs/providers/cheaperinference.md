@@ -1,7 +1,7 @@
 # Cheaper Inference (hosted)
 
 House upstream for digiquant (and digichat house when keyed) is **hosted Cheaper
-Inference** at `https://api.cheaperinference.com/v1` — Chris’s “OmniRoute” naming
+Inference** at `https://api.cheaperinference.com/v1` — the maintainer’s “OmniRoute” naming
 here means this product, **not** self-hosted OmniRoute Docker / `OMNIROUTE_*`.
 
 ## Prefer CI when keyed

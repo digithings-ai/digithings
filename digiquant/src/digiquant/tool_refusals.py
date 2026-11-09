@@ -43,7 +43,7 @@ tool surface specifically — not the congressional-trades data class as a whole
 The LuxAlgo ``market-trackers-data`` ``congress-trades`` dataset carries the same
 data class as the rows Counsel classified under 13105(l)/13107(c). Counsel
 confirmed the classification and advised refusal (DIG-1472, CONFIRMED). The
-business owner (Chris) decided on **2026-10-06** to keep that dataset in service
+business owner (the maintainer) decided on **2026-10-06** to keep that dataset in service
 anyway, accepting the 13107(c)(2) exposure. That is a business decision against
 Counsel's advice, not a legal clearance, and it is recorded here and in
 ``digisearch.trackers_ingest`` so no later reader mistakes the allowlist for a

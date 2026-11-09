@@ -1794,7 +1794,7 @@ bindings:
 # client_repo data API (DIG-2895, moved from the retired digidata-api Worker in
 # DIG-2887 S2). The D1 database id is a PLACEHOLDER (no remote database yet); the
 # binding exists so the parity contract can see the name. A remote database_id
-# is a cutover step and needs Chris's approval.
+# is a cutover step and needs the maintainer's approval.
 - worker: fxdesk-runner
   type: d1_database
   name: FXDESK_DB

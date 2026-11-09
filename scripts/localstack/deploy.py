@@ -55,7 +55,7 @@ SERVICES_REGISTRY = "config/contract/services.yaml"
 #: The measured production binding census, per config path.
 PARITY_BASELINE = "config/self-host/parity-baseline.json"
 
-#: A real upload needs this exact value in this exact variable.  Chris sets it
+#: A real upload needs this exact value in this exact variable.  the maintainer sets it
 #: interactively; no agent sets it.
 APPROVAL_ENV = "DT_DEPLOY_APPROVED_BY"
 APPROVAL_VALUE = "chris"
@@ -443,7 +443,7 @@ def approval_state(env: Mapping[str, str], target_env: str) -> tuple[bool, str]:
         )
     if env.get(APPROVAL_ENV) != APPROVAL_VALUE:
         return False, (
-            f"production needs {APPROVAL_ENV}={APPROVAL_VALUE}, set by Chris "
+            f"production needs {APPROVAL_ENV}={APPROVAL_VALUE}, set by the maintainer "
             "interactively; agents never set it"
         )
     return True, "approved"
@@ -504,7 +504,7 @@ def deploy_steps(
                     f"{surface.kind} deploy to {target_env}"
                     + (" (dry run: no upload)" if dry_run else "")
                 ),
-                owner="Chris (production approval)" if not dry_run else "",
+                owner="the maintainer (production approval)" if not dry_run else "",
             )
         )
     return tuple(steps)

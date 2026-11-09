@@ -23,6 +23,13 @@ tag dated after its bound, but the tag date is chosen by the signer.
 K1 covers tags cut before 2026-12-01, including `r0-v0.1.1` and
 `strategies-v0.1.0`. K2 is the current rotating key and signs every new tag.
 
+One earlier tag sits outside this policy on purpose. `r0-v0.1.0` was cut during
+the initial repository promotion with a bootstrap key that was never enrolled in
+`scripts/deploy/allowed_signers`. Its signature therefore does not verify against
+the published signers and its fingerprint is deliberately not listed here. It is
+superseded by `r0-v0.1.2` and is **not** a current trust anchor: verify and pin
+`r0-v0.1.2`, or a later tag signed by K2, instead.
+
 **Trust the fingerprints published here, not the copy of
 `scripts/deploy/allowed_signers` inside the tagged tree.** Anyone able to write
 the tag can also write the tree it points at, so a file that vouches for itself
