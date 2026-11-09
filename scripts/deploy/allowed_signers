@@ -2,8 +2,14 @@
 # git verify-tag reads this file (gpg.ssh.allowedSignersFile).
 #
 # One key per line, sshd allowed-signers format:
-#   <email> namespaces="git" <key-type> <public-key>
+#   <email> [options] <key-type> <public-key> [comment]
 #
-# Chris adds his ed25519-sk public key here. A file with no key lines
-# fails closed: every deploy job refuses the tag. Do not put a private
-# key in this file.
+# The release key is the agent-held software Ed25519 primary (D-S1, 2026-11-09).
+# The 2026-12-01 bound keeps the tags cut before it verifiable; K2 adds the
+# rotating 2027-06-01 line. New tags use the current agent key; no hardware
+# token is involved.
+# A file with no key lines fails closed: every deploy job refuses the tag.
+# Do not put a private key in this file.
+release@digithings namespaces="git",valid-before="20261201Z" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKVY/JXX9piwuPgbYu7hx7CsprAMaOcSlxGoK4oVBmbp K1 2026-11-09
+# K2: rotating agent key; the 2026 line above remains until its bound.
+release@digithings namespaces="git",valid-before="20270601Z" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBLmqNgbV0gtFcG1Lw0Bg8iYQSCiM49XR3wrFa6Gkn7x K2 2026-11-09

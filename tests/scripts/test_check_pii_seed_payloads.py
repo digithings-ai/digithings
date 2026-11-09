@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 from check_pii_seed_payloads import (
     Finding,
+    directory_payload_paths,
     domain_of,
     is_payload,
     is_reserved,
@@ -356,3 +357,59 @@ class TestMain:
         out = capsys.readouterr().out
         assert code == 0, out
         assert "no unmasked address" in out
+
+
+class TestDirectoryMode:
+    """`--dir PATH`: an external seed tree, e.g. one fetched from an R6 tag.
+
+    The tree is not a repository, so `git ls-files` cannot answer and the
+    repo-relative `SKIP_PREFIXES` must not apply — a `docs/` payload in another
+    repository is still copied into an index.
+    """
+
+    def test_every_payload_under_the_directory_is_scanned(self, tmp_path: Path) -> None:
+        (tmp_path / "tenantb").mkdir()
+        (tmp_path / "tenantb" / "tickets.jsonl").write_text(
+            '{"customer": "real.person@acme-corp.de"}\n', encoding="utf-8"
+        )
+        (tmp_path / "vault" / "docs").mkdir(parents=True)
+        (tmp_path / "vault" / "docs" / "note.json").write_text(
+            '{"owner": "someone@gmail.com"}\n', encoding="utf-8"
+        )
+        (tmp_path / "README.md").write_text("real.person@acme-corp.de\n", encoding="utf-8")
+
+        assert directory_payload_paths(tmp_path) == [
+            "tenantb/tickets.jsonl",
+            "vault/docs/note.json",
+        ]
+        code = main(["--dir", str(tmp_path)])
+        assert code == 1
+
+    def test_a_directory_named_docs_is_still_scanned(self, tmp_path: Path) -> None:
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "payload.jsonl").write_text(
+            '{"customer": "real.person@acme-corp.de"}\n', encoding="utf-8"
+        )
+        assert directory_payload_paths(tmp_path) == ["docs/payload.jsonl"]
+        assert main(["--dir", str(tmp_path)]) == 1
+
+    def test_reserved_domains_pass(self, tmp_path: Path) -> None:
+        (tmp_path / "clean.jsonl").write_text(
+            '{"customer": "jane.doe@example.test"}\n', encoding="utf-8"
+        )
+        assert main(["--dir", str(tmp_path)]) == 0
+
+    def test_missing_directory_is_refused(self, tmp_path: Path) -> None:
+        with pytest.raises(SystemExit) as exc:
+            main(["--dir", str(tmp_path / "absent")])
+        assert exc.value.code == 2
+
+    def test_no_address_is_printed(self, tmp_path: Path, capsys) -> None:
+        (tmp_path / "tickets.jsonl").write_text(
+            '{"customer": "real.person@acme-corp.de"}\n', encoding="utf-8"
+        )
+        assert main(["--dir", str(tmp_path)]) == 1
+        output = capsys.readouterr()
+        assert "real.person" not in output.out + output.err
+        assert "acme-corp.de" not in output.out + output.err
+        assert "tickets.jsonl:1" in output.out

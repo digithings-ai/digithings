@@ -46,10 +46,18 @@ PR step, diff-scoped. It is deliberately **not** a required status check on
 required check that is red on arrival gets suppressed rather than fixed. Making
 it required is the last step of DIG-1230, once containment has landed.
 
+A fourth mode scans an arbitrary directory: ``--dir PATH``. It exists for a
+seed corpus fetched from another repository at build time
+(``scripts/fetch_tenant_seeds.sh``), where the tree is not part of this
+repository and ``git ls-files`` cannot answer. Every ``.jsonl``/``.json`` file
+under PATH is scanned; the ``SKIP_PREFIXES`` exclusions are a property of this
+repository's tree and do not apply to an external corpus.
+
 Usage:
     scripts/check_pii_seed_payloads.py                        # uncommitted changes
     scripts/check_pii_seed_payloads.py --base origin/main     # a diff
     scripts/check_pii_seed_payloads.py --all                  # the whole tree
+    scripts/check_pii_seed_payloads.py --dir /tmp/seed        # an external seed tree
     scripts/check_pii_seed_payloads.py --json
 """
 
@@ -233,6 +241,27 @@ def tracked_payload_paths(root: Path = REPO_ROOT) -> list[str]:
     return [line for line in raw.splitlines() if line and is_payload(line)]
 
 
+def directory_payload_paths(root: Path) -> list[str]:
+    """Every payload under ``root``, relative to it.
+
+    An external seed tree is not a repository, so ``git ls-files`` cannot answer
+    and the repo-relative ``SKIP_PREFIXES`` do not apply: a path like
+    ``docs/...`` in another repository is still a payload copied into an index.
+    The suffix is the whole rule.
+
+    This walk follows symlinks (``Path.is_file`` dereferences them). The mode
+    makes no promise about leaving the tree: ``fetch_tenant_seeds.sh`` refuses a
+    seed tree containing a symlink before it calls this, but a direct
+    ``--dir`` run scans whatever the links resolve to.
+    """
+    suffixes = PAYLOAD_SUFFIXES
+    return sorted(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file() and path.as_posix().endswith(suffixes)
+    )
+
+
 def select_paths(
     base: str | None, head: str, whole_tree: bool, root: Path = REPO_ROOT
 ) -> tuple[list[str], str]:
@@ -285,35 +314,16 @@ def scan(
     return findings
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Refuse a commit that adds a payload carrying unmasked customer PII."
-    )
-    parser.add_argument("--base", help="Base ref; scans payloads this diff touches.")
-    parser.add_argument("--head", default="HEAD", help="Head ref (default: HEAD).")
-    parser.add_argument(
-        "--all",
-        dest="whole_tree",
-        action="store_true",
-        help="Scan every tracked payload instead of a diff.",
-    )
-    parser.add_argument("--json", action="store_true", help="Machine-readable output.")
-    args = parser.parse_args(argv)
-
-    paths, scope = select_paths(args.base, args.head, args.whole_tree, REPO_ROOT)
-    # Uncommitted scope reads the working tree (that is what is being proposed);
-    # a diff or the whole tree reads blobs from git, so a payload that is not
-    # checked out locally is still scanned.
-    ref = None if (args.whole_tree is False and args.base is None) else args.head
-    findings = scan(paths, ref=ref)
+def _report(findings: list[Finding], scanned: int, scope: str, as_json: bool) -> int:
+    """Print the verdict; exit 1 only when the payloads carry unmasked addresses."""
     addresses = sum(finding.count for finding in findings)
 
-    if args.json:
+    if as_json:
         print(
             json.dumps(
                 {
                     "scope": scope,
-                    "scanned": len(set(paths)),
+                    "scanned": scanned,
                     "files_with_findings": len({finding.path for finding in findings}),
                     "addresses": addresses,
                     # Counts and locations only. No address value is ever emitted.
@@ -331,7 +341,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1 if findings else 0
 
-    print(f"Scanned {len(set(paths))} payload(s) in {scope}.")
+    print(f"Scanned {scanned} payload(s) in {scope}.")
     if not findings:
         print("OK: no unmasked address in any payload in scope.")
         return 0
@@ -345,6 +355,46 @@ def main(argv: list[str] | None = None) -> int:
         "mask real data before it is committed. See DIG-1210."
     )
     return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Refuse a commit that adds a payload carrying unmasked customer PII."
+    )
+    parser.add_argument("--base", help="Base ref; scans payloads this diff touches.")
+    parser.add_argument("--head", default="HEAD", help="Head ref (default: HEAD).")
+    parser.add_argument(
+        "--all",
+        dest="whole_tree",
+        action="store_true",
+        help="Scan every tracked payload instead of a diff.",
+    )
+    parser.add_argument(
+        "--dir",
+        dest="directory",
+        metavar="PATH",
+        help="Scan every payload under PATH (an external seed tree, not a git checkout).",
+    )
+    parser.add_argument("--json", action="store_true", help="Machine-readable output.")
+    args = parser.parse_args(argv)
+
+    if args.directory is not None:
+        root = Path(args.directory)
+        if not root.is_dir():
+            parser.error(f"--dir {root} is not a directory")
+        paths = directory_payload_paths(root)
+        # A tree outside this repository has no ref to read from: the working
+        # tree is the tree under review, and it is the one that would ship.
+        findings = scan(paths, ref=None, root=root)
+        return _report(findings, len(set(paths)), str(root), args.json)
+
+    paths, scope = select_paths(args.base, args.head, args.whole_tree, REPO_ROOT)
+    # Uncommitted scope reads the working tree (that is what is being proposed);
+    # a diff or the whole tree reads blobs from git, so a payload that is not
+    # checked out locally is still scanned.
+    ref = None if (args.whole_tree is False and args.base is None) else args.head
+    findings = scan(paths, ref=ref)
+    return _report(findings, len(set(paths)), scope, args.json)
 
 
 if __name__ == "__main__":
