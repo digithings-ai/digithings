@@ -1,6 +1,6 @@
 # Hero banner spec (`@digithings/hero-banner`)
 
-Status: proposed (DIG-2864). Approver: Chris (L lane).
+Status: proposed (DIG-2864). Approver: the maintainer (L lane).
 
 One banner definition renders the module mark in a terminal (half-blocks,
 OpenTUI) and on the web (canvas). Every module banner ticket builds on this

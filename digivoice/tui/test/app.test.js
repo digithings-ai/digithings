@@ -293,7 +293,7 @@ test("glyph cells become smaller square pixels when the window can hold them", (
 })
 
 test("letters keep a gap on a narrow frame and never wrap to two lines", () => {
-  // Touching glyphs were the defect Chris rejected; the floor is one column.
+  // Touching glyphs were the defect the maintainer rejected; the floor is one column.
   assert.equal(MIN_GAP, 1)
   assert.equal(letterGap(63, 9), MIN_GAP)
   assert.ok(letterGap(120, 9) > MIN_GAP)

@@ -2474,7 +2474,7 @@ html:has(.aui-theme-stage) :focus-visible {
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-chat-notice[data-tone="error"] {
-  /* Faded red (Chris, 21 Oct): the danger hue pulled 28% toward the muted
+  /* Faded red (the maintainer, 21 Oct): the danger hue pulled 28% toward the muted
      ink (HSL saturation 0.76 → 0.49), a 5% wash and a 24% hairline. The
      same rules serve dark and light: the vars switch per theme. */
   --notice-danger: color-mix(in srgb, var(--danger) 72%, var(--ink-mute));

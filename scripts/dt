@@ -24,7 +24,7 @@ usage error.  ``dt status`` exits 1 on a failed check; ``--require-all`` also
 exits 1 when any check was skipped, which is how CI demands zero unknowns.
 
 ``dt deploy`` refuses any real upload unless ``DT_DEPLOY_APPROVED_BY=chris`` is
-present in the environment.  That variable is set by Chris interactively.  No
+present in the environment.  That variable is set by the maintainer interactively.  No
 agent sets it, no agent runs a production deploy, and nothing here reads a
 production secret: bindings are reported by name and kind only.
 

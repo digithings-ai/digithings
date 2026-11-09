@@ -362,7 +362,7 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   color: var(--destructive);
 }
 
-/* Faded red (Chris, 21 Oct, DIG-4459): a 4% wash and a 20% hairline; the
+/* Faded red (the maintainer, 21 Oct, DIG-4459): a 4% wash and a 20% hairline; the
    text keeps the full destructive colour so it stays WCAG AA. */
 .aui-message-error-root {
   color: var(--destructive);

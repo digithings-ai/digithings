@@ -7,8 +7,10 @@
 #
 #   bash scripts/deploy/run-job.sh --job stack --tag stack-v1.2.3
 #
-# The default allowed-signers file is scripts/deploy/allowed_signers.
-# It carries the release public key; an empty file refuses every tag.
+# The signers file is the trust anchor and must live outside --repo: a copy
+# checked out with the tag could be edited by whoever cut it. The default is
+# therefore the host copy, $DIGI_RELEASE_SIGNERS or
+# ~/.config/digithings/allowed_signers. An empty file refuses every tag.
 # Tests pass --allowed-signers and --repo.
 set -euo pipefail
 
@@ -36,7 +38,7 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --live)
-      echo "DISARMED: live deploy is refused until Chris approves. Nothing was deployed." >&2
+      echo "DISARMED: live deploy is refused until the maintainer approves. Nothing was deployed." >&2
       exit 2
       ;;
     *)
@@ -56,7 +58,7 @@ if [ -z "$REPO" ]; then
   REPO="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 fi
 if [ -z "$SIGNERS" ]; then
-  SIGNERS="$SCRIPT_DIR/allowed_signers"
+  SIGNERS="${DIGI_RELEASE_SIGNERS:-${HOME:-}/.config/digithings/allowed_signers}"
 fi
 
 MANIFEST="$SCRIPT_DIR/workers.tsv"
@@ -77,18 +79,16 @@ if ! printf '%s\n' "$TAG" | grep -Eq "^${prefix}-v[0-9]+\\.[0-9]+\\.[0-9]+$"; th
   exit 1
 fi
 
-# An empty signers file still makes git print "Good signature" and then
-# "No principal matched". Refuse before verify-tag so that line never
-# looks like a pass.
-if ! grep -Eq '^[^#[:space:]]' "$SIGNERS"; then
-  echo "allowed_signers has no keys; refusing '$TAG'." >&2
-  exit 1
-fi
-
 git -C "$REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
   || { echo "not a git checkout: $REPO" >&2; exit 1; }
 
-if ! git -C "$REPO" -c gpg.ssh.allowedSignersFile="$SIGNERS" verify-tag "$TAG" >&2; then
+# The shared verifier pins the SSH backend, refuses an empty signers file
+# before "Good signature" can be printed, and refuses GPG/X.509. --head binds
+# the tag to the commit this checkout is on.
+VERIFIER="$SCRIPT_DIR/../release/ssh_signers.py"
+if ! verify_out="$(python3 "$VERIFIER" verify-tag --repo "$REPO" --tag "$TAG" \
+    --signers "$SIGNERS" --head 2>&1)"; then
+  printf '%s\n' "$verify_out" >&2
   echo "git verify-tag refused '$TAG'." >&2
   exit 1
 fi

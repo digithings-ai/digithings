@@ -113,8 +113,8 @@ vendored as a dependency. For Python components, `pip-licenses --format=markdown
 **Status:** entries landed 2026-10-16 from the counsel memo (the `counsel-memo`
 document on DIG-1768; DIG-1768 `done`). `DIG-###` references below are internal
 issue IDs, cited for traceability as in `docs/VENDOR_CONTENT_BOUNDARY.md`.
-Mastra boundary adopted by Chris ("use it behind an interface we own"); LiteLLM
-PyPI-only boundary **ratified** by Chris 2026-10-07, not re-litigable at adoption
+Mastra boundary adopted by the maintainer ("use it behind an interface we own"); LiteLLM
+PyPI-only boundary **ratified** by the maintainer 2026-10-07, not re-litigable at adoption
 time.
 
 Checked against the tree at `github/develop` `fb447feeb1` (2026-10-16): no
@@ -181,7 +181,7 @@ that.
 
 Enforcement: none needed (no adoption); this entry exists so scans conclude.
 
-### LiteLLM — PyPI only, never the vendor image [RATIFIED by Chris 2026-10-07]
+### LiteLLM — PyPI only, never the vendor image [RATIFIED by the maintainer 2026-10-07]
 
 Licence: MIT core (`litellm`, PyPI) versus proprietary `enterprise/` tree
 (separate distribution `litellm-enterprise`, `LicenseRef-Proprietary`).

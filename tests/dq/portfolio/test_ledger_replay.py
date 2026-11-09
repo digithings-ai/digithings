@@ -1,7 +1,7 @@
 """DIG-2816: the write-side ledger replay and its fail-closed contract.
 
 ``positions.weight_pct`` is a drift-carrying ACTUAL written by several independent
-writers. ``position_events`` is the ledger of INTENDED targets, and Chris's
+writers. ``position_events`` is the ledger of INTENDED targets, and the maintainer's
 2026-10-10 verdict is that the 25-Sep rebalance targets (UUP 15 / DBO 10 / XLV 10)
 are correct while the persisted book is not. These tests pin the two properties
 the fix depends on, both of which are easy to break silently:

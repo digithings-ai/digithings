@@ -1,5 +1,8 @@
 # Public SSH keys allowed to sign a release tag.
-# git verify-tag reads this file (gpg.ssh.allowedSignersFile).
+# This is the public copy shipped in the tree. The runtime trust anchor is the
+# host copy outside the checkout (~/.config/digithings/allowed_signers, or
+# --allowed-signers); ssh_signers.py refuses a signers file that lives inside
+# the repository it verifies.
 #
 # One key per line, sshd allowed-signers format:
 #   <email> [options] <key-type> <public-key> [comment]

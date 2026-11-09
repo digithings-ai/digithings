@@ -155,7 +155,7 @@ describe.each([["gallery skin", Gallery]])("chat transparency (%s)", (_name, Ski
     const json = args!.querySelector("pre")!.textContent ?? "";
     expect(json).toContain('"mailbox_29"');
     expect(json).toContain('\n  "pageSize": 20,');
-    // Long block: a max-height scroll area, no expand button (Chris, 21 Oct).
+    // Long block: a max-height scroll area, no expand button (the maintainer, 21 Oct).
     const pre = args!.querySelector<HTMLElement>('[data-slot="tool-fallback-args-json"]')!;
     expect(pre.className).toMatch(/\bmax-h-72\b/);
     expect(pre.className).toMatch(/\boverflow-auto\b/);

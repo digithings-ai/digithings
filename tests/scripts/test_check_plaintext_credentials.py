@@ -68,7 +68,7 @@ def test_mailbox_account_with_bare_token_is_flagged(guard: object) -> None:
 
 @pytest.mark.unit
 def test_password_label_with_bare_separator_passphrase_is_flagged(guard: object) -> None:
-    line = f"[18:19] Chris: Thx! Le user password {SYNTHETIC_PASSPHRASE}"
+    line = f"[18:19] the maintainer: Thx! Le user password {SYNTHETIC_PASSPHRASE}"
     assert _rules(guard, line) == {"password-label"}
 
 
@@ -93,7 +93,7 @@ def test_finding_carries_line_number_and_rule_but_never_the_value(
     text = (
         "[17:56] Client: "
         f"{SYNTHETIC_ADDRESS} {SYNTHETIC_BARE_TOKEN}\n"
-        f"[18:19] Chris: password {SYNTHETIC_PASSPHRASE}\n"
+        f"[18:19] the maintainer: password {SYNTHETIC_PASSPHRASE}\n"
     )
     findings = guard.scan_text(text)
     assert [(lineno, rule_id) for lineno, rule_id, _ in findings] == [
@@ -113,7 +113,7 @@ def test_redacted_transcript_is_clean(guard: object) -> None:
     text = (
         "[17:56] Client: "
         f"{SYNTHETIC_ADDRESS} [REDACTED DIG-179]\n"
-        "[18:19] Chris: Thx! Le user password [REDACTED DIG-179]\n"
+        "[18:19] the maintainer: Thx! Le user password [REDACTED DIG-179]\n"
     )
     assert guard.scan_text(text) == []
 

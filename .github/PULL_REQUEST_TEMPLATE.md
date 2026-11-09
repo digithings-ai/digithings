@@ -45,7 +45,7 @@ Fixes #
 
 ## Modules / files / folders touched
 
-<!-- Required by the develop merge rule (Chris, 15 Oct 2026, DIG-3845).
+<!-- Required by the develop merge rule (the maintainer, 15 Oct 2026, DIG-3845).
 List every module, file and folder this PR touches, e.g.
 `digibase/src/digibase/art9.py`, `tests/db/`, `.github/workflows/ci-docs.yml`. -->
 

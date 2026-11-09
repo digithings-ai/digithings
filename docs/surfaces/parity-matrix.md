@@ -86,7 +86,7 @@ The dashboard has no TUI. Its parity question is real data (DIG-2697) and previe
 | X2 | Font | terminal-owned; README says Geist Mono | 5 `fonts.ts`, 4 load unused `Inter` | canonical `apps/dashboard/app/fonts.ts` + contract test | drop `Inter`; byte-identical `fonts.ts` | DIG-2695 |
 | X3 | Motion tokens | literals; no reduced-motion | `tokens.css` vars + reduced-motion contract | `packages/design/motion.json` | generate/verify CSS; `DIGI_REDUCED_MOTION` in TUIs | DIG-2695 |
 | X4 | Local/cloud endpoint config | `DQ_API_URL` ×8, `DIGICHAT_DEVKIT_URL` | per-app env | `packages/surface-config/endpoints.ts`, `DIGI_ENV`, `DIGI_<SERVICE>_URL` | build the module; alias old names for one release | DIG-2703 |
-| X5 | Cloudflare API hosts | — | — | `digithings.ai/api/chat*`, `/api/embed*` (digichat worker); `graph.`, `key.digithings.ai` (stack); `dashboard-api.chris-stefan.workers.dev` | list them exactly in the `cloud` profile and the CSP | DIG-2703 |
+| X5 | Cloudflare API hosts | — | — | `digithings.ai/api/chat*`, `/api/embed*` (digichat worker); `graph.`, `key.digithings.ai` (stack); `dashboard-api.example.workers.dev` | list them exactly in the `cloud` profile and the CSP | DIG-2703 |
 | X6 | Cloudflare MCP endpoint | — | — | `dashboard-api` `POST /mcp` (`x-digi-mcp-key`, fail-closed); `/_stack/mcp` precedent | **no public host**: human gate, [external]/[security] card | DIG-2703 |
 | X7 | Gloomberb | link out (ADR D8) | flagged, default-off (#5245) | vendor | legal/vendor terms | DIG-2704 |
 | X8 | LuxAlgo / Vela | link out (ADR D8) | `vela-pane.tsx`, `/research/vela-spike`, "soon" | vendor | legal/vendor terms | DIG-2704 |

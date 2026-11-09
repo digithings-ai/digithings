@@ -29,7 +29,7 @@ from typing import Any
 
 ALLOW_LIVE_ENV = "DIGI_ALLOW_LIVE_LLM_TESTS"
 
-#: Fail-fast key: the house upstream, billed to Chris's account.
+#: Fail-fast key: the house upstream, billed to the maintainer's account.
 FAIL_FAST_KEYS = ("CHEAPERINFERENCE_API_KEY",)
 
 #: Other paid-provider keys, scrubbed for the session (never printed).

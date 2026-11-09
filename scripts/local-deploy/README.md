@@ -2,7 +2,7 @@
 
 GitHub Actions minutes are exhausted, so the build, deploy and publish
 lanes below no longer run on GitHub. Their local replacements live in
-this directory and run on Chris's Mac under his normal user. No Cloudflare
+this directory and run on the maintainer's Mac under his normal user. No Cloudflare
 setting is changed by any script here, and nothing here deploys, publishes
 or spends without an explicit live flag plus a named approval.
 
@@ -39,7 +39,7 @@ the branch is version-shaped rather than named after Cloudflare.
 git worktree add ~/cf-rel release/v0.2.0
 cd ~/cf-rel && npm ci --no-audit --no-fund
 bash scripts/local-deploy/deploy_worker.sh digiquant-runner            # dry-run
-LOCAL_DEPLOY_APPROVED_BY=Chris \
+LOCAL_DEPLOY_APPROVED_BY=the maintainer \
   bash scripts/local-deploy/deploy_worker.sh digiquant-runner --live --yes
 ```
 
@@ -80,9 +80,9 @@ LOCAL_DEPLOY_APPROVED_BY=Chris \
   `publish_image.sh` builds and boot-probes but never pushes. A live write
   needs the explicit flag (`--live` / `--push`).
 - **Live needs a named approval.** The live flag additionally requires
-  `LOCAL_DEPLOY_APPROVED_BY` to be set to the approver (Chris for
+  `LOCAL_DEPLOY_APPROVED_BY` to be set to the approver (the maintainer for
   production). No approval string, no live write. This is the local form of
-  "no prod deploy without Chris's OK".
+  "no prod deploy without the maintainer's OK".
 - **Secrets arrive as environment variables** (`CLOUDFLARE_API_TOKEN`,
   `CLOUDFLARE_ACCOUNT_ID`, GHCR login via `docker login`). No secret is
   printed, logged or committed. Logs live under
@@ -101,7 +101,7 @@ bash scripts/local-deploy/build_workers.sh
 bash scripts/local-deploy/build_workers.sh dashboard-api
 bash scripts/local-deploy/build_sites.sh all
 bash scripts/local-deploy/deploy_worker.sh digithings-cron
-LOCAL_DEPLOY_APPROVED_BY=Chris \
+LOCAL_DEPLOY_APPROVED_BY=the maintainer \
   bash scripts/local-deploy/deploy_worker.sh digithings-cron --live
 bash scripts/local-deploy/publish_image.sh digichat --ref develop
 bash scripts/local-deploy/publish_image.sh digillm --tag digillm-v0.2.0

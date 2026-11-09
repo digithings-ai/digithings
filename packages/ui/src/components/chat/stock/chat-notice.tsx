@@ -48,7 +48,7 @@ export function chatNoticeRootProps(
 
 /**
  * The full detail (error text, traceback, JSON payload). Never cut and never
- * folded: it sits in a max-height scroll area (Chris, 21 Oct).
+ * folded: it sits in a max-height scroll area (the maintainer, 21 Oct).
  */
 export const ChatNoticeDetail: FC<{ text: string }> = ({ text }) => (
   <pre
