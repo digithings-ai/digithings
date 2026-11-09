@@ -3068,7 +3068,7 @@ describe("POST /api/chat", () => {
       expect(body.error).toBe("plan_tier_required");
     });
 
-    it("returns 403 when X-Embed-Plan-Tier header is spoofed (#3662 Chris lock)", async () => {
+    it("returns 403 when X-Embed-Plan-Tier header is spoofed (#3662 the maintainer lock)", async () => {
       // Raw X-Embed-Plan-Tier header is NEVER trusted — must still 403.
       const req = dashboardReq({ "x-embed-plan-tier": "desk" });
       const res = await POST(req);
@@ -3077,7 +3077,7 @@ describe("POST /api/chat", () => {
       expect(body.error).toBe("plan_tier_required");
     });
 
-    it("returns 403 when ?plan_tier= query param is spoofed (#3662 Chris lock)", async () => {
+    it("returns 403 when ?plan_tier= query param is spoofed (#3662 the maintainer lock)", async () => {
       // Raw ?plan_tier= query param is NEVER trusted — must still 403.
       const req = new Request("http://localhost/api/chat?plan_tier=desk", {
         method: "POST",

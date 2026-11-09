@@ -1,9 +1,9 @@
 # CHR-858 / Fixes #4947 — DigiVoice banner UX v5.8 SHIP
 
-Chris locked mock look **2026-10-01 ~20:39 Rome**. Implement product PR now (HOLD lifted).
+the maintainer locked mock look **2026-10-01 ~20:39 Rome**. Implement product PR now (HOLD lifted).
 
 ## SoT mock
-`/workspace/digivoice-banner-ux-v5.8-mock.html` (also Chris Desktop + `~/Library/Application Support/digivoice/mocks/banner-ux-v5.8.html` if present)
+`/workspace/digivoice-banner-ux-v5.8-mock.html` (also the maintainer Desktop + `~/Library/Application Support/digivoice/mocks/banner-ux-v5.8.html` if present)
 
 ## Product base
 `origin/develop` after #4937 banner+Esc. Open AGENTS.md + digivoice AGENTS.md first. Branch off develop. PR → develop with `Fixes #4947`.
@@ -18,7 +18,7 @@ Chris locked mock look **2026-10-01 ~20:39 Rome**. Implement product PR now (HOL
 - DigiChat StatusGrid squares (not dots); no DigiVoice/Recording/Esc chrome copy
 - Esc = full discard (no paste/blank/history)
 
-### v5 visual + interaction (from mock + Chris locks)
+### v5 visual + interaction (from mock + the maintainer locks)
 - StatusGrid always top-left; hug content (no empty gutter/min-width stretch)
 - Equal padding mini/peek/full; light/dark DigiChat flips (RYG status colors stay)
 - No settings UI on banner — CLI owns config
@@ -39,7 +39,7 @@ Chris locked mock look **2026-10-01 ~20:39 Rome**. Implement product PR now (HOL
 ## Done bar
 1. PR open `Fixes #4947` → develop
 2. In-session review hatch `<!-- in-session-review -->` + `reviewed:agent`
-3. Ping One / Merge when green — then Mac Hammerspoon Reload Config for Chris smoke
+3. Ping One / Merge when green — then Mac Hammerspoon Reload Config for the maintainer smoke
 4. Clean OpenCode sessions when done
 
 OpenCode free ladder; parallel sessions OK keep winner. lowercase digi*.

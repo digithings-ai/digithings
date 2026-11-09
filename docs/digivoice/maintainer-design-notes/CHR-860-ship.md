@@ -1,6 +1,6 @@
 # CHR-860 / Fixes #4953 — DigiVoice CLI setup + doctor + config spine
 
-## Locks (Chris / One 2026-10-01)
+## Locks (the maintainer / One 2026-10-01)
 - DigiVoice CLI = **only** config surface besides live banner (no settings web UI).
 - Shape like Claude Code / Grok CLI: `digivoice` launches local terminal config app.
 - `digivoice setup` — interactive arrow-key menus, enter to select, walk every preference.

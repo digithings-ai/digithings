@@ -14,6 +14,7 @@ marked `integration` and not `unit`.
 
 from __future__ import annotations
 
+import base64
 import os
 import shutil
 import subprocess
@@ -225,6 +226,53 @@ def test_security_md_lists_every_signer_fingerprint(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_promotion_key_is_absent() -> None:
     assert PROMOTION_KEY not in SIGNERS.read_text()
+
+
+@pytest.mark.unit
+def test_security_md_records_the_unverified_historical_tag() -> None:
+    """``r0-v0.1.0`` is named, superseded and explicitly not a trust anchor.
+
+    That tag was cut with the bootstrap promotion key before the signer policy
+    existed, so it cannot verify against this file. A verifier who reads
+    ``SECURITY.md`` has to learn that before it meets the failure; otherwise a
+    "good signature" from an unlisted key is the only thing it has to go on.
+    """
+    security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    section = security.split("## Release signing keys", 1)[1].split("\n## ", 1)[0]
+    assert "r0-v0.1.0" in section
+    assert "r0-v0.1.2" in section, "the historical tag must name its successor"
+    assert "not** a current trust anchor" in section
+    assert PROMOTION_KEY not in SIGNERS.read_text()
+
+
+#: The split repos carry their own copy of the signers file (K1/K2 synced it).
+#: They are private, so this reads them through the host `gh` session and skips
+#: cleanly when that session (or CI) cannot see them.
+SPLIT_SIGNERS = (
+    ("digithings-ai/digiquant-strategies", "R1"),
+    ("digithings-ai/digichat-tenants", "R6"),
+)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(("repo", "label"), SPLIT_SIGNERS)
+def test_promotion_key_is_absent_from_split_repos(repo: str, label: str) -> None:
+    if shutil.which("gh") is None:
+        pytest.skip("gh CLI unavailable")
+    read = _run(
+        ROOT,
+        "gh",
+        "api",
+        f"repos/{repo}/contents/allowed_signers",
+        "--jq",
+        ".content",
+        timeout=30,
+    )
+    if read.returncode != 0:
+        pytest.skip(f"cannot read {label} allowed_signers: {read.stderr.strip()}")
+    text = base64.b64decode(read.stdout).decode("utf-8")
+    assert PROMOTION_KEY not in text, f"promotion key present in {label} allowed_signers"
+    assert "release@digithings" in text, f"{label} allowed_signers has no release key"
 
 
 @pytest.mark.unit

@@ -2,7 +2,7 @@
 
 ``positions.weight_pct`` is a drift-carrying ACTUAL written by several independent
 writers. ``position_events`` is the rebalance LEDGER — the operator's intended
-target weight per ticker. Chris's 2026-10-10 verdict on the house book: the
+target weight per ticker. the maintainer's 2026-10-10 verdict on the house book: the
 25 Sep rebalance targets (UUP 15 / DBO 10 / XLV 10) are the correct weights, so a
 writer must not persist a book the ledger cannot explain.
 

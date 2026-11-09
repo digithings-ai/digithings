@@ -7,8 +7,8 @@
 #
 # A real deploy needs --live AND a named approval AND the Cloudflare
 # credentials exported in the environment. This is the local form of
-# "no prod deploy without Chris's OK":
-#   LOCAL_DEPLOY_APPROVED_BY=Chris \
+# "no prod deploy without the maintainer's OK":
+#   LOCAL_DEPLOY_APPROVED_BY=the maintainer \
 #     bash scripts/local-deploy/deploy_worker.sh digithings-cron --live
 # (with CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID exported)
 #
@@ -58,7 +58,7 @@ if [ "$LIVE" -eq 0 ]; then
   exit 0
 fi
 
-: "${LOCAL_DEPLOY_APPROVED_BY:?--live needs LOCAL_DEPLOY_APPROVED_BY naming the approver (Chris for production).}"
+: "${LOCAL_DEPLOY_APPROVED_BY:?--live needs LOCAL_DEPLOY_APPROVED_BY naming the approver (the maintainer for production).}"
 : "${CLOUDFLARE_API_TOKEN:?--live needs CLOUDFLARE_API_TOKEN.}"
 : "${CLOUDFLARE_ACCOUNT_ID:?--live needs CLOUDFLARE_ACCOUNT_ID.}"
 if [ "$YES" -eq 0 ]; then
@@ -100,7 +100,7 @@ if grep -q '^\[\[containers\]\]' "apps/$APP/wrangler.toml"; then
   fi
 fi
 
-# Local Docker gate (Chris, 2026-10-18): build the container image HERE first, so
+# Local Docker gate (the maintainer, 2026-10-18): build the container image HERE first, so
 # a broken image -- a missing packaged dependency, a bad COPY -- fails in a minute
 # locally instead of after a full Cloudflare deploy attempt. This is not theoretical:
 # on 2026-10-18 the digichat dry run passed (28 tests, clean typecheck) and the live
