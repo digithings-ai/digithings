@@ -9,6 +9,12 @@ lay out at the paths they already execute.
 
 Output is ``image-packages/`` (gitignored). It is not a registry and it
 does not push an image.
+
+The stack image's tenant seed corpus is an R6 subject. It is staged from the
+mono tree by default; ``--tenant-seeds-dir`` (or ``DIGI_TENANT_SEEDS_DIR``)
+points it at a checkout of a verified ``tenants-v*`` tag produced by
+``scripts/fetch_tenant_seeds.sh``. The provenance records which source was
+used, the tag and commit, and a content digest.
 """
 
 from __future__ import annotations
@@ -16,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -101,6 +108,21 @@ STACK_OUTPUTS = (
 #: it here and the Dockerfile copies the staged copy. Same rule as the wheel and
 #: requirements inputs - the image consumes build inputs, never a sibling tree.
 TENANT_SEEDS_SOURCE = Path("apps/digithings-stack-cloudflare/container/seed")
+#: The provenance key the staged corpus is fingerprinted under. It is also the
+#: name ``stack_input_paths`` uses, so ``check_only`` reports drift on it.
+TENANT_SEEDS_KEY = "payload:tenant-seeds"
+#: Where ``--tenant-seeds-dir`` can come from when the flag is absent.
+TENANT_SEEDS_ENV = "DIGI_TENANT_SEEDS_DIR"
+#: The provenance record ``scripts/fetch_tenant_seeds.sh`` writes into the
+#: staged tree. It is build metadata, not seed content, so it is excluded from
+#: the digest: a tag-staged tree must fingerprint the same as the mono tree it
+#: replaced (T19 proves parity by digest equality).
+TENANT_SOURCE_NAME = ".tenants-source"
+TENANT_TAG_RE = re.compile(r"^tenants-v[0-9]+\.[0-9]+\.[0-9]+$")
+TENANT_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+#: The refusal both staging paths share. An image built without a seed corpus
+#: boots and serves an empty tenant index, which looks like a healthy deploy.
+EMPTY_TENANT_SEEDS = "no tenant seeds; refusing to build an image with an empty /seed"
 RUNNER_FILES = (
     "scripts/refresh_market_data_r2.py",
     "scripts/backfill_market_data_r2.py",
@@ -193,7 +215,7 @@ def _walked_files(root: Path) -> list[Path]:
     return found
 
 
-def content_digest(root: Path) -> str:
+def content_digest(root: Path, exclude: tuple[str, ...] | frozenset[str] = ()) -> str:
     """sha256 over (relative POSIX path, working-tree bytes) for an input's sources.
 
     mtimes are deliberately absent. Git checkout stamps every source file with the
@@ -205,6 +227,10 @@ def content_digest(root: Path) -> str:
     tree's, never the index blob's: ``uv build`` packages a dirty edit, so reading the
     index would pass a tree the wheel was not built from.
 
+    ``exclude`` drops top-level relative paths from the digest. It exists for
+    ``.tenants-source``: the tag record is build metadata, so the tag-staged tree
+    must fingerprint the same as the mono tree holding the same payloads.
+
     Without git this degrades to the old filesystem walk and says so on stderr, rather
     than returning an empty digest that reads as "unchanged".
     """
@@ -214,9 +240,12 @@ def content_digest(root: Path) -> str:
         digest.update(root.read_bytes())
         return digest.hexdigest()
 
+    excluded = frozenset(exclude)
     listed = _git_listed_files(root)
+    if listed is not None:
+        listed = [path for path in listed if path.as_posix() not in excluded]
     if listed is None or not listed:
-        walked = _walked_files(root)
+        walked = [path for path in _walked_files(root) if path.as_posix() not in excluded]
         # listed is None: git could not answer. listed == [] over a non-empty tree:
         # every file is ignored, which is not something to trust silently.
         if listed is None or walked:
@@ -235,9 +264,23 @@ def content_digest(root: Path) -> str:
     return digest.hexdigest()
 
 
-def input_paths() -> dict[str, Path]:
-    """Every packaged input: name -> the source path it is built from."""
+def input_paths(
+    tenant_seeds_dir: Path | None = None, include_tenant_seeds: bool = True
+) -> dict[str, Path]:
+    """Every packaged input: name -> the source path it is built from.
+
+    ``payload:tenant-seeds`` is one of them: a full build stages the corpus from
+    ``tenant_seeds_dir`` (or the mono tree), and ``check_only`` must be able to
+    re-check its digest. The npm scope passes ``include_tenant_seeds=False``:
+    that image installs no seed corpus and must not require R6 content to build.
+    An R0 checkout has no seed tree (it is an R6 subject) and no build to
+    protect, so the key is present only when a source exists or is named.
+    """
     paths: dict[str, Path] = {}
+    if include_tenant_seeds and (
+        tenant_seeds_dir is not None or (REPO / TENANT_SEEDS_SOURCE).is_dir()
+    ):
+        paths[TENANT_SEEDS_KEY] = tenant_seeds_source(tenant_seeds_dir)
     for package in dict.fromkeys([name for name, _ in STACK_PACKAGES] + list(RUNNER_WHEELS)):
         paths[package] = REPO / package
 
@@ -294,8 +337,94 @@ def _combined(packages: dict[str, str]) -> str:
     return hashlib.sha256(pairs.encode("utf-8")).hexdigest()
 
 
+def tenant_seeds_source(tenant_seeds_dir: Path | None = None) -> Path:
+    """The tree the image's ``/seed`` is staged from, or refuse to build.
+
+    ``tenant_seeds_dir`` is the checkout ``scripts/fetch_tenant_seeds.sh``
+    produced from a verified ``tenants-v*`` tag; absent, the mono tree is the
+    source (the pre-cutover default). There is deliberately no third case: an
+    image built with no seed corpus starts and serves an empty tenant index,
+    which reads as a healthy deploy.
+
+    A directory holding only metadata or a README is not a corpus either: it
+    must carry at least one seed document (``.md`` other than ``README.md``,
+    ``.jsonl`` or ``.json``).
+    """
+    chosen = Path(tenant_seeds_dir) if tenant_seeds_dir is not None else REPO / TENANT_SEEDS_SOURCE
+    if not chosen.is_dir():
+        raise SystemExit(f"{EMPTY_TENANT_SEEDS} (source: {chosen})")
+    has_payload = any(
+        path.is_file()
+        and path.name != TENANT_SOURCE_NAME
+        and path.name.lower() not in ("readme.md", "readme")
+        and path.suffix in (".jsonl", ".json", ".md")
+        for path in chosen.rglob("*")
+    )
+    if not has_payload:
+        raise SystemExit(f"{EMPTY_TENANT_SEEDS} (source: {chosen} holds no seed payload)")
+    return chosen
+
+
+def read_tenant_source(seed_dir: Path) -> dict[str, str]:
+    """The ``tag=``/``commit=`` record the fetcher writes, validated.
+
+    **Self-attested by design.** The record is written by
+    ``scripts/fetch_tenant_seeds.sh`` after it verifies the tag; nothing in the
+    staged directory can prove that happened. Packaging has no tag object and no
+    history to re-run ``git verify-tag`` against — it holds a copy of the
+    corpus, not the repository — so this reader checks shape, not provenance.
+    The fetcher is the trust boundary; the record is evidence of what it did,
+    and a hand-written copy is indistinguishable from a fetched one. Provenance
+    records ``source: tag`` on that basis.
+    """
+    source_file = seed_dir / TENANT_SOURCE_NAME
+    try:
+        lines = source_file.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise SystemExit(
+            f"tenant seeds dir {seed_dir} has no {TENANT_SOURCE_NAME}; refusing "
+            f"an unverified seed tree (stage it with scripts/fetch_tenant_seeds.sh) ({exc})"
+        ) from exc
+    values: dict[str, str] = {}
+    for line in lines:
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key.strip()] = value.strip()
+    tag = values.get("tag", "")
+    commit = values.get("commit", "")
+    if not TENANT_TAG_RE.match(tag) or not TENANT_COMMIT_RE.match(commit):
+        raise SystemExit(
+            f"tenant seeds provenance {source_file} is malformed "
+            "(want tag=tenants-vX.Y.Z and commit=<40 hex>); refusing an "
+            "unverified seed tree"
+        )
+    return {"tag": tag, "commit": commit}
+
+
+def tenant_seeds_record(tenant_seeds_dir: Path | None = None) -> dict[str, object]:
+    """The provenance entry for the staged corpus: where it came from and its digest."""
+    source = tenant_seeds_source(tenant_seeds_dir)
+    record: dict[str, object] = {
+        "source": "mono" if tenant_seeds_dir is None else "tag",
+        "tag": None,
+        "commit": None,
+        "digest": content_digest(source, exclude=(TENANT_SOURCE_NAME,)),
+    }
+    if tenant_seeds_dir is not None:
+        record.update(read_tenant_source(source))
+    return record
+
+
+def _input_digest(name: str, path: Path) -> str:
+    """``content_digest`` with the tenant seed tree's build metadata excluded."""
+    excludes = (TENANT_SOURCE_NAME,) if name == TENANT_SEEDS_KEY else ()
+    return content_digest(path, exclude=excludes)
+
+
 def provenance_document(
-    paths: dict[str, Path] | None = None, scope: str | None = None
+    paths: dict[str, Path] | None = None,
+    scope: str | None = None,
+    tenant_seeds_dir: Path | None = None,
 ) -> dict[str, object]:
     """The provenance record written next to the packaged artifacts.
 
@@ -303,9 +432,19 @@ def provenance_document(
     everything: ``"npm-only"`` for the digichat image's inputs. It is absent on
     a full record, so a reader can tell "this tree is partial" from "this tree
     is the whole thing" without comparing key sets.
+
+    ``tenant_seeds`` names the corpus's origin (``tag`` or ``mono``) and the
+    content digest, so a build can be traced to the signed tag it consumed and
+    two staging paths can be proven content-identical (T19). The record is
+    self-attested by the fetcher when ``source`` is ``tag``: see
+    ``read_tenant_source``.
     """
-    selected = input_paths() if paths is None else paths
-    packages = {name: content_digest(path) for name, path in sorted(selected.items())}
+    selected = (
+        input_paths(tenant_seeds_dir, include_tenant_seeds=scope != NPM_SCOPE)
+        if paths is None
+        else paths
+    )
+    packages = {name: _input_digest(name, path) for name, path in sorted(selected.items())}
     document: dict[str, object] = {
         "version": PROVENANCE_VERSION,
         "packages": packages,
@@ -315,6 +454,8 @@ def provenance_document(
     }
     if scope is not None:
         document["scope"] = scope
+    if scope in (None, STACK_SCOPE):
+        document["tenant_seeds"] = tenant_seeds_record(tenant_seeds_dir)
     return document
 
 
@@ -328,9 +469,11 @@ def _provenance_path() -> Path:
 
 
 def _write_provenance(
-    paths: dict[str, Path] | None = None, scope: str | None = None
+    paths: dict[str, Path] | None = None,
+    scope: str | None = None,
+    tenant_seeds_dir: Path | None = None,
 ) -> None:
-    document = provenance_document(paths, scope)
+    document = provenance_document(paths, scope, tenant_seeds_dir)
     _provenance_path().write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
 
@@ -338,6 +481,7 @@ def check_only(
     paths: dict[str, Path] | None = None,
     provenance: Path | None = None,
     scope: str | None = None,
+    tenant_seeds_dir: Path | None = None,
 ) -> int:
     """0 when the packaged inputs match the sources, 1 on drift, 2 when unknown.
 
@@ -350,6 +494,11 @@ def check_only(
     scoped check for the stack image. It refuses a tree packaged for a DIFFERENT
     scope, and a scoped tree still fails a full check, because a partial tree
     must never read as a complete one.
+
+    ``tenant_seeds_dir`` points the stack scope at a tag-staged corpus instead
+    of the mono tree. Its provenance must agree with the packaged payload digest
+    — the two are written from one read, so a disagreement is a tampered or
+    hand-edited record, not drift.
     """
     target = _provenance_path() if provenance is None else provenance
     if scope is not None and paths is not None:
@@ -357,9 +506,9 @@ def check_only(
             "check_only() takes a scope OR an explicit path set, not both: a scope "
             "already says which inputs the question is about"
         )
-    selected = input_paths() if paths is None else paths
+    selected = input_paths(tenant_seeds_dir) if paths is None else paths
     if scope == STACK_SCOPE:
-        selected = stack_input_paths()
+        selected = stack_input_paths(tenant_seeds_dir)
     elif scope == NPM_SCOPE:
         selected = npm_input_paths()
     try:
@@ -385,7 +534,19 @@ def check_only(
         print(f"  rebuild: {REMEDIATION}")
         return 1
 
-    current = {name: content_digest(path) for name, path in selected.items()}
+    tenant_record = document.get("tenant_seeds")
+    if (
+        scope in (None, STACK_SCOPE)
+        and isinstance(tenant_record, dict)
+        and TENANT_SEEDS_KEY in recorded
+        and tenant_record.get("digest") != recorded[TENANT_SEEDS_KEY]
+    ):
+        print(f"ABORT: {target} tenant_seeds.digest disagrees with the packaged")
+        print(f"       {TENANT_SEEDS_KEY}; the record was edited after it was written.")
+        print(f"  rebuild: {REMEDIATION}")
+        return 2
+
+    current = {name: _input_digest(name, path) for name, path in selected.items()}
     added = sorted(set(current) - set(recorded))
     removed = sorted(set(recorded) - set(current))
     changed = sorted(
@@ -395,6 +556,23 @@ def check_only(
         # A scoped check asks about the scope's inputs only: what a full tree
         # carries beyond them is not drift.
         removed = []
+
+    # The source digest is not enough: the image COPYs the STAGED corpus, so a
+    # copy swapped after packaging would ship content the record does not name.
+    # A full build writes this path too, and its record must protect it.
+    staged_seeds = OUT / "stack" / "tenant-seeds"
+    if (
+        scope != NPM_SCOPE
+        and TENANT_SEEDS_KEY in recorded
+        and staged_seeds.is_dir()
+        and content_digest(staged_seeds, exclude=(TENANT_SOURCE_NAME,))
+        != recorded[TENANT_SEEDS_KEY]
+    ):
+        print("ABORT: image-packages/stack/tenant-seeds does not match the recorded")
+        print(f"       {TENANT_SEEDS_KEY} digest; the staged corpus changed after packaging.")
+        print(f"  rebuild: {REMEDIATION}")
+        return 1
+
     if not (added or removed or changed):
         print(f"ok: image-packages provenance matches {len(current)} packaged input(s)")
         return 0
@@ -632,10 +810,14 @@ def npm_input_paths() -> dict[str, Path]:
     tree as fresh.
     """
     manifest_sources = {manifest.parent for manifest in NPM_MANIFESTS.values()}
-    return {name: path for name, path in input_paths().items() if path in manifest_sources}
+    return {
+        name: path
+        for name, path in input_paths(include_tenant_seeds=False).items()
+        if path in manifest_sources
+    }
 
 
-def stack_input_paths() -> dict[str, Path]:
+def stack_input_paths(tenant_seeds_dir: Path | None = None) -> dict[str, Path]:
     """The inputs the stack image installs — the stack half of :func:`input_paths`.
 
     The stack image COPYs ``image-packages/stack/{requirements.txt,wheels,
@@ -644,10 +826,13 @@ def stack_input_paths() -> dict[str, Path]:
     this scope covers the nine workspace packages it installs and the seed
     corpus it bakes in. The digisearch seeds are the one payload input the
     stack image reads, and they are a source tree of their own.
+
+    ``tenant_seeds_dir`` is the verified-tag checkout from
+    ``scripts/fetch_tenant_seeds.sh``; absent, the mono tree is the source.
     """
     paths = {package: REPO / package for package, _ in STACK_PACKAGES}
     paths["payload:digisearch/seeds"] = REPO / "digisearch" / "seeds"
-    paths["payload:tenant-seeds"] = REPO / TENANT_SEEDS_SOURCE
+    paths[TENANT_SEEDS_KEY] = tenant_seeds_source(tenant_seeds_dir)
     return paths
 
 
@@ -672,7 +857,7 @@ def npm_only() -> int:
     return 0
 
 
-def stack_only() -> int:
+def stack_only(tenant_seeds_dir: Path | None = None) -> int:
     """Package only the stack image's inputs.
 
     The stack image installs nine workspace wheels, the frozen export of their
@@ -682,10 +867,16 @@ def stack_only() -> int:
     runs a fresh ``uv lock`` against PyPI, and the npm step packs five
     workspaces the image never installs.
 
+    The tenant seed corpus comes from ``tenant_seeds_dir`` when given — a
+    checkout ``scripts/fetch_tenant_seeds.sh`` verified against the release
+    signing key — and from the mono tree otherwise. The source is resolved
+    before ``OUT`` is removed, so a missing corpus cannot wipe a good tree.
+
     The provenance written here covers ONLY these inputs and says so, so a full
     ``--check-only`` still refuses this tree: a partial tree must never read as
     a complete one.
     """
+    tenant_seeds = tenant_seeds_source(tenant_seeds_dir)
     if OUT.exists():
         shutil.rmtree(OUT)
     stack_wheels = OUT / "stack" / "wheels"
@@ -703,9 +894,11 @@ def stack_only() -> int:
     stack_req.write_text("\n".join(_merge(stack_exports)) + "\n", encoding="utf-8")
     seeds = REPO / "digisearch" / "seeds"
     shutil.copytree(seeds, OUT / "stack" / "digisearch-seeds")
-    shutil.copytree(REPO / TENANT_SEEDS_SOURCE, OUT / "stack" / "tenant-seeds")
+    shutil.copytree(tenant_seeds, OUT / "stack" / "tenant-seeds")
     # Last, so the record describes the artifacts on disk.
-    _write_provenance(stack_input_paths(), scope=STACK_SCOPE)
+    _write_provenance(
+        stack_input_paths(tenant_seeds_dir), scope=STACK_SCOPE, tenant_seeds_dir=tenant_seeds_dir
+    )
     print(f"wrote {OUT / 'stack'} (stack inputs only)")
     print("  the npm and runner inputs are NOT in this tree; a worker deploy")
     print("  needs the full generator:")
@@ -713,11 +906,28 @@ def stack_only() -> int:
     return 0
 
 
+def resolve_tenant_seeds_dir(explicit: str | None) -> Path | None:
+    """The ``--tenant-seeds-dir`` value, falling back to the environment.
+
+    An explicit flag wins over ``DIGI_TENANT_SEEDS_DIR``, and an empty variable
+    is the same as unset: an accidental ``export DIGI_TENANT_SEEDS_DIR=`` must
+    not turn into ``Path('.')`` and fingerprint the repository as a seed tree.
+    """
+    value = explicit if explicit is not None else os.environ.get(TENANT_SEEDS_ENV, "")
+    value = (value or "").strip()
+    if not value:
+        return None
+    return Path(value).expanduser()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     check = False
     scope: str | None = None
-    for arg in args:
+    tenant_seeds_arg: str | None = None
+    index = 0
+    while index < len(args):
+        arg = args[index]
         if arg == "--check-only":
             check = True
         elif arg == "--npm-only":
@@ -734,18 +944,35 @@ def main(argv: list[str] | None = None) -> int:
                     "package one image at a time"
                 )
             scope = STACK_SCOPE
+        elif arg == "--tenant-seeds-dir":
+            if index + 1 >= len(args):
+                raise SystemExit("--tenant-seeds-dir needs a PATH")
+            tenant_seeds_arg = args[index + 1]
+            index += 1
+        elif arg.startswith("--tenant-seeds-dir="):
+            tenant_seeds_arg = arg.split("=", 1)[1]
         else:
             raise SystemExit(
                 f"unknown argument(s): {' '.join(args)} "
-                "(want --check-only, --npm-only or --stack-only)"
+                "(want --check-only, --npm-only, --stack-only or --tenant-seeds-dir PATH)"
             )
+        index += 1
+    tenant_seeds = resolve_tenant_seeds_dir(tenant_seeds_arg)
+    if tenant_seeds is not None and scope == NPM_SCOPE:
+        raise SystemExit(
+            "--tenant-seeds-dir stages the stack image's /seed, not an npm input; "
+            "drop it from a digichat-only build"
+        )
     if check:
-        return check_only(scope=scope)
+        return check_only(scope=scope, tenant_seeds_dir=tenant_seeds)
     if scope == NPM_SCOPE:
         return npm_only()
     if scope == STACK_SCOPE:
-        return stack_only()
+        return stack_only(tenant_seeds)
 
+    # Resolve before the tree is removed: a missing corpus must not destroy a
+    # previously good image-packages/.
+    staged_seeds = tenant_seeds_source(tenant_seeds)
     if OUT.exists():
         shutil.rmtree(OUT)
     wheel_dir = OUT / "wheels"
@@ -771,7 +998,7 @@ def main(argv: list[str] | None = None) -> int:
         shutil.copy2(built[package], stack_wheels / built[package].name)
     seeds = REPO / "digisearch" / "seeds"
     shutil.copytree(seeds, OUT / "stack" / "digisearch-seeds")
-    shutil.copytree(REPO / TENANT_SEEDS_SOURCE, OUT / "stack" / "tenant-seeds")
+    shutil.copytree(staged_seeds, OUT / "stack" / "tenant-seeds")
 
     runner_exports: list[Path] = []
     for package, extras in RUNNER_EXPORTS:
@@ -786,7 +1013,7 @@ def main(argv: list[str] | None = None) -> int:
     # Last, so the record describes the artifacts on disk. DIG-4423: this is what
     # lets deploy_worker.sh refuse a stale image-packages/ instead of trusting that
     # the directory merely exists.
-    _write_provenance()
+    _write_provenance(tenant_seeds_dir=tenant_seeds)
     print(f"wrote {OUT}")
     return 0
 
