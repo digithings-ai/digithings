@@ -197,7 +197,7 @@ To update the landing page: edit `apps/digithings-web/`, run the build script lo
   `infra/digichat-digithings/README.md`.
 - **Cutover (DIG-5121, in `develop`, not live yet):** the digichat Worker claims
   `digithings.ai/chat*` and the Container is built with `DIGICHAT_BASE_PATH=/chat`, so the
-  **app** — not the Pages shell — answers `/chat` once the deploy lane (DIG-5120) and Chris's
+  **app** — not the Pages shell — answers `/chat` once the deploy lane (DIG-5120) and the maintainer's
   approval of the production environment land. `/chat/tenantb` stays a Pages shell behind the invite
   gate. Compatibility window: `/embed*` stays **indefinitely** (the tenantb shell's iframe and the
   marketing site both point at `digithings.ai/embed?host=…`); the legacy `/api/chat*`,
@@ -352,9 +352,9 @@ a Docker CLI locally for `wrangler deploy` to build the image.
 Both `infra/docker/Dockerfile.digichat-cloudflare` and `infra/docker/Dockerfile.digithings-stack-cloudflare` are live at
 the repo root, and both lanes now exist on `develop`: the stack lane was re-derived on
 2026-10-20 (DIG-4612) and the digichat lane on 2026-10-22 (DIG-5120). Both sit behind the
-`production` environment, whose required reviewer is Chris. The **digichat** lane deploys only
+`production` environment, whose required reviewer is the maintainer. The **digichat** lane deploys only
 on a manual dispatch, so a merge to `main` runs its validation gate and deploys nothing; the
-**stack** lane still deploys on a push to `main`, behind Chris's approval.
+**stack** lane still deploys on a push to `main`, behind the maintainer's approval.
 
 #### Why the lane was deleted, and what brought it back
 

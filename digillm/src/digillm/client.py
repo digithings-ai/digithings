@@ -775,12 +775,12 @@ _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
 # meta-llama/*, perplexity/*, and all ``:online`` variants — those are not on the
 # CI catalog and fail closed when CI is the selected house upstream (#3660).
 # DeepSeek flash: the house flash slugs and the ``*-release`` names route to
-# the V4.1 Flash 1017 checkpoint (2026-10-21). Chris decided 1017 replaces
+# the V4.1 Flash 1017 checkpoint (2026-10-21). the maintainer decided 1017 replaces
 # the older flash checkpoints. The 0731 fast row is its own markets id, with
 # its own price, so that slug keeps its bare name instead of aliasing to 1017.
 _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
     "deepseek/deepseek-v4.1-flash-1017": "deepseek-v4.1-flash-1017",
-    # House chats run the 1017 checkpoint (Chris, 23 Oct 2026); this slug stays
+    # House chats run the 1017 checkpoint (the maintainer, 23 Oct 2026); this slug stays
     # its own id so a picker selection is never silently rewritten. 1017 reasons
     # only when asked — the digichat chain sends reasoning_effort for it — while
     # the bare id reasons unprompted (live check 2026-10-22).
@@ -933,7 +933,7 @@ def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
     return _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE.get(model)
 
 
-# Chat reasoning (Chris, 2026-10-22): reasoning is on for every chat. A chat's
+# Chat reasoning (the maintainer, 2026-10-22): reasoning is on for every chat. A chat's
 # /effort (low/medium/high, ``X-Digi-Effort``) maps to ``reasoning_effort`` on
 # models whose level is configurable; with no /effort set the model keeps its
 # own default level. Models without levels reason (or not) as they always do.

@@ -41,7 +41,7 @@ test("cloud chat uses digithings.ai; cloud mcp stays unset", () => {
 
 test("cloud desk and graph use the product defaults", () => {
   expect(endpoint("desk", { DIGI_ENV: "cloud" })).toBe(
-    "https://dashboard-api.[redacted].workers.dev",
+    "https://dashboard-api.example.workers.dev",
   );
   expect(endpoint("graph", { DIGI_ENV: "cloud" })).toBe("https://graph.digithings.ai");
 });

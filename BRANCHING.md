@@ -14,9 +14,9 @@ branch protection**, which the rulesets endpoint does not report at all — see 
 table below, and query `…/branches/<name>/protection` before concluding a branch
 is unguarded.
 
-## Origin drafts
+## Draft branches
 
-Agent iterations use a local branch named `origin/<slug>` and `origin push local`. Those refs live only on the Origin `/local` endpoint and do not sync to GitHub. They are not part of the taxonomy below. Promoting a draft means copying its tip onto a `task/` or `release/` branch and pushing that branch. See [AGENTS.md](AGENTS.md#origin-iteration-github-promotion).
+Draft work stays on a local branch cut from `develop`. It is not part of the taxonomy below. Promoting a draft means copying its tip onto a `task/` or `release/` branch and opening a pull request. See [AGENTS.md](AGENTS.md#github-promotion).
 
 ## Two-tier branching model
 
@@ -64,7 +64,7 @@ bare `git push` lands there — repair it with
 | `copilot/<slug>` | Work driven by GitHub Copilot. | `copilot/fix-import-order` |
 | `bot/<slug>` | Opened by a repo workflow, not a person. Live publishers are `agent-backlog-snapshot.yml` (`bot/agent-backlog-snapshot`) and `pipeline-provider-review.yml` (`bot/provider-review-*`). `project-stub-fields.yml` used to push `bot/stub-tsv-*` and was removed in #4919; those leftover refs stay deletable. | `bot/agent-backlog-snapshot` |
 | `release-please--branches--<target>--components--<component>` | The pattern stays so a leftover release-please ref can still be pushed. The `release-please-*.yml` workflows that used to create these branches were removed in #4919; none remain under `.github/workflows/`. | `release-please--branches--develop--components--digichat` |
-| `<handle>/<slug>` | Direct human commits by a named contributor (GitHub login). | `[redacted]/vision-pass` |
+| `<handle>/<slug>` | Direct human commits by a named contributor (GitHub login). | `maintainer/vision-pass` |
 | `feat/<slug>` | Feature work not bound to a single Issue. | `feat/model-picker` |
 | `fix/<slug>` | Bug fix not bound to a single Issue. | `fix/auth-retry` |
 | `docs/<slug>` | Docs-only change (eligible for auto-merge via the `automerge-docs` label). | `docs/vision-update` |
@@ -114,7 +114,7 @@ Human branches use the contributor's GitHub handle as the namespace. To add a
 new contributor:
 
 1. Edit `scripts/hooks/pre-push.sh` and add the handle to `CONTRIBUTOR_HANDLES`
-   (pipe-separated: `[redacted]|alice|bob`).
+   (pipe-separated: `maintainer|alice|bob`).
 2. Install your *uncommitted* edit to test it: `HOOKS_REF=WORKTREE make hooks-install`.
    A plain `make hooks-install` installs the copy committed on `origin/develop`,
    so on its own it would not pick your edit up. The override is not durable:
@@ -242,8 +242,8 @@ to it, so it needs the same `ALLOW_MAIN_PUSH=1`. The `develop` guard works the
   enforces this server-side today**: `scripts/github-rulesets/01-branch-naming.json`
   declares the same regex (bar the `main`/`develop` arms, which its
   `conditions.ref_name.exclude` covers instead) and reads `"enforcement":
-  "active"`, but that file is desired state that was never applied (`origin` is
-  the [redacted], not the GitHub repo). Nothing currently proves this
+  "active"`, but that file is desired state that was never applied to the
+  GitHub repo. Nothing currently proves this
   the way the `release-please--branches--*--components--*` refs used to: those were
   live on GitHub while the taxonomy still rejected them client-side, meaning the
   hook was blocking even a maintainer's own follow-up push (e.g. a lockfile resync)

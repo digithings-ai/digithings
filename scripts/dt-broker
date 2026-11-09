@@ -8,7 +8,7 @@ Two callers:
 * the launchd job, which runs `dt-broker serve`.
 
 The script finds the package next to itself, so it works from a checkout, from
-a worktree, and from wherever Chris installs a copy of it.
+a worktree, and from wherever the maintainer installs a copy of it.
 """
 
 from __future__ import annotations

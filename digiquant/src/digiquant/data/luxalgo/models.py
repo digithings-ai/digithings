@@ -241,7 +241,7 @@ LUXALGO_TRACKERS_ALLOWED_DATASETS: frozenset[str] = frozenset(
         "short-volume",  # FINRA daily
         "lobbying-filings",  # LDA, 2 U.S.C. 1601 et seq.
         "gov-contracts",  # USAspending, 31 U.S.C. 3512
-        # RISK-ACCEPTED 2026-10-06 (business owner: Chris). Counsel classified these
+        # RISK-ACCEPTED 2026-10-06 (business owner: the maintainer). Counsel classified these
         # rows as periodic transaction reports under 5 U.S.C. 13105(l), therefore
         # "reports" for 13107(c), and advised refusal (DIG-1472, CONFIRMED). The
         # business owner decided to keep this dataset in service. That is a decision

@@ -3,7 +3,7 @@
  * The two product chats open with the model chip and a usable picker when the
  * tenant registry names no model policy. That is the live registry today:
  * #6193 made the picker opt-in (`models.catalog`, and `tenantbPicker` on tenantb), so
- * the chip vanished on digithings.ai and tenantb. Chris signed off the tenantb picker
+ * the chip vanished on digithings.ai and tenantb. the maintainer signed off the tenantb picker
  * on 21 Oct 2026, 19:19 Rome. tenantb is unmetered; digithings.ai keeps its
  * per-visitor premium window. A Foundry tenant stays closed.
  */

@@ -1,8 +1,7 @@
 # GitHub rulesets (source of truth)
 
 Branch-protection rulesets for `digithings-ai/digithings`. Apply them to the
-GitHub repo to enforce the branch taxonomy defined in `BRANCHING.md` (`origin`
-is the cursor mirror, not GitHub — see DIG-3425).
+GitHub repo to enforce the branch taxonomy defined in `BRANCHING.md`.
 
 **Desired state, not live state.** `"enforcement": "active"` in a file says
 nothing about the live repo. None of these four is applied there: no *ruleset*
@@ -31,9 +30,7 @@ Those two arms are the only difference; anything else diverging is a bug.
 git ls-remote --heads https://github.com/digithings-ai/digithings.git | sed 's|.*refs/heads/||'
 ```
 
-`origin` on a digithings clone is the [redacted], not this repo (see the
-opening paragraph). Listing that remote audits mirror heads, including
-`origin/<slug>` drafts the GitHub ruleset never sees.
+Listing the repository's heads audits exactly the refs the GitHub ruleset sees.
 
 `release-please--branches--develop--components--<component>`
 is an arm of the pattern (#2557). `release-please-digichat.yml` and

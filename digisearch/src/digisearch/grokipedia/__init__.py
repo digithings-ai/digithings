@@ -6,7 +6,7 @@ Read-only wrappers around the public JSON APIs the site itself calls. This is
 robots.txt (probed 2026-10-02) currently has ``User-agent: *`` / ``Disallow: /api/``.
 The public site JS still calls these APIs. Treat this as unofficial/third-party
 use: polite rate limits, no HTML scrape of ``/page/{slug}``, spike only — HOLD
-hatch for a One/Chris legal/product call before any production attach.
+hatch for a One/the maintainer legal/product call before any production attach.
 
 Live endpoints (same probe):
 

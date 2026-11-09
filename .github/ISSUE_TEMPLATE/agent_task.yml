@@ -73,7 +73,7 @@ body:
         Give the vendor and say whether the record exists. If the entry does not exist yet, say
         so; writing it is part of this task. An open-source `LICENSE` in the
         vendor's repository does not cover their data. Reading their public terms
-        is not outreach — contacting them is Chris's decision.
+        is not outreach — contacting them is the maintainer's decision.
       placeholder: "Vendor: <name>\nRecord: private vendor-records store (exists | to write)"
     validations:
       required: false

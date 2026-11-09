@@ -1,6 +1,6 @@
 # DigiVoice banner — close v5.8 mock gap (follow-up to #4950)
 
-Chris 2026-10-01 ~23:52 Rome: live Mac banner ≠ Desktop mock SoT.
+the maintainer 2026-10-01 ~23:52 Rome: live Mac banner ≠ Desktop mock SoT.
 #4950 (cb425bfb) density/grid/silence stays — close remaining mock locks on top.
 
 ## SoT (read these first)
@@ -43,7 +43,7 @@ CWD is already this worktree on branch `task/4947-digivoice-banner-v58-gap` trac
 2. Push to `github` remote: `git push -u github HEAD`
 3. Open **draft** PR → develop with gh:
    - title: `feat(digivoice): banner v5.8 mock-gap follow-up (#4947 / after #4950)`
-   - body must: refs #4947 follow-up to #4950; list the 8 gaps closed; say HOLD hatch until Chris Mac visual after digivoice reload / HS relaunch; do NOT say Fixes if that would auto-close wrongly — use `Refs #4947` / follow-up wording
+   - body must: refs #4947 follow-up to #4950; list the 8 gaps closed; say HOLD hatch until the maintainer Mac visual after digivoice reload / HS relaunch; do NOT say Fixes if that would auto-close wrongly — use `Refs #4947` / follow-up wording
    - `--draft`
 4. Print: full PR URL, tip SHA, files changed.
 

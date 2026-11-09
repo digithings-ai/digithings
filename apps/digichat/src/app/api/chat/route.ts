@@ -280,7 +280,7 @@ export async function POST(req: Request) {
   const activityDetail = embedConfig?.activityDetail ?? dep?.gate.activityDetail ?? "labels";
   const requiredPlanTier = embedConfig?.requiredPlanTier ?? dep?.gate.requiredPlanTier;
 
-  // Desk+ tier gate (#3662, Chris lock): when the embed config declares a
+  // Desk+ tier gate (#3662, the maintainer lock): when the embed config declares a
   // requiredPlanTier, the caller must present a valid HMAC-signed plan proof
   // token (X-Embed-Plan-Proof header) OR an authenticated digichat session
   // with plan_tier in app_metadata.  Raw client-asserted X-Embed-Plan-Tier

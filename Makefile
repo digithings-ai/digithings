@@ -66,8 +66,8 @@ test-e2e:
 doc-check:
 	python3 scripts/check_doc_links.py
 
-moved-paths-guard:
-	python3 scripts/repo-split/moved_paths_guard.py --base github/develop --head HEAD
+# moved-paths-guard is the monorepo's extraction guard: it is not part of
+# this repository and there is no target for it here.
 
 brand-studio-check:
 	python3 packages/brand/build-studio.py --check

@@ -3,7 +3,7 @@
 Why this module exists
 ----------------------
 The platform's end-user identity is moving off Supabase Auth to Cloudflare
-Access (Chris, 2026-10-11, answering DIG-2900): Google, GitHub and X sign-in
+Access (the maintainer, 2026-10-11, answering DIG-2900): Google, GitHub and X sign-in
 are served by Cloudflare, and we do not hold a password for any caller. So
 nothing here accepts a credential. :func:`identity_from_claims` takes the
 **claims of an already-verified** Access JWT and normalises them into an

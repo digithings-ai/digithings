@@ -81,7 +81,7 @@ Exempt patterns (not blocked):
 - Default to the most conservative, secure, and token-efficient option.
 - If unclear, open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1) referencing the relevant `ARCHITECTURE.md` section.
 
-## Develop merge rule (Chris, 15 Oct 2026)
+## Develop merge rule (the maintainer, 15 Oct 2026)
 
 DCO sign-off is dropped entirely (DIG-3845): do not add `Signed-off-by`
 lines, do not ask for them, and never gate on them. A PR is ready to merge

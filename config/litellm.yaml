@@ -57,7 +57,7 @@ model_list:
     litellm_params: *or_openai_gpt_oss_120b
   # House DeepSeek flash pin (2026-10-21). Cheaper Inference serves the 1017
   # checkpoint (config/litellm.cheaperinference.yaml) and that checkpoint is the
-  # house default (Chris, 23 Oct 2026); OpenRouter has no separate 1017 id, so
+  # house default (the maintainer, 23 Oct 2026); OpenRouter has no separate 1017 id, so
   # this non-CI route uses OpenRouter's deepseek-v4.1-flash.
   - model_name: deepseek/deepseek-v4.1-flash-1017
     litellm_params: &or_deepseek_deepseek_v4_1_flash_1017

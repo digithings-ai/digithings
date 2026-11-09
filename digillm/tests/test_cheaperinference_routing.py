@@ -188,7 +188,7 @@ def test_api_base_host_is_not_a_substring(
 def test_house_chat_v41_flash_keeps_its_reasoning_id() -> None:
     """The bare v4.1-flash slug maps to its own id, never to 1017.
 
-    House chats run the 1017 checkpoint (Chris, 23 Oct 2026) and 1017 reasons
+    House chats run the 1017 checkpoint (the maintainer, 23 Oct 2026) and 1017 reasons
     only when asked — the digichat chain sends reasoning_effort for it — while
     the bare id reasons unprompted (live check 2026-10-22). The alias is a
     rename, not a substitution: a picker selection must reach the model it names.

@@ -75,7 +75,7 @@ deployment: &house
     allowPicker: true
     catalog: true
     # The house default is the 1017 checkpoint on the CheaperInference API
-    # (Chris, 23 Oct 2026). The bare id stays in the catalog and in the
+    # (the maintainer, 23 Oct 2026). The bare id stays in the catalog and in the
     # litellm routes; it is not what house chats run.
     default: deepseek/deepseek-v4.1-flash-1017
     priceCapUsdPerMillion: 2

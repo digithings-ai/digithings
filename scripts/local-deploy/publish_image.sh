@@ -6,7 +6,7 @@
 # DEFAULT BUILDS AND BOOT-PROBES BUT NEVER PUSHES. The image is loaded into
 # the local Docker daemon, watched until it serves, and checked for the
 # version and revision it was built as. Pushing needs --push AND a named
-# approval (LOCAL_DEPLOY_APPROVED_BY, Chris for releases) AND a GHCR login.
+# approval (LOCAL_DEPLOY_APPROVED_BY, the maintainer for releases) AND a GHCR login.
 #
 # Usage:
 #   bash scripts/local-deploy/publish_image.sh digichat [--tag digichat-vX.Y.Z | --ref <branch|sha>] [--push]
@@ -206,7 +206,7 @@ if [ "$PUSH" -eq 0 ]; then
   exit 0
 fi
 
-: "${LOCAL_DEPLOY_APPROVED_BY:?--push needs LOCAL_DEPLOY_APPROVED_BY naming the approver (Chris for releases).}"
+: "${LOCAL_DEPLOY_APPROVED_BY:?--push needs LOCAL_DEPLOY_APPROVED_BY naming the approver (the maintainer for releases).}"
 case "$NAME" in
   *:sha-*|digillm:ci)
     echo "ERROR: rehearsal image $NAME must never be pushed under a release name." >&2; exit 1 ;;

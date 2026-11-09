@@ -5,7 +5,7 @@
   "prs": [
     {
       "number": 5942,
-      "author": "[redacted]",
+      "author": "maintainer",
       "head_sha": "c045b17e94",
       "head_pushed_at": "2026-10-20T06:46:28Z",
       "merged_at": "2026-10-20T13:06:45Z",
@@ -20,7 +20,7 @@
     },
     {
       "number": 5947,
-      "author": "[redacted]",
+      "author": "maintainer",
       "head_sha": "1f0f9ee6b1",
       "head_pushed_at": "2026-10-20T13:11:49Z",
       "merged_at": "2026-10-20T13:13:09Z",
@@ -35,7 +35,7 @@
     },
     {
       "number": 6013,
-      "author": "[redacted]",
+      "author": "maintainer",
       "head_sha": "509228c713",
       "head_pushed_at": "2026-10-20T13:13:14Z",
       "merged_at": "2026-10-20T13:27:09Z",
@@ -61,10 +61,10 @@
           "path": "scripts/deploy-digithings-stack-cloudflare.yml",
           "is_resolved": true,
           "is_outdated": false,
-          "resolved_by": "[redacted]",
+          "resolved_by": "maintainer",
           "comments": [
             {
-              "author": "[redacted]",
+              "author": "maintainer",
               "body": "Verified: scoped to the cutover slice; the added test asserts the behaviour it names."
             }
           ]
@@ -73,10 +73,10 @@
           "path": "scripts/deploy-digithings-stack-cloudflare.yml",
           "is_resolved": true,
           "is_outdated": false,
-          "resolved_by": "[redacted]",
+          "resolved_by": "maintainer",
           "comments": [
             {
-              "author": "[redacted]",
+              "author": "maintainer",
               "body": "<!-- in-session-review -->\n\nVerified: scoped to the cutover slice; the added test asserts the behaviour it names."
             }
           ]
@@ -85,7 +85,7 @@
     },
     {
       "number": 5968,
-      "author": "[redacted]",
+      "author": "maintainer",
       "head_sha": "a3b894ebb1",
       "head_pushed_at": "2026-10-20T13:27:15Z",
       "merged_at": "2026-10-20T13:28:12Z",
@@ -111,10 +111,10 @@
           "path": "scripts/deploy-digithings-stack-cloudflare.yml",
           "is_resolved": true,
           "is_outdated": false,
-          "resolved_by": "[redacted]",
+          "resolved_by": "maintainer",
           "comments": [
             {
-              "author": "[redacted]",
+              "author": "maintainer",
               "body": "Verified: scoped to the cutover slice; the added test asserts the behaviour it names."
             }
           ]
@@ -123,10 +123,10 @@
           "path": "scripts/deploy-digithings-stack-cloudflare.yml",
           "is_resolved": true,
           "is_outdated": false,
-          "resolved_by": "[redacted]",
+          "resolved_by": "maintainer",
           "comments": [
             {
-              "author": "[redacted]",
+              "author": "maintainer",
               "body": "<!-- in-session-review -->\n\nVerified: scoped to the cutover slice; the added test asserts the behaviour it names."
             }
           ]
@@ -135,7 +135,7 @@
     },
     {
       "number": 5948,
-      "author": "[redacted]",
+      "author": "maintainer",
       "head_sha": "cf1b9d750f",
       "head_pushed_at": "2026-10-20T11:51:13Z",
       "merged_at": "2026-10-20T13:29:38Z",
@@ -164,7 +164,7 @@
           "resolved_by": "github-advanced-security[bot]",
           "comments": [
             {
-              "author": "[redacted]",
+              "author": "maintainer",
               "body": "CodeQL finding."
             }
           ]
@@ -173,10 +173,10 @@
           "path": "scripts/deploy-digithings-stack-cloudflare.yml",
           "is_resolved": true,
           "is_outdated": false,
-          "resolved_by": "[redacted]",
+          "resolved_by": "maintainer",
           "comments": [
             {
-              "author": "[redacted]",
+              "author": "maintainer",
               "body": "Verified: scoped to the cutover slice; the added test asserts the behaviour it names."
             }
           ]
@@ -185,10 +185,10 @@
           "path": "scripts/deploy-digithings-stack-cloudflare.yml",
           "is_resolved": true,
           "is_outdated": false,
-          "resolved_by": "[redacted]",
+          "resolved_by": "maintainer",
           "comments": [
             {
-              "author": "[redacted]",
+              "author": "maintainer",
               "body": "<!-- in-session-review -->\n\nVerified: scoped to the cutover slice; the added test asserts the behaviour it names."
             }
           ]
@@ -197,7 +197,7 @@
     },
     {
       "number": 6019,
-      "author": "[redacted]",
+      "author": "maintainer",
       "head_sha": "d57dc5b8a7",
       "head_pushed_at": "2026-10-20T13:02:00Z",
       "merged_at": "2026-10-20T13:35:00Z",
@@ -217,7 +217,7 @@
     },
     {
       "number": 6015,
-      "author": "[redacted]",
+      "author": "maintainer",
       "head_sha": "90b69c27f8",
       "head_pushed_at": "2026-10-20T13:03:00Z",
       "merged_at": "2026-10-20T13:36:00Z",
