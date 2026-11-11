@@ -1,6 +1,6 @@
 # digiweb charting — the canvas-vs-SVG engine split (#1463)
 
-Two chart engines ship in `@digithings/ui`, on purpose, and the split is a
+Two chart engines ship in `@digithings-ai/ui`, on purpose, and the split is a
 ruling, not an accident:
 
 | Engine | Family | Surfaces | Why |
@@ -48,5 +48,5 @@ into it in #1463; do not reintroduce a second matrix.
 
 The old `/finance` reference page (canvas family, SyncedTearsheet, the SVG
 tearsheet with a working Download PDF) was deleted with the 2026-08 corpus. The
-components remain in `@digithings/ui` (`finance-charts`, `finance-tearsheet`);
+components remain in `@digithings-ai/ui` (`finance-charts`, `finance-tearsheet`);
 read their source and the contract tests until a new proof page exists.

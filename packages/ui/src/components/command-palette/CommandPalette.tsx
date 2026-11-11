@@ -32,7 +32,7 @@ import { useBodyScrollLock } from "../../lib/useBodyScrollLock";
  * `item.onSelect()`, then `onClose()` unless `closeOnSelect={false}`.
  *
  * Wiring (in the consuming app's globals.css):
- *   @import "@digithings/ui/styles/command-palette.css";
+ *   @import "@digithings-ai/ui/styles/command-palette.css";
  *   @source "<path-to>/packages/ui/src/components/command-palette";
  * Overlay stacking: the overlay's z-index reads var(--cp-z, 40) — set --cp-z
  * at the call site when the app's chrome stacks higher than the reference's.

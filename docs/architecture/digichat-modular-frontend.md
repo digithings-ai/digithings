@@ -18,7 +18,7 @@ digichat is the **containerized chat product**:
    tenant/embed policy; adapters
 2. **Default UI** — **stock** assistant-ui `Thread` at `/` and `/embed`
    (`chrome.mode` from deployment config). CLI flavor deferred.
-3. **Shared helpers** — `@digithings/digichat-ui` slash/markdown helpers where still
+3. **Shared helpers** — `@digithings-ai/digichat-ui` slash/markdown helpers where still
    used; not a second session shell
 4. **Deployment config** — file (`DIGICHAT_CONFIG_PATH` → `/app/config/digichat.yaml`)
    + env secret overlay; `DIGICHAT_EMBED_TENANTS` remains a compat hydrate into the

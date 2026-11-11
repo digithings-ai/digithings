@@ -1,5 +1,5 @@
 {
-  "name": "@digithings/digichat-ui",
+  "name": "@digithings-ai/digichat-ui",
   "version": "0.1.0",
   "description": "Shared digichat CSS, slash helpers, brand marks, and transcript markdown. digichat 2.0 session UI is the stock assistant-ui Thread in apps/digichat; parents iframe /embed; backends are digigraph | foundry.",
   "license": "MIT",
@@ -33,7 +33,7 @@
     "react-dom": "^19.2.4"
   },
   "dependencies": {
-    "@digithings/ui": "0.1.0"
+    "@digithings-ai/ui": "0.1.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.14",

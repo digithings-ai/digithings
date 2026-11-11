@@ -5,7 +5,7 @@ This is the **library**: discover here, fetch from the registry when a deploy
 needs it. Do **not** vendor all ~120 cards into digichat or digiweb.
 
 digichat is the BFF (auth, stream, deploy YAML). digiweb is the frontend suite.
-Product Thread copies live in `@digithings/ui/chat/thread` (gallery
+Product Thread copies live in `@digithings-ai/ui/chat/thread` (gallery
 `thread.aui.tsx` + slots). Gallery `/chatbot` imports that same module.
 This file is the single map — do not duplicate the table in digichat.
 
@@ -34,7 +34,7 @@ compositions of those primitives.
 
 | Kind | Meaning |
 | ---- | ------- |
-| **in gallery** | Fixture `/chatbot` page mounts `@digithings/ui/chat/thread` (not a second copy) |
+| **in gallery** | Fixture `/chatbot` page mounts `@digithings-ai/ui/chat/thread` (not a second copy) |
 | **in product** | Copied under digichat `src/app/(baseline)/stock/` (or slotted inside that Thread) |
 | **part-driven** | Shows when the AI SDK / digigraph stream emits the matching part |
 | **chrome-driven** | Shows when deploy YAML (`features.*` / `tools.catalog` / `gate.*`) enables it |

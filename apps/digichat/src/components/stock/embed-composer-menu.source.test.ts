@@ -8,14 +8,14 @@ const source = readFileSync(join(here, "embed-composer-menu.tsx"), "utf8");
 
 /** The one import the view wording may come from. */
 const sharedImport =
-  /import\s*\{[^}]*\bVIEW_LABELS\b[^}]*\}\s*from\s*"@digithings\/digichat-ui"/g;
+  /import\s*\{[^}]*\bVIEW_LABELS\b[^}]*\}\s*from\s*"@digithings-ai\/digichat-ui"/g;
 
 /** The one import the house backend id may come from. */
 const houseBackendImport =
   /import\s*\{[^}]*\bHOUSE_BACKEND_ID\b[^}]*\}\s*from\s*"@\/lib\/provider-label"/g;
 
 /**
- * The view-level wording has one home: `@digithings/digichat-ui`. A second,
+ * The view-level wording has one home: `@digithings-ai/digichat-ui`. A second,
  * private copy inside this component is exactly what let the #6034 rename
  * (compact/detailed -> quiet/verbose) leave the /view page without a
  * description (DIG-4665).

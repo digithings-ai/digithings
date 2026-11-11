@@ -29,7 +29,7 @@ const SURFACES = [
  * Until then the contract does not police it.
  *
  * digiquant-app still loads Inter, JetBrains Mono and Geist Mono through its own
- * next/font call. It rejoins SURFACES when its fonts move to `@digithings/design/fonts`.
+ * next/font call. It rejoins SURFACES when its fonts move to `@digithings-ai/design/fonts`.
  */
 const PENDING_PORT = ["apps/digichat/", "apps/digiquant-app/"];
 
@@ -104,7 +104,7 @@ describe("font tokens contract", { timeout: 30_000 }, () => {
       expect(existsSync(path.join(repoRoot, config)), `${surface} has ${config}`).toBe(true);
       const source = at(config);
       expect(source, `${surface} re-exports the shared loader`).toMatch(
-        /export\s*\{[^}]*fontVariables[^}]*\}\s*from\s*["']@digithings\/design\/fonts["']/,
+        /export\s*\{[^}]*fontVariables[^}]*\}\s*from\s*["']@digithings-ai\/design\/fonts["']/,
       );
       expect(source, `${surface} does not call next/font`).not.toMatch(/from ["']next\/font/);
     }

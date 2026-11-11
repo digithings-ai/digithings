@@ -11,7 +11,7 @@
  * scrolling horizontally (`weeks`, below).
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/repo-activity.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/repo-activity.css";
  *                 @source "<path-to>/packages/ui/src/components/repo-activity";
  */
 import { useEffect, useRef, useState, type RefObject } from "react";

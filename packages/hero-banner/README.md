@@ -1,18 +1,18 @@
-# @digithings/hero-banner
+# @digithings-ai/hero-banner
 
 One banner definition, rendered to a terminal (half-blocks) and to the web
 (canvas). The definition — cells, animation, palette — is declared once in
 `src/definitions/`; the renderers only decide how a cell becomes output.
 
 ```ts
-import { BANNERS } from "@digithings/hero-banner/definitions";
+import { BANNERS } from "@digithings-ai/hero-banner/definitions";
 ```
 
 | Entry | What it is |
 |---|---|
-| `@digithings/hero-banner` | The engine: `sampleBanner`, `canonicalLayout`, `fitTerminal`, the animation builders and the layout maths |
-| `@digithings/hero-banner/definitions` | The shipped banner definitions (`BANNERS`), one per module |
-| `@digithings/hero-banner/web` | The canvas renderer for React surfaces (`react` is an optional peer) |
+| `@digithings-ai/hero-banner` | The engine: `sampleBanner`, `canonicalLayout`, `fitTerminal`, the animation builders and the layout maths |
+| `@digithings-ai/hero-banner/definitions` | The shipped banner definitions (`BANNERS`), one per module |
+| `@digithings-ai/hero-banner/web` | The canvas renderer for React surfaces (`react` is an optional peer) |
 
 `src/tui.ts` and `src/ssr.ts` are the terminal and server-side renderers. The
 spec is [`docs/architecture/hero-banner-spec.md`](../../docs/architecture/hero-banner-spec.md).
@@ -28,11 +28,11 @@ A Next.js consumer must therefore transpile it — add the package to
 
 ```js
 const nextConfig = {
-  transpilePackages: ["@digithings/hero-banner"],
+  transpilePackages: ["@digithings-ai/hero-banner"],
 };
 ```
 
 A bundler that already compiles TS (Vite, tsup, Bun) resolves the source
 directly and needs no extra configuration.
 
-Tests: `bun test`. Build (type declarations): `npm run build --workspace @digithings/hero-banner`.
+Tests: `bun test`. Build (type declarations): `npm run build --workspace @digithings-ai/hero-banner`.

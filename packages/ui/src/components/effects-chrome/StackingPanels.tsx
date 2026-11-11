@@ -20,7 +20,7 @@ import { useEffect, useRef, type ReactNode } from "react";
  * 3.4rem) — see styles/effects-chrome.css.
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/effects-chrome.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/effects-chrome.css";
  *                 @source "<path-to>/packages/ui/src/components/effects-chrome";
  */
 export type StackingPanel = {

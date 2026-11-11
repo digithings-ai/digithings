@@ -20,7 +20,7 @@ import { signalDigichatReady } from "./boot-signal";
  *
  * Pace and geometry are ported from the approved demo (loading-demos G6):
  * 3px cubes on a 4px pitch, six cubes per head per 32ms tick.
- * Styles: @digithings/ui/styles/digichat-boot-loader.css.
+ * Styles: @digithings-ai/ui/styles/digichat-boot-loader.css.
  */
 
 /** 5x5 cube geometry, mirroring DotMatrix so every glyph reads identically. */

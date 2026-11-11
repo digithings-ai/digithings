@@ -45,7 +45,7 @@ collapse duplicated surfaces — **not** "move UI into one folder".
 - **F4** — `apps/digichat/src/app/(baseline)/stock/` is an app route folder serving as
   the shared library for 10+ skins. Move under the skin system / package.
 - **F5** — Skins + registry are app-owned while the Thread is package-owned
-  (`@digithings/ui/chat/thread`); no other app can reuse a skin. Move registry + skins
+  (`@digithings-ai/ui/chat/thread`); no other app can reuse a skin. Move registry + skins
   into the package (or new `packages/chat-skins`).
 - **F6** (strongest structural signal) — "What a skin needs to render correctly" is
   implicit: `/baseline` needed five accommodations, each a bug

@@ -4,7 +4,7 @@
  */
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { asRecord } from "@digithings/ui/lib/record";
+import { asRecord } from "@digithings-ai/ui/lib/record";
 import { p } from "@/lib/base-path";
 import { isAllowedMcpServerUrl } from "@/lib/deploy-config/mcp-servers";
 import { sameOrigin } from "@/lib/fetch-guarded";

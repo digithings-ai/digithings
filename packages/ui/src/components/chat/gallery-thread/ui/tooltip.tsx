@@ -2,7 +2,7 @@
 
 /**
  * Product tooltip for the gallery Thread: the canonical kit Tooltip
- * (`@digithings/ui/ui/tooltip`, Base UI) with the chat's long-standing
+ * (`@digithings-ai/ui/ui/tooltip`, Base UI) with the chat's long-standing
  * no-arrow ruling (#3818) via the kit's `hideArrow` prop, and a zero
  * `sideOffset` default. Behaviour (hover + focus open, Escape dismiss, aria
  * wiring) is the kit's; only the arrow is suppressed, which keeps the

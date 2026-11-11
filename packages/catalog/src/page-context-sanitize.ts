@@ -1,7 +1,7 @@
 /**
  * Structural page-context sanitizer (#3602).
  *
- * Moved to `@digithings/catalog` (DIG-3695); digichat re-exports it.
+ * Moved to `@digithings-ai/catalog` (DIG-3695); digichat re-exports it.
  *
  * Sender (dashboard popup / widget.js) clones the live DOM, drops non-visible and
  * sensitive nodes, then serializes an allowlisted fragment. Receiver (embed)

@@ -25,7 +25,7 @@ import { useExportKeepMounted } from "../../../replay/export-mount";
 import { toolRowTitle } from "./tool-display";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
-import { readGloomberbAttribution } from "@digithings/ui";
+import { readGloomberbAttribution } from "@digithings-ai/ui";
 import { ChatNoticeContent, chatNoticeRootProps } from "./chat-notice";
 import { JsonView } from "./json-view";
 import { stockRadius, useStockShape } from "./stock-shape";

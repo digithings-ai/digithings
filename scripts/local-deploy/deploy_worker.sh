@@ -105,7 +105,7 @@ fi
 # locally instead of after a full Cloudflare deploy attempt. This is not theoretical:
 # on 2026-10-18 the digichat dry run passed (28 tests, clean typecheck) and the live
 # deploy then died inside `next build` because packages/ui had gained an import of
-# @digithings/hero-banner that the image never packaged.
+# @digithings-ai/hero-banner that the image never packaged.
 # The deploy then rebuilds the same Dockerfile and Docker reuses these layers,
 # so the gate costs seconds.
 # NOTE: this must be `docker build`, NOT `wrangler containers build` -- that command

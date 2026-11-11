@@ -25,9 +25,9 @@ import {
   LAYOUT_SKINS,
   THREAD_SKINS,
   type ThreadSkin,
-} from "@digithings/ui/chat/skins";
-import { designTokens } from "@digithings/design/tokens";
-import { PALETTES, isPaletteId } from "@digithings/ui/theme";
+} from "@digithings-ai/ui/chat/skins";
+import { designTokens } from "@digithings-ai/design/tokens";
+import { PALETTES, isPaletteId } from "@digithings-ai/ui/theme";
 import { CONTRAST_MINIMUM, contrast } from "./devkit-contrast";
 
 /** Where a skin sits in the registry (what it does, not what it looks like). */

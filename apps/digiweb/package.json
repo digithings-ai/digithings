@@ -1,5 +1,5 @@
 {
-  "name": "@digithings/digiweb",
+  "name": "@digithings-ai/digiweb",
   "description": "digiweb — the live design reference and brand studio for digithings.",
   "license": "MIT",
   "homepage": "https://digithings.ai",
@@ -19,9 +19,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@digithings/design": "*",
-    "@digithings/hero-banner": "*",
-    "@digithings/ui": "*",
+    "@digithings-ai/design": "*",
+    "@digithings-ai/hero-banner": "*",
+    "@digithings-ai/ui": "*",
     "clsx": "^2.1.1",
     "geist": "^1.5.1",
     "motion": "^12.23.12",

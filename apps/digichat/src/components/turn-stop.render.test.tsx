@@ -13,7 +13,7 @@ import { DefaultChatTransport } from "ai";
 import { act, useEffect, useState, type FC } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
-import { DigichatThread } from "@digithings/ui/chat/thread";
+import { DigichatThread } from "@digithings-ai/ui/chat/thread";
 
 type Chunk = Record<string, unknown>;
 

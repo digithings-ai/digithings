@@ -90,7 +90,7 @@ These are a **starting point**, not absolute law. Below is the consistency pass 
 
 ## Promotion status
 
-v0.1 is **promoted** into `DESIGN.md` frontmatter + `tokens.css` + design-reference foundations and an early `@digithings/ui` chrome sweep. Product apps (digithings-web, digiquant-web, digichat, dashboard / FX Hub) follow [`ROLLOUT.md`](ROLLOUT.md) Phases 2–3.
+v0.1 is **promoted** into `DESIGN.md` frontmatter + `tokens.css` + design-reference foundations and an early `@digithings-ai/ui` chrome sweep. Product apps (digithings-web, digiquant-web, digichat, dashboard / FX Hub) follow [`ROLLOUT.md`](ROLLOUT.md) Phases 2–3.
 
 The `/iterate` gallery stays as the preference ledger UI (`uv-` CSS only). Further round tweaks edit BLEND first, then re-promote tokens.
 

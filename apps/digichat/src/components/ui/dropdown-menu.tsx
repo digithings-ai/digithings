@@ -1,6 +1,6 @@
 "use client"
 
-// Thin re-export of the shared @digithings/ui DropdownMenu (#1419). The
+// Thin re-export of the shared @digithings-ai/ui DropdownMenu (#1419). The
 // shared control's DEFAULT skin ("chat") reproduces digichat's rendered
 // look exactly (shadcn tokens translated per the #1403 reverse bridge), so
 // a bare re-export is correct — no pin needed. skin="reference" on
@@ -22,4 +22,4 @@ export {
   DropdownMenuSub,
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
-} from "@digithings/ui/ui"
+} from "@digithings-ai/ui/ui"

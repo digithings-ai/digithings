@@ -8,7 +8,7 @@ import { m, useMotionSafe, EASE } from "../../motion/primitives";
  * micro-caps tag, a serif title, one sentence of mechanism. A hairline spine
  * (`.ns-stage::before`, styles/stages.css) runs through the badge column and
  * stops at the last stage; each stage may scope its own module livery via
- * `livery` (`accent-<module>` — declared in @digithings/design/tokens.css),
+ * `livery` (`accent-<module>` — declared in @digithings-ai/design/tokens.css),
  * which re-tints the badge's two-color color-mix and the tag/index text.
  *
  * Scroll cadence (#1450): stages fill the pipeline one at a time — each row
@@ -23,7 +23,7 @@ import { m, useMotionSafe, EASE } from "../../motion/primitives";
  *
  * Client component (Motion m.li under the app's MotionProvider). Wiring (in
  * the consuming app):
- *   globals.css   @import "@digithings/ui/styles/stages.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/stages.css";
  *                 @source "<path-to>/packages/ui/src/components/stages";
  */
 export type NumberedStage = {

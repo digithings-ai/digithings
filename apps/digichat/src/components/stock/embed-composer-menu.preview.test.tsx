@@ -14,7 +14,7 @@ import {
   useEmbedChatPrefs,
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 
 /**
  * Live preview in the `/` menu: hovering or arrowing onto a purely visual

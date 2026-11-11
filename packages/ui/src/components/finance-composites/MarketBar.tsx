@@ -32,8 +32,8 @@ import { cn } from "../../lib/utils";
  *    finance-tearsheet `is-pos` / `is-neg`), never the symbol or value.
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/marquee.css";
- *                 @import "@digithings/ui/styles/finance-tearsheet.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/marquee.css";
+ *                 @import "@digithings-ai/ui/styles/finance-tearsheet.css";
  *                 @source "<path-to>/packages/ui/src/components/finance-composites";
  * CSS-only motion: no MotionProvider needed. Client component (pause state).
  */

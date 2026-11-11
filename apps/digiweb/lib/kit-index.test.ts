@@ -8,7 +8,7 @@ describe("kit index", () => {
     expect(primitives.map((entry) => entry.name)).toContain("button");
     expect(primitives.map((entry) => entry.name)).toContain("select");
     for (const entry of primitives) {
-      expect(entry.from).toBe("@digithings/ui/ui");
+      expect(entry.from).toBe("@digithings-ai/ui/ui");
       expect(entry.module).toBe(`ui/${entry.name}`);
     }
   });
@@ -19,7 +19,7 @@ describe("kit index", () => {
     expect(composites.map((entry) => entry.module)).toContain("components/ThemeProvider");
     expect(new Set(composites.map((entry) => entry.module)).size).toBe(composites.length);
     for (const entry of composites) {
-      expect(entry.from).toBe("@digithings/ui");
+      expect(entry.from).toBe("@digithings-ai/ui");
       expect(entry.name.length).toBeGreaterThan(0);
     }
   });

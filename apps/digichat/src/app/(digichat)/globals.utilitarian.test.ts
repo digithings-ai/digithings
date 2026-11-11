@@ -24,7 +24,7 @@ describe("product chrome vs 1.5 utilitarian-terminal", () => {
   const bridge = read(bridgePath);
 
   it("keeps stock shadcn radius/type on product globals, not CLI ink/paper", () => {
-    expect(css).toContain("@digithings/ui/styles/digichat-app-theme.css");
+    expect(css).toContain("@digithings-ai/ui/styles/digichat-app-theme.css");
     expect(bridge).toMatch(/--radius:\s*0\.625rem/);
     expect(bridge).toMatch(/--font-sans:\s*var\(--font-sans-face,\s*"Inter"\)/);
     expect(css).not.toMatch(

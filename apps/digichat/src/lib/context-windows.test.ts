@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CONTEXT_WINDOWS } from "@digithings/ui/chat/context-meter";
+import { CONTEXT_WINDOWS } from "@digithings-ai/ui/chat/context-meter";
 import { resolveModelCatalog } from "./model-picker-catalog";
 
 describe("context windows", () => {

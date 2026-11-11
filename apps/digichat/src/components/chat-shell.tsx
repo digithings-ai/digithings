@@ -2,12 +2,12 @@
 
 /** CLI / session / terminal sheets — only for persistence:server ChatShell. */
 import "@/styles/chat-shell-cli.css";
-import { BrandWordmark } from "@digithings/ui";
+import { BrandWordmark } from "@digithings-ai/ui";
 
 /**
  * ChatShell — authenticated chat chrome for digichat.
  *
- * #273: Rewritten to consume @digithings/design/app-shell-terminal
+ * #273: Rewritten to consume @digithings-ai/design/app-shell-terminal
  * classes natively in React (CSS classes are the primitive's contract; the
  * primitive's vanilla-JS `initAppShell` would clobber React state by
  * imperatively rewriting the host's innerHTML, so we render the same DOM
@@ -60,7 +60,7 @@ import {
 } from "@/lib/thread-local";
 import { cn } from "@/lib/utils";
 import { p } from "@/lib/base-path";
-import { Button, Input, Label } from "@digithings/ui/ui";
+import { Button, Input, Label } from "@digithings-ai/ui/ui";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
 
 type RemoteSummary = { id: string; title: string; updatedAt: string };

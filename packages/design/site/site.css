@@ -5,7 +5,7 @@
    Page-specific overrides live in each site's local style.css.
 
    Nav shell, hero layout, cards, pills/stage, connected graph, and scroll
-   reveal were reimplemented as React components in @digithings/ui after
+   reveal were reimplemented as React components in @digithings-ai/ui after
    the Dec 2025 migration (commit 681273a) — those selectors were removed
    here (#1240). What remains is what digithings-web / digiquant-web still
    import directly: brand mark, theme toggle, buttons, kicker/prompt, the
@@ -74,7 +74,7 @@ a { color: inherit; text-decoration: none; }
 
 /* ── buttons ───────────────────────────────────────────────────────────
    Retired in the wave-3 close-out (Task 6). The kit `buttonVariants`
-   (@digithings/ui/ui) is the canonical button dress; the last live consumer
+   (@digithings-ai/ui/ui) is the canonical button dress; the last live consumer
    (digithings-web DtNav) moved to it in T2, and the only remaining `.btn*`
    carriers were the dead `chrome.tsx` `Nav` export and AuthCard's inert
    `.btn-primary` (rendered by apps that never import this sheet) — both

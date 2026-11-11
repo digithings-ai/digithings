@@ -68,14 +68,14 @@ RUNNER_WHEEL_EXTRAS: dict[str, tuple[str, ...]] = {
     "digigraph": ("checkpoint-postgres",),
 }
 NPM_PACKAGES = (
-    "@digithings/design",
-    "@digithings/ui",
-    "@digithings/digichat-ui",
-    "@digithings/hero-banner",
+    "@digithings-ai/design",
+    "@digithings-ai/ui",
+    "@digithings-ai/digichat-ui",
+    "@digithings-ai/hero-banner",
     # apps/digichat imports the BYOK provider catalog and the page-context
     # sanitizer from here (2026-10-20): without it in the image the digichat
-    # build failed with "Module not found: @digithings/catalog/...".
-    "@digithings/catalog",
+    # build failed with "Module not found: @digithings-ai/catalog/...".
+    "@digithings-ai/catalog",
 )
 NPM_MANIFESTS = {
     "design": REPO / "packages" / "design" / "package.json",
@@ -287,7 +287,7 @@ def input_paths(
     # package.json into the image. The manifest path is the only place that layout
     # is stated, so the source dir is its parent — never a guessed
     # packages/<short-name>. 2026-10-18 was a stale npm package: a packages/ui
-    # import of @digithings/hero-banner that the image never packaged.
+    # import of @digithings-ai/hero-banner that the image never packaged.
     covered: set[str] = set()
     for manifest in NPM_MANIFESTS.values():
         if not manifest.is_file():
@@ -784,7 +784,7 @@ def _write_npm() -> None:
             # The Dockerfile still COPYs the path, so write a stub it can read.
             (dest / "package.json").write_text(
                 json.dumps(
-                    {"name": f"@digithings/{key}", "version": "0.0.0", "private": True},
+                    {"name": f"@digithings-ai/{key}", "version": "0.0.0", "private": True},
                     indent=2,
                 )
                 + "\n",

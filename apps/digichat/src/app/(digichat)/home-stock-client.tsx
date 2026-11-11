@@ -25,7 +25,7 @@ import {
   ArtifactsPanel,
   StockChatPrefsHost,
   useStockChatPrefs,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import { p } from "@/lib/base-path";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
 import { toStockChatPrefsConfig } from "@/lib/route-client-config";
@@ -46,7 +46,7 @@ import {
   SessionMemoryThreadListAdapter,
   memoryThreadStorageKey,
 } from "@/lib/session-memory-thread-list";
-import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
+import { skinOwnsPageChrome } from "@digithings-ai/ui/chat/skins";
 import { PresentationFrame } from "@/components/stock/presentation-frame";
 import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
 import {

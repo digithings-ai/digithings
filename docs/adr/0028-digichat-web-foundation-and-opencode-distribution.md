@@ -56,7 +56,7 @@ presentation and 53% is API routes, adapters, auth, persistence, and embed
 policy. The genuinely visual part of `digichat-ui` is approximately 2,300–2,600
 lines. Its roughly 3,100-line source already contains `DigiChatSession`,
 slash-command handling, streaming intro, activities, transcript markdown, and
-the terminal stylesheet; markdown is already delegated to `@digithings/ui`.
+the terminal stylesheet; markdown is already delegated to `@digithings-ai/ui`.
 Replacing the chat chrome would not retire most of digichat. A convincing CLI
 skin on the current React UI is estimated at 1–2 weeks, or 3–5 weeks with a
 theme system, keyboard-navigation polish, and accessibility. An alternative

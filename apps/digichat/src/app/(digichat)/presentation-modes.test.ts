@@ -45,7 +45,7 @@ describe("chrome.mode presentation surfaces", () => {
       "utf8",
     );
 
-    expect(frame).toMatch(/import \{ DigichatLauncher \} from "@digithings\/ui\/chat\/launcher"/);
+    expect(frame).toMatch(/import \{ DigichatLauncher \} from "@digithings-ai\/ui\/chat\/launcher"/);
     expect(frame).toMatch(/hotkey=\{chrome\.launcher\?\.hotkey\}/);
     expect(frame).toMatch(/mode === "modal"/);
     expect(frame).toMatch(/mode === "sidebar"/);

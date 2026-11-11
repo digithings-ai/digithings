@@ -1,5 +1,5 @@
 /* ==========================================================================
-   @digithings/ui — data-layout family CSS (components/data-layout/*:
+   @digithings-ai/ui — data-layout family CSS (components/data-layout/*:
    <Odometer/> + <OdometerStrip/>, <DotMatrixStat/>, <BentoGrid/> +
    <BentoCell/>, <ProductFrame/>, <FeatureCell/>; <TestimonialWall/> is
    utilities-only and needs no rules here).
@@ -13,9 +13,9 @@
    unlayered ON PURPOSE so they keep outranking plain utilities.
 
      @import "tailwindcss";
-     @import "@digithings/design/tokens.css";
-     @import "@digithings/ui/styles/web-theme.css";
-     @import "@digithings/ui/styles/data-layout.css";
+     @import "@digithings-ai/design/tokens.css";
+     @import "@digithings-ai/ui/styles/web-theme.css";
+     @import "@digithings-ai/ui/styles/data-layout.css";
      @source "<path-to>/packages/ui/src/components/data-layout";
 
    The @source line is load-bearing (path relative to the app's globals.css):

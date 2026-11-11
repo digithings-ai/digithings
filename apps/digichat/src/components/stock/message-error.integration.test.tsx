@@ -48,7 +48,7 @@ vi.mock("@assistant-ui/react", async () => {
   };
 });
 
-import { MessageError, SkinRuntimeProvider } from "@digithings/ui/chat/stock";
+import { MessageError, SkinRuntimeProvider } from "@digithings-ai/ui/chat/stock";
 import {
   BYOK_MODEL_REMEDIABLE_MESSAGE,
   formatEmbedChatError,

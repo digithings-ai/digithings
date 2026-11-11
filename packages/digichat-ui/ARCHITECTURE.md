@@ -1,4 +1,4 @@
-# @digithings/digichat-ui — architecture
+# @digithings-ai/digichat-ui — architecture
 
 Shared digichat helpers and CSS. digichat **2.0** renders the session through
 assistant-ui (stock Thread in `apps/digichat` (CliThread removed)). This package is **not** a
@@ -17,9 +17,9 @@ Do not reintroduce a second transcript renderer here.
 | File | What it is |
 |---|---|
 | `src/slash-commands.ts` | Public slash palette: `/digisearch`, `/digivault`, `/mcp`, `/tools`, `/lang`, `/provider` (`/byok`), `/settings`, plus `/help` `/new` `/copy` `/export`. `/export` carries `EXPORT_CHOICES` (`Markdown (.md)`, `HTML (.html)`): bare `/export` opens that pane, `/export md|html` exports the whole conversation. Any other format shows an unsupported-format error. |
-| `@digithings/ui/chat/transcript` (`activity-view.ts`, `transcript-markdown.ts`, `types.ts`) | Activity rows, markdown export, and `DigiChatActivity` / `DigiChatMessage` / `DigiChatController`. This package re-exports them from `src/index.ts`. There is no local `src/types.ts`. |
-| `src/components/DigiChatMark.tsx` | Brand mark (digithings-web nav). The wordmark is not re-implemented here: `Wordmark` / `TerminalWordmark` in `@digithings/ui` own that grammar. |
-| `src/components/DocumentPane.tsx` / `MiniMarkdown.tsx` | Optional helpers. Not mounted by the stock assistant-ui Thread. `MiniMarkdown` delegates to `@digithings/ui` `ChatMarkdown`. |
+| `@digithings-ai/ui/chat/transcript` (`activity-view.ts`, `transcript-markdown.ts`, `types.ts`) | Activity rows, markdown export, and `DigiChatActivity` / `DigiChatMessage` / `DigiChatController`. This package re-exports them from `src/index.ts`. There is no local `src/types.ts`. |
+| `src/components/DigiChatMark.tsx` | Brand mark (digithings-web nav). The wordmark is not re-implemented here: `Wordmark` / `TerminalWordmark` in `@digithings-ai/ui` own that grammar. |
+| `src/components/DocumentPane.tsx` / `MiniMarkdown.tsx` | Optional helpers. Not mounted by the stock assistant-ui Thread. `MiniMarkdown` delegates to `@digithings-ai/ui` `ChatMarkdown`. |
 | `src/styles/session.css` | `.dc-*` session grammar (thread, rows, form). Legacy blocks stay as a CSS contract. |
 | `src/styles/cursor.css` | `.dt-cur` caret + `dt-bl` keyframes, `.dtc-chip` / `.dtc-error`. |
 

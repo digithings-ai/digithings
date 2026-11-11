@@ -25,14 +25,14 @@ describe("baseline preview isolation", () => {
     // it carries the stock shadcn tokens both entry sheets used to duplicate.
     // The canon token @reference is also allowed: it registers the web-theme
     // @theme keys for utility generation and emits no CSS of its own.
-    const bridge = "@digithings/ui/styles/digichat-app-theme.css";
-    const themeRef = "@digithings/ui/styles/web-theme.css";
+    const bridge = "@digithings-ai/ui/styles/digichat-app-theme.css";
+    const themeRef = "@digithings-ai/ui/styles/web-theme.css";
     expect(css).toContain(bridge);
     const rest = css
       .split("\n")
       .filter((l) => !l.includes(bridge) && !l.includes(themeRef))
       .join("\n");
-    expect(rest).not.toMatch(/@digithings\//);
+    expect(rest).not.toMatch(/@digithings-ai\//);
     expect(css).not.toMatch(/assistant-ui-cli/);
     expect(css).not.toMatch(/chat-core/);
   });
@@ -58,7 +58,7 @@ describe("baseline preview isolation", () => {
     const client = read("baseline/baseline-client.tsx");
     const thread = read("../../../../../packages/ui/src/components/chat/stock/thread.aui.tsx");
     expect(client).toMatch(/ThreadSkinView/);
-    expect(client).toMatch(/@digithings\/ui\/chat\/skins/);
+    expect(client).toMatch(/@digithings-ai\/ui\/chat\/skins/);
     expect(client).toMatch(/THREAD_SKINS/);
     expect(thread).toContain("Ask the stack.");
     expect(thread).not.toContain("How can I help you today?");

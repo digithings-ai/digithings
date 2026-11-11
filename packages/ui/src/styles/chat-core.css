@@ -1,6 +1,6 @@
 
 /* ==========================================================================
-   Chat core (@digithings/ui) — the digichat turn grammar (canon §16).
+   Chat core (@digithings-ai/ui) — the digichat turn grammar (canon §16).
    Owned by components/chat/*: <ChatTranscript> term-surface pane,
    <ChatMessage> marker+body grid rows, <ChatStreamCursor> blink caret, and
    the <ChatMarkdown>/<ChatCodeBlock> rich-text frame. Only what CANNOT be a
@@ -9,7 +9,7 @@
    caret blink keyframes, and the markdown element combinators with their
    color-mix washes and ::marker accents.
    Import once in the app shell:
-     @import "@digithings/ui/styles/chat-core.css";
+     @import "@digithings-ai/ui/styles/chat-core.css";
    ========================================================================== */
 
 /* ── transcript pane ──────────────────────────────────────────────────── */

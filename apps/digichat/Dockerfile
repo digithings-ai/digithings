@@ -1,7 +1,7 @@
 # digichat — Next.js standalone.
 # Build from the REPO ROOT (compose: context '.', dockerfile apps/digichat/Dockerfile):
-# the root lockfile pins the install. @digithings/design, @digithings/ui,
-# @digithings/digichat-ui and @digithings/hero-banner come from tarballs
+# the root lockfile pins the install. @digithings-ai/design, @digithings-ai/ui,
+# @digithings-ai/digichat-ui and @digithings-ai/hero-banner come from tarballs
 # (scripts/package_r5_image_inputs.py), not from a sibling-tree COPY. The only
 # app tree copied is apps/digichat.
 FROM node:22-alpine AS deps
@@ -35,11 +35,11 @@ COPY image-packages/digichat/npm/ /tmp/digi-npm/
 # Unpack the published package trees over the manifests npm ci linked.
 # Grammar moved into the package (WS1): chat-digichat.css ships with
 # packages/ui, so no gallery COPY is needed anymore (#3717 closed).
-RUN tar -xzf /tmp/digi-npm/digithings-design-*.tgz -C packages/design --strip-components=1 \
- && tar -xzf /tmp/digi-npm/digithings-ui-*.tgz -C packages/ui --strip-components=1 \
- && tar -xzf /tmp/digi-npm/digithings-digichat-ui-*.tgz -C packages/digichat-ui --strip-components=1 \
- && tar -xzf /tmp/digi-npm/digithings-hero-banner-*.tgz -C packages/hero-banner --strip-components=1 \
- && tar -xzf /tmp/digi-npm/digithings-catalog-*.tgz -C packages/catalog --strip-components=1
+RUN tar -xzf /tmp/digi-npm/digithings-ai-design-*.tgz -C packages/design --strip-components=1 \
+ && tar -xzf /tmp/digi-npm/digithings-ai-ui-*.tgz -C packages/ui --strip-components=1 \
+ && tar -xzf /tmp/digi-npm/digithings-ai-digichat-ui-*.tgz -C packages/digichat-ui --strip-components=1 \
+ && tar -xzf /tmp/digi-npm/digithings-ai-hero-banner-*.tgz -C packages/hero-banner --strip-components=1 \
+ && tar -xzf /tmp/digi-npm/digithings-ai-catalog-*.tgz -C packages/catalog --strip-components=1
 COPY apps/digichat ./apps/digichat
 COPY tsconfig.base.json ./tsconfig.base.json
 # BYOK provider pins are imported from the repo-root config (#5020).

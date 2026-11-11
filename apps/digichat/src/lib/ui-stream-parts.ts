@@ -10,7 +10,7 @@ import type { UIMessage, UIMessageChunk } from "ai";
 import type { ActivityDocument, ActivitySpan } from "@/lib/chat-activity";
 import { documentIdentityKeys } from "@/lib/document-identity";
 import { expandPageContextFileParts } from "@/lib/embed-page-context-messages";
-import { toolRowTitle } from "@digithings/ui/chat/stock";
+import { toolRowTitle } from "@digithings-ai/ui/chat/stock";
 
 /** Unbranded conversation-id part (Foundry continuity). Was data-externalConversation. */
 export const CONVERSATION_PART_TYPE = "data-conversation" as const;

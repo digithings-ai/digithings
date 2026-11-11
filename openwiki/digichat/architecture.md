@@ -162,7 +162,7 @@ All backends emit the same AI SDK UI message stream parts — the UI never learn
 
 The 2.0 UI replaces the 1.x custom thread with **assistant-ui `Thread` skins** selected per deployment:
 
-- **First-party skin `digichat`:** `DigichatThread` from `@digithings/ui/chat/thread` — gallery thread with cube glyphs
+- **First-party skin `digichat`:** `DigichatThread` from `@digithings-ai/ui/chat/thread` — gallery thread with cube glyphs
 - **11 official catalog templates:** vendored under `src/components/assistant-ui/skins/` and under `src/app/(baseline)/stock/`
 - **Skin selection:** `chrome.skin` in deploy YAML, `DIGICHAT_CHROME_SKIN` env overlay, or `?skin=` on `/baseline`
 - **Thread rendering:** `ThreadSkinView` inside `ProductStockShell` (`src/components/stock/product-shell.tsx`)
@@ -301,8 +301,8 @@ Desk+ chat entitlement for the digiquant dashboard embed:
 
 digichat runs on the shared digithings design token canon:
 
-- `@digithings/design/tokens.css` defines `[data-theme="dark"|"light"]` semantic tokens
-- `@digithings/ui/styles/web-theme.css` is the single Tailwind `@theme inline` bridge
+- `@digithings-ai/design/tokens.css` defines `[data-theme="dark"|"light"]` semantic tokens
+- `@digithings-ai/ui/styles/web-theme.css` is the single Tailwind `@theme inline` bridge
 - `globals.css` derives shadcn variable set from those tokens under `:root[data-theme]`
 - Type is Geist Mono for all surfaces (`--font-sans`/`--font-display` → `--font-geist-mono`)
 - SSR default: `<html>` ships `data-theme="dark"` + `.dark`

@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { preparedBanner, settledFrame } from "@digithings/hero-banner";
-import { DIGICHAT } from "@digithings/hero-banner/definitions";
+import { preparedBanner, settledFrame } from "@digithings-ai/hero-banner";
+import { DIGICHAT } from "@digithings-ai/hero-banner/definitions";
 
 import { DigichatWordmark } from "./DigichatWordmark";
 import * as React from "react";
@@ -35,9 +35,9 @@ function maskLitCells(svg: string): number {
 
 describe("DigichatWordmark", () => {
   it("draws the shared DIGICHAT definition through HeroBanner", () => {
-    expect(SRC).toContain("@digithings/hero-banner/definitions");
+    expect(SRC).toContain("@digithings-ai/hero-banner/definitions");
     expect(SRC).toContain("DIGICHAT");
-    expect(SRC).toContain("@digithings/hero-banner/web");
+    expect(SRC).toContain("@digithings-ai/hero-banner/web");
     expect(SRC).toContain("HeroBanner");
     expect(SRC).toContain("<span");
     expect(SRC).toContain("live={false}");

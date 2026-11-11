@@ -119,7 +119,7 @@ Details, interfaces and data flow: [ARCHITECTURE.md](ARCHITECTURE.md).
 | **digivoice** | Local dictation and speech tools | [readme](digivoice/README.md) |
 | **digidev** | Drop-in agentic coding workflow kit | [readme](digidev/README.md) |
 
-JavaScript packages live in [`packages/`](packages/) (`@digithings/ui`, `@digithings/design`, `@digithings/digichat-ui`, `@digithings/hero-banner` and more) and terminal clients in [`clients/`](clients/).
+JavaScript packages live in [`packages/`](packages/) (`@digithings-ai/ui`, `@digithings-ai/design`, `@digithings-ai/digichat-ui`, `@digithings-ai/hero-banner` and more) and terminal clients in [`clients/`](clients/).
 
 All services bind to `127.0.0.1`. For remote access use Tailscale or Cloudflare Tunnel, never a public port. See [SECURITY.md](SECURITY.md).
 

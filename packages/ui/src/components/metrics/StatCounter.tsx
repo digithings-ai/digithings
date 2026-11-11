@@ -16,7 +16,7 @@ import { animate, useInView, useReducedMotion } from "motion/react";
  * below 720px. Client component — in-view observer + imperative count.
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/metrics.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/metrics.css";
  *                 @source "<path-to>/packages/ui/src/components/metrics";
  */
 export type CounterStat = {

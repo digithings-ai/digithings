@@ -1,7 +1,7 @@
 # Official assistant-ui templates (11) + first-party `digichat`
 
 Ids 1–11 match assistant-ui `list_templates`. `digichat` is the first-party
-Thread (`@digithings/ui/chat/thread`). Client containers pick one with
+Thread (`@digithings-ai/ui/chat/thread`). Client containers pick one with
 `chrome.skin` / `DIGICHAT_CHROME_SKIN` (fail closed). Baked YAML for each id
 lives at `apps/digichat/config/examples/skins/<id>.yaml` and is copied into
 the image at `/app/config/examples/skins/`. Point `DIGICHAT_CONFIG_PATH` at
@@ -22,7 +22,7 @@ assistant-ui.com at request time.
 | `base-assistant-ui` | Configurable Base: same Thread plus official `brandTheme` / labels shell |
 | `webpage-assistant` | Docs layout + sidebar/modal Thread |
 | `product-page-assistant` | Product dashboard + floating modal Thread |
-| `digichat` | Gallery `/chatbot` Thread via `@digithings/ui/chat/thread` (not a LAYOUT_SKINS owner). |
+| `digichat` | Gallery `/chatbot` Thread via `@digithings-ai/ui/chat/thread` (not a LAYOUT_SKINS owner). |
 
 Downloads (fixed demos): `https://www.assistant-ui.com/api/xulux/demo-download?slug=<id>`
 Expo: `https://github.com/assistant-ui/assistant-ui/tree/main/examples/with-expo`
@@ -33,4 +33,4 @@ Edits vs upstream for in-app mounts:
 - `CloneThreadShell` stripped (digichat owns thread-list via persistence)
 - webpage / product-page use the parent `AssistantRuntimeProvider` (no nested demo runtime)
 - Ink / Expo originals are not imported by Next.js
-- `digichat` is the gallery `/chatbot` Thread (`@digithings/ui/chat/thread`), not a downloaded catalog template
+- `digichat` is the gallery `/chatbot` Thread (`@digithings-ai/ui/chat/thread`), not a downloaded catalog template

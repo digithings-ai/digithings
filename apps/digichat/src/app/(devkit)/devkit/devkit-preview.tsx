@@ -3,19 +3,19 @@
 import { useMemo, useState } from "react";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/ai-sdk";
-import { ThreadSkinView, type ThreadSkin } from "@digithings/ui/chat/skins";
+import { ThreadSkinView, type ThreadSkin } from "@digithings-ai/ui/chat/skins";
 import { DIGICHAT_SKIN_OPTIONS } from "@/lib/digichat-skin-options";
 import {
   StockChatPrefsHost,
   useStockChatPrefs,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import {
   resolveRouteClientConfig,
   toStockChatPrefsConfig,
 } from "@/lib/route-client-config";
 import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
-import { SkinRuntimeProvider, SkinChromeProvider, type SkinChromeValue } from "@digithings/ui/chat/stock";
+import { SkinRuntimeProvider, SkinChromeProvider, type SkinChromeValue } from "@digithings-ai/ui/chat/stock";
 import { parseEmbedChatError, formatEmbedChatError } from "@/lib/embed-chat-error";
 import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
 import {

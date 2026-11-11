@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { SLASH_COMMANDS } from "@digithings/digichat-ui";
+import { SLASH_COMMANDS } from "@digithings-ai/digichat-ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_EMBED_CHAT_PREFS, type EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
+import { DEFAULT_EMBED_CHAT_PREFS, type EmbedChatPrefsApi } from "@digithings-ai/ui/chat/stock";
 import { buildProductSlashCommands, executeSlashDef } from "./product-slash-commands";
 import {
   embedThemePrefs,

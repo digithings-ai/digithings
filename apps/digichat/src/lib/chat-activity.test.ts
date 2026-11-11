@@ -14,7 +14,7 @@ import {
   standardPartsToSpans,
   type ActivitySpan,
 } from "./chat-activity";
-import type { DigiChatActivity } from "@digithings/digichat-ui";
+import type { DigiChatActivity } from "@digithings-ai/digichat-ui";
 
 const span = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({
   operation: "execute_tool",

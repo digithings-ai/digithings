@@ -163,7 +163,7 @@ export {
 } from "./components/chat/ChatWidgetFrame";
 
 // terminal loaders — the house type-out applied to waiting. Styles:
-// @digithings/ui/styles/terminal-loaders.css (needs chat-core.css first).
+// @digithings-ai/ui/styles/terminal-loaders.css (needs chat-core.css first).
 export { TerminalStepCaret, type TerminalStepCaretProps } from "./components/terminal/TerminalStepCaret";
 export {
   ContainerBootLoader,
@@ -178,7 +178,7 @@ export {
 } from "./components/terminal/ChatResponseLoader";
 
 // digichat boot loader — the default embed warm-up animation (composer-outline
-// cube field). Styles: @digithings/ui/styles/digichat-boot-loader.css.
+// cube field). Styles: @digithings-ai/ui/styles/digichat-boot-loader.css.
 export {
   DigichatBootLoader,
   type DigichatBootLoaderProps,

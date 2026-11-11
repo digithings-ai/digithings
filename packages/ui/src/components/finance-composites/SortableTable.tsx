@@ -18,7 +18,7 @@ import { useState } from "react";
  * order.
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/finance-composites.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/finance-composites.css";
  *                 @source "<path-to>/packages/ui/src/components/finance-composites";
  */
 export type SortableColumn<Row> = {

@@ -1,4 +1,4 @@
-# @digithings/digiweb
+# @digithings-ai/digiweb
 
 The live design reference for digithings — **digiweb**. It renders the current
 generation's tokens, kit and brand as working code in a React / Next.js /
@@ -12,13 +12,13 @@ It replaces the retired 2026-08 blend corpus that lived in `apps/reference`.
 ## Run it
 
 ```bash
-npm run dev --workspace @digithings/digiweb -- --port 4013
+npm run dev --workspace @digithings-ai/digiweb -- --port 4013
 # Reference:    http://127.0.0.1:4013/
 # Brand studio: http://127.0.0.1:4013/brand/
 ```
 
-It consumes the shared workspaces from source: `@digithings/design` (tokens),
-`@digithings/ui` (the kit), and `@digithings/hero-banner` (the wordmark
+It consumes the shared workspaces from source: `@digithings-ai/design` (tokens),
+`@digithings-ai/ui` (the kit), and `@digithings-ai/hero-banner` (the wordmark
 banners). Edits to those packages hot-reload here.
 
 ## Page map
@@ -43,7 +43,7 @@ the suite.
 - **The kit index** parses `packages/ui/src/ui/index.ts` and
   `packages/ui/src/index.ts`; a new export appears without an edit here.
 - **The module banners** render from `BANNERS` in
-  `@digithings/hero-banner/definitions`; nothing is copied.
+  `@digithings-ai/hero-banner/definitions`; nothing is copied.
 - **Brand studio assets** are a byte-identical mirror of `packages/brand/studio/`,
   checked by `make brand-studio-check`.
 
@@ -58,4 +58,4 @@ for new specimens.
 
 This app is a local reference. It is not deployed to digithings.ai or
 digiquant.io, and no product surface imports it. Product apps import
-`@digithings/ui` and `@digithings/design` directly.
+`@digithings-ai/ui` and `@digithings-ai/design` directly.

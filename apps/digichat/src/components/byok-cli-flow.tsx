@@ -25,7 +25,7 @@ import {
 } from "@/lib/byok-ping";
 import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
-import { Button, Input, Label, SegmentedControl } from "@digithings/ui/ui";
+import { Button, Input, Label, SegmentedControl } from "@digithings-ai/ui/ui";
 
 type Step = "provider" | "key" | "model" | "validating" | "done";
 

@@ -11,7 +11,7 @@
  * borders re-derive. Server component — no state, no effects.
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/metrics.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/metrics.css";
  *                 @source "<path-to>/packages/ui/src/components/metrics";
  */
 export type PerfMetric = {

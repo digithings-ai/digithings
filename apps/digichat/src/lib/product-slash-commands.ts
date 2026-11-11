@@ -1,6 +1,6 @@
 /**
  * Product-skin slash commands for the assistant-ui trigger popover (#3733 / #3736).
- * Command *data* comes from `@digithings/digichat-ui`; execute closures live here.
+ * Command *data* comes from `@digithings-ai/digichat-ui`; execute closures live here.
  */
 
 import type { Unstable_SlashCommand } from "@assistant-ui/react";
@@ -19,15 +19,15 @@ import {
   type SlashVisibility,
   SLASH_CATEGORIES,
   SLASH_COMMANDS,
-} from "@digithings/digichat-ui";
+} from "@digithings-ai/digichat-ui";
 import {
   FEATURED_LANGUAGE_CODES,
   LANGUAGES,
   languageLabel,
   tryResolveLanguageInput,
 } from "@/lib/languages";
-import { isTraceDensity } from "@digithings/ui/chat/trace-spacing";
-import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
+import { isTraceDensity } from "@digithings-ai/ui/chat/trace-spacing";
+import type { EmbedChatPrefsApi } from "@digithings-ai/ui/chat/stock";
 import {
   applyDocumentTheme,
   isPaletteId,
@@ -36,7 +36,7 @@ import {
   normalizePalette,
   type ThemePreference,
   type ThemeState,
-} from "@digithings/ui/theme";
+} from "@digithings-ai/ui/theme";
 import {
   isLegacyViewMode,
   isViewMode,

@@ -8,7 +8,7 @@
  * Every surface that rides this shell (embed, standalone, panels) also gets
  * the universal DigiChat boot animation: the loader mounts as an overlay
  * above the shell until it settles, then fades out and unmounts. The boot's
- * settle signal (see @digithings/ui chat/boot-signal) also releases copy
+ * settle signal (see @digithings-ai/ui chat/boot-signal) also releases copy
  * choreography that waits for it.
  */
 
@@ -29,16 +29,16 @@ import {
   type SpeechSynthesisAdapter,
 } from "@assistant-ui/react";
 
-import type { ComposerLayout } from "@digithings/ui/chat/thread";
+import type { ComposerLayout } from "@digithings-ai/ui/chat/thread";
 import {
   resolveBootLabVariant,
   type BootLabVariant,
-} from "@digithings/ui/chat/boot-lab";
+} from "@digithings-ai/ui/chat/boot-lab";
 import {
   SuggestionCycleProvider,
   useSuggestionCycle,
   useThreadActivity,
-} from "@digithings/ui/chat/suggestions";
+} from "@digithings-ai/ui/chat/suggestions";
 import {
   DIGI_CHAT_READY_EVENT,
   getDigichatWarmupPhase,
@@ -47,7 +47,7 @@ import {
   signalDigichatBootStep,
   signalDigichatRevealed,
   type DigichatHandoff,
-} from "@digithings/ui/chat/boot-signal";
+} from "@digithings-ai/ui/chat/boot-signal";
 import type { DigichatClientConfig, DigichatClientFeatures } from "@/lib/deploy-config";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 import { applyDeployedPalette } from "@/lib/palette-prefs";
@@ -57,17 +57,17 @@ import {
 } from "@/lib/view-modes";
 import {
   skinOwnsPageChrome,
-} from "@digithings/ui/chat/skins";
-import { useEmbedChatPrefsOptional } from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/skins";
+import { useEmbedChatPrefsOptional } from "@digithings-ai/ui/chat/stock";
 import {
   type StockSendGateHandlers,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import {
   type DeployUiValue,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import {
   type SkinChromeValue,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 
 import { DigiChatHost } from "./digichat-host";
 
@@ -353,7 +353,7 @@ export function ProductStockShell({
   );
 
   // Starter chips: the tenant defines the list, the screen shows four at a
-  // time and cycles the rest (see @digithings/ui/chat/suggestions). One
+  // time and cycles the rest (see @digithings-ai/ui/chat/suggestions). One
   // boundary for every surface — the embedding, the standalone app, the tenant
   // panels — because every skin reads the capped group from here: the stock
   // skin through `auiConfig.suggestions`, the gallery and base skins through

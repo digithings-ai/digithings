@@ -126,7 +126,7 @@ GENERATED_BANNER = "GENERATED FILE"
 #: Whole paths exempt from the check, each with the reason it is exempt rather
 #: than a file that happened to trip the guard once.
 EXEMPT_PREFIXES: dict[str, str] = {
-    # `@digithings/ui` is a workspace package consumed as TypeScript source —
+    # `@digithings-ai/ui` is a workspace package consumed as TypeScript source —
     # `"private": true`, an `exports` map, and `scripts` of `test`/`typecheck`
     # with no build step — and a chat skin is *a provider binding*: the skin
     # exists to present one provider's model, so naming one is its job, not a

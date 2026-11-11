@@ -64,7 +64,7 @@ export function toChartTime(iso: string): Time {
 }
 
 /** Token reads off the host element, with SSR-safe fallbacks mirroring the
- *  dark theme in @digithings/design/tokens.css (the sanctioned cssVar
+ *  dark theme in @digithings-ai/design/tokens.css (the sanctioned cssVar
  *  fallback pattern — see scripts/check_frontend_canon.py). Fallbacks track
  *  tokens.css:161,166,175,182-183; the light theme intentionally renders
  *  from the dark snapshot until the client re-reads. Pass `null`

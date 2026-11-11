@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { PALETTE_IDS } from "@digithings/ui/theme";
+import { PALETTE_IDS } from "@digithings-ai/ui/theme";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -237,11 +237,11 @@ function cascade(rules: Rule[], elements: Element[]): Record<string, string>[] {
 
 function resolveImport(fromFile: string, spec: string): string | null {
   if (spec === "tailwindcss" || spec === "tw-animate-css") return null;
-  if (spec.startsWith("@digithings/design/")) {
-    return path.join(ROOT, "packages/design", spec.slice("@digithings/design/".length));
+  if (spec.startsWith("@digithings-ai/design/")) {
+    return path.join(ROOT, "packages/design", spec.slice("@digithings-ai/design/".length));
   }
-  if (spec.startsWith("@digithings/ui/styles/")) {
-    return path.join(ROOT, "packages/ui/src/styles", spec.slice("@digithings/ui/styles/".length));
+  if (spec.startsWith("@digithings-ai/ui/styles/")) {
+    return path.join(ROOT, "packages/ui/src/styles", spec.slice("@digithings-ai/ui/styles/".length));
   }
   if (spec.startsWith(".")) return path.resolve(path.dirname(fromFile), spec);
   return null;

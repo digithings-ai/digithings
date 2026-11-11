@@ -165,7 +165,7 @@ export const REPO_ACTIVITY_DEMO: RepoActivitySnapshot = {
     },
     {
       number: 1450,
-      title: "promote F1 component families into @digithings/ui",
+      title: "promote F1 component families into @digithings-ai/ui",
       url: "#1450",
       updatedAt: "2026-08-12T08:22:00Z",
     },

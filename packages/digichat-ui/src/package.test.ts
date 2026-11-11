@@ -5,12 +5,12 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-describe("@digithings/digichat-ui package surface", () => {
+describe("@digithings-ai/digichat-ui package surface", () => {
   it("exports session styles", () => {
     const css = readFileSync(join(root, "src/styles/session.css"), "utf8");
     expect(css).toContain(".dc-session");
     expect(css).toContain(".dc-thread");
-    // NOT .dc-mermaid: MermaidBlock moved to @digithings/ui's ChatMermaidBlock
+    // NOT .dc-mermaid: MermaidBlock moved to @digithings-ai/ui's ChatMermaidBlock
     // (.chat-md-mermaid*), so asserting it here pinned dead CSS in place.
     expect(css).not.toContain(".dc-mermaid");
   });
@@ -54,7 +54,7 @@ describe("@digithings/digichat-ui package surface", () => {
   });
 
   it("ships one wordmark, not a hand-copied second one", () => {
-    // The canonical wordmark lives in @digithings/ui (Wordmark /
+    // The canonical wordmark lives in @digithings-ai/ui (Wordmark /
     // TerminalWordmark). This package carried a `.dc-wordmark` copy with its own
     // accent suffix: no consumers, and it drifted from the canon grammar.
     const index = readFileSync(join(root, "src/index.ts"), "utf8");

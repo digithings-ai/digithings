@@ -15,7 +15,7 @@
   "aliases": {
     "components": "@/components",
     "utils": "@/lib/utils",
-    "ui": "@digithings/ui/ui",
+    "ui": "@digithings-ai/ui/ui",
     "lib": "@/lib",
     "hooks": "@/hooks"
   },

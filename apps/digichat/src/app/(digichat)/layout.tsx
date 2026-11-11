@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Cabin, Geist_Mono, IBM_Plex_Mono, Inter, Mulish } from "next/font/google";
 import "./globals.css";
-import { faviconThemeScript, themeInitScript } from "@digithings/ui";
+import { faviconThemeScript, themeInitScript } from "@digithings-ai/ui";
 import { p } from "@/lib/base-path";
 import { PUBLIC_ORIGIN } from "@/lib/public-origin";
 import { auth } from "@/auth";

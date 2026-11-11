@@ -6,7 +6,7 @@ import { toEmbedClientConfig } from "@/lib/embed-client-config";
 import { resolveEmbedUiFlags } from "@/lib/embed-ui-flags";
 import { parseEmbedTenants } from "@/lib/embed-tenants";
 import { resolveRouteClientConfig } from "@/lib/route-client-config";
-import { catalogToolsFromClient } from "@digithings/ui/chat/stock";
+import { catalogToolsFromClient } from "@digithings-ai/ui/chat/stock";
 
 type Overlay = { DIGICHAT_EMBED_TENANTS: Record<string, Record<string, unknown>> };
 

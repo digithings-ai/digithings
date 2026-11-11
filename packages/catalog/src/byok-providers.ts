@@ -13,7 +13,7 @@
  *
  * The catalog below mirrors (but is not generated from — see
  * `apps/digichat/ARCHITECTURE.md`'s BYOK section) `config/byok-providers.json`.
- * Moved to `@digithings/catalog` (DIG-3695); digichat re-exports it.
+ * Moved to `@digithings-ai/catalog` (DIG-3695); digichat re-exports it.
  * `use-byok-key.catalog-parity.test.ts` fails if the two drift apart.
  *
  * That mirror stays deliberately hand-written. `config/byok-providers.json`

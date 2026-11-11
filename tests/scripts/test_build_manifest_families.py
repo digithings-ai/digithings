@@ -7,7 +7,7 @@ next.js route group is organisational, not a family, so `(...)` segments must be
 skipped (and the bare `app/(gallery)/page.tsx` falls back to `foundations`).
 
 The vendored shadcn kit (`packages/ui/src/ui/*.tsx`) is importable only as the package
-export `@digithings/ui/ui`, never as `@/components/*`, so no reference page maps
+export `@digithings-ai/ui/ui`, never as `@/components/*`, so no reference page maps
 it and it must be indexed directly from source, one row per file.
 
 The script takes an output path as argv[2], so this test writes to a temp file

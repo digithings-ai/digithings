@@ -53,7 +53,7 @@ import { Button } from "../../ui";
  * none.
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/effects-chrome.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/effects-chrome.css";
  *                 @source "<path-to>/packages/ui/src/components/effects-chrome";
  */
 export type TabItem = { id: string; label: ReactNode };

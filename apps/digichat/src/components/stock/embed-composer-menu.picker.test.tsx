@@ -11,12 +11,12 @@ import {
   type MenuRow,
 } from "./embed-composer-menu";
 import { VIEW_MODES } from "@/lib/view-modes";
-import { VIEW_LABELS } from "@digithings/digichat-ui";
+import { VIEW_LABELS } from "@digithings-ai/digichat-ui";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   EmbedChatPrefsProvider,
   type EmbedChatPrefsApi,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import { resolveModelCatalog } from "@/lib/model-picker-catalog";
 
 /** Navigated row: marked by data-cursor (the lighter wash); no chevron glyph on any row. */

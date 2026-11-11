@@ -53,7 +53,7 @@ is retired with no redirect alias.
 client code as `NEXT_PUBLIC_DASHBOARD_BASE_PATH` (a static export has no
 runtime config; it is used by `oauthRedirectTo()` so PKCE `redirect_to`
 matches the AUTH.md allow-list). Images are unoptimized, `trailingSlash` is
-on, and `transpilePackages` compiles the `@digithings/ui` TypeScript sources.
+on, and `transpilePackages` compiles the `@digithings-ai/ui` TypeScript sources.
 The build runs `next build && npm run check:static-export` (a
 `scripts/check-static-export.mjs` pass that verifies server/client class
 boundaries). Top-level route groups under `app/` include `research`,
@@ -65,8 +65,8 @@ boundaries). Top-level route groups under `app/` include `research`,
 ## Design system
 
 Styling joins the root npm workspace and consumes the shared canon via
-`@digithings/design` (canon tokens, quant-native and finance-tearsheet
-grammars) plus the **Tailwind v4 bridge** from `@digithings/ui`
+`@digithings-ai/design` (canon tokens, quant-native and finance-tearsheet
+grammars) plus the **Tailwind v4 bridge** from `@digithings-ai/ui`
 (`web-theme.css`, the `@theme inline` bridge) — not a separate web package.
 `app/globals.css` layers Tailwind, the typography plugin, `tw-animate-css`,
 the canon tokens, the theme bridge, and the quant-native / tearsheet /

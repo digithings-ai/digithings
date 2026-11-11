@@ -7,7 +7,7 @@
  * already do by hand. Hand-rolling keeps three dependency trees (rxjs, uuid,
  * fast-json-patch, …) out of the image for a fraction of their surface.
  */
-import { isRecord } from "@digithings/ui/lib/record";
+import { isRecord } from "@digithings-ai/ui/lib/record";
 import {
   applyActivityDetail,
   sanitizeActivitySpan,

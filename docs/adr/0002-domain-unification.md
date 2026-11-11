@@ -101,4 +101,4 @@ its own deployment repo (matching the historical
 superseded. All three web surfaces — `digithings.ai`, `digiquant.io`, and
 `chat.digithings.ai` — now ship from this monorepo under
 `cloudflare/{website,digiquant-web,digichat}`, with a shared
-`@digithings/design` workspace package.
+`@digithings-ai/design` workspace package.

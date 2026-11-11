@@ -7,7 +7,7 @@
  * grammar are call-site utilities.
  *
  * Import once in an app's globals.css:
- *   @import "@digithings/ui/styles/card-rail.css";
+ *   @import "@digithings-ai/ui/styles/card-rail.css";
  */
 
 .cr-nav {

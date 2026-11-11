@@ -12,7 +12,7 @@ export type SpinnerProps = {
  * been copied into three reference specimens (task-1b review, Minor 3).
  *
  * `currentColor`-based, so it inherits the button/label tone; motion-reduce
- * disables the rotation. Import from `@digithings/ui`.
+ * disables the rotation. Import from `@digithings-ai/ui`.
  */
 export function Spinner({ className }: SpinnerProps) {
   return (

@@ -32,7 +32,7 @@ import { useMotionSafe } from "../../motion/primitives";
  *
  * Wiring (in the consuming app): the word-reveal sheet must be imported, which
  * <WordReveal/> already requires —
- *   globals.css  @import "@digithings/ui/styles/word-reveal.css";
+ *   globals.css  @import "@digithings-ai/ui/styles/word-reveal.css";
  */
 const REVEAL_END = 0.86;
 const WORD_SPAN = 0.2;

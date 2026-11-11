@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { VIEW_LABELS } from "@digithings/digichat-ui";
+import { VIEW_LABELS } from "@digithings-ai/digichat-ui";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appSrc = join(here, "..");
@@ -23,7 +23,7 @@ function read(file: string): string {
 }
 
 /**
- * The view-level wording has one home: `@digithings/digichat-ui`. A private
+ * The view-level wording has one home: `@digithings-ai/digichat-ui`. A private
  * copy of it inside the app is exactly what let the #6034 rename
  * (compact/detailed -> quiet/verbose) leave the composer menu's `/view` page
  * without a description (DIG-4665).

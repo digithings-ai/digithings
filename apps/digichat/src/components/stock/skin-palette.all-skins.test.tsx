@@ -13,8 +13,8 @@ import {
 import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { THREAD_SKINS, ThreadSkinView, type ThreadSkin } from "@digithings/ui/chat/skins";
-import { StockChatPrefsHost, useStockChatPrefs } from "@digithings/ui/chat/stock";
+import { THREAD_SKINS, ThreadSkinView, type ThreadSkin } from "@digithings-ai/ui/chat/skins";
+import { StockChatPrefsHost, useStockChatPrefs } from "@digithings-ai/ui/chat/stock";
 import { DIGICHAT_SKIN_OPTIONS } from "@/lib/digichat-skin-options";
 import {
   resolveRouteClientConfig,

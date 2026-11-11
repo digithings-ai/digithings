@@ -1,8 +1,8 @@
 /* ==========================================================================
-   @digithings/ui — finance-tearsheet family CSS (#1463)
+   @digithings-ai/ui — finance-tearsheet family CSS (#1463)
    The print-grade tearsheet grammar (.ts-*): SVG charts, KPI strip, returns
    matrix, trade log, library card, live badge — promoted from
-   @digithings/design/tearsheet/styles.css (screen grammar, now deprecated in
+   @digithings-ai/design/tearsheet/styles.css (screen grammar, now deprecated in
    favour of this sheet) + apps/digiquant-web/app/globals.css (the
    @media print grammar, canon §17). Consumes the [data-theme] semantic
    tokens so the whole surface works in light AND dark; positive P&L wears
@@ -23,9 +23,9 @@
 
    Wiring (consuming app globals.css):
      @import "tailwindcss";
-     @import "@digithings/design/tokens.css";
-     @import "@digithings/ui/styles/web-theme.css";
-     @import "@digithings/ui/styles/finance-tearsheet.css";
+     @import "@digithings-ai/design/tokens.css";
+     @import "@digithings-ai/ui/styles/web-theme.css";
+     @import "@digithings-ai/ui/styles/finance-tearsheet.css";
      @source "<path-to>/packages/ui/src/components/finance-tearsheet";
    App-local print resets for the app's own layout shells (e.g. digiquant's
    .wrap / .dq-subpage) stay app-side, after this import.

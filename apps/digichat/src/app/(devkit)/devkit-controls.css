@@ -1,7 +1,7 @@
-@import "@digithings/design/tokens.css";
-@import "@digithings/ui/styles/web-theme.css";
-@import "@digithings/ui/styles/controls-core.css";
-@import "@digithings/ui/styles/controls-overlay.css";
+@import "@digithings-ai/design/tokens.css";
+@import "@digithings-ai/ui/styles/web-theme.css";
+@import "@digithings-ai/ui/styles/controls-core.css";
+@import "@digithings-ai/ui/styles/controls-overlay.css";
 
 @source "../../../../../packages/ui/src/ui";
 

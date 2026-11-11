@@ -1,14 +1,14 @@
 /* ==========================================================================
-   @digithings/ui — chat activity-widget CSS (components/chat/*, #1418).
+   @digithings-ai/ui — chat activity-widget CSS (components/chat/*, #1418).
    The digichat activity grammar promoted from the chatbot reference family:
    collapsible tool-call blocks (ChatToolCall), the thinking/reasoning
    disclosure (ChatThinking), and the framed-embed widget grammar
    (ChatWidgetFrame / ChatWidgetButton). Import AFTER the token bridge, in the
    app's globals.css:
      @import "tailwindcss";
-     @import "@digithings/design/tokens.css";
-     @import "@digithings/ui/styles/web-theme.css";
-     @import "@digithings/ui/styles/chat-widgets.css";
+     @import "@digithings-ai/design/tokens.css";
+     @import "@digithings-ai/ui/styles/web-theme.css";
+     @import "@digithings-ai/ui/styles/chat-widgets.css";
      @source "<path-to>/packages/ui/src/components/chat";
    The @source line is load-bearing (path relative to the app's globals.css):
    the components carry token-backed utilities, and Tailwind does not scan

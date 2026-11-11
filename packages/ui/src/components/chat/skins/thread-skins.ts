@@ -2,7 +2,7 @@
  * Official assistant-ui templates a digichat container can pick at deploy time.
  *
  * Ids 1–11 match assistant-ui `list_templates`. `digichat` is the first-party
- * Thread — the gallery `/chatbot` module at `@digithings/ui/chat/thread`
+ * Thread — the gallery `/chatbot` module at `@digithings-ai/ui/chat/thread`
  * (`thread.aui.tsx` + slots + cube glyphs), not a catalog clone.
  * `base` is the fixed Base demo. `base-assistant-ui` is the configurable
  * Base shell (brandTheme + labels). Same Thread, different catalog product.

@@ -7,9 +7,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(join(here, "tool-fallback.aui.tsx"), "utf8");
 
 describe("stock ToolFallback source guard", () => {
-  it("reads attribution through the shared @digithings/ui helper", () => {
+  it("reads attribution through the shared @digithings-ai/ui helper", () => {
     expect(source).toMatch(
-      /import\s*\{\s*readGloomberbAttribution\s*\}\s*from\s*["']@digithings\/ui["']/,
+      /import\s*\{\s*readGloomberbAttribution\s*\}\s*from\s*["']@digithings-ai\/ui["']/,
     );
   });
 

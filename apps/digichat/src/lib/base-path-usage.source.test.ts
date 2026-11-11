@@ -6,7 +6,7 @@ import { BASE_PATH as APP_BASE_PATH, p as appP } from "./base-path";
 // The shared package's own copy, through its public export: importing
 // `packages/*/src` is restricted (DIG-3695), and this test is about the two
 // copies agreeing.
-import { BASE_PATH as UI_BASE_PATH, p as uiP } from "@digithings/ui/base-path";
+import { BASE_PATH as UI_BASE_PATH, p as uiP } from "@digithings-ai/ui/base-path";
 
 /**
  * Every client-side call into the app's own API goes through `p()`

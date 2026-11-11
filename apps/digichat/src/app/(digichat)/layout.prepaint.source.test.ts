@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { themeInitScript } from "@digithings/ui";
+import { themeInitScript } from "@digithings-ai/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
