@@ -1,7 +1,6 @@
 {
   "name": "@digithings/design",
   "version": "0.1.0",
-  "private": true,
   "description": "Shared digithings design tokens and the CSS and vanilla-JS modules live surfaces still import.",
   "license": "MIT",
   "homepage": "https://digithings.ai",
@@ -36,5 +35,16 @@
     "site",
     "releases.json",
     "fonts.ts"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "next": ">=16"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
+  }
 }

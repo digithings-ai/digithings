@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-core up-chat up-trace up-edge up-all proxy-validate up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check config-contract config-contract-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check answer-integrity-check seed-local seed-local-no-r2
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-core up-chat up-trace up-edge up-all proxy-validate up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check config-contract config-contract-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error up-observability down-observability answer-integrity-check seed-local seed-local-no-r2
 build:
 	docker compose build
 
@@ -31,7 +31,7 @@ proxy-validate:
 
 # Pull prebuilt GHCR images (no local Dockerfile build). See infra/self-host/ and docs/DEPLOYMENT.md.
 .PHONY: up-ghcr up-ghcr-digichat pull-ghcr
-GHCR_COMPOSE := -f docker-compose.yml -f infra/self-host/compose.ghcr.yml
+GHCR_COMPOSE := -f docker-compose.yml
 pull-ghcr:
 	docker compose $(GHCR_COMPOSE) pull
 up-ghcr:
@@ -69,8 +69,6 @@ doc-check:
 # moved-paths-guard is the monorepo's extraction guard: it is not part of
 # this repository and there is no target for it here.
 
-brand-studio-check:
-	python3 packages/brand/build-studio.py --check
 
 # docs/adr/NNNN-*.md must be zero-padded, unique and gap-free. Same check as CI docs job (#3524).
 adr-check:
@@ -100,7 +98,6 @@ vault-check:
 # real status on a `answer-integrity-check: exit N` line and still fails, so make
 # never reports success for a check that found something. Anything that schedules
 # this must run the probe directly and branch on its exit code, not on make's.
-ANSWER_PROBE := scripts/answer_integrity_check.py
 answer-integrity-check:
 	@if [ ! -f "$(ANSWER_PROBE)" ]; then \
 		echo "answer-check: the probe is not shipped in this tree (exit 2)"; \
@@ -304,192 +301,3 @@ config-contract-check:
 # Fail-fast house: no provider pings — provider errors surface from the real run.
 # Usage: make research-validate              (full check)
 #        make research-validate SKIP=--skip-db   (env + dry-run only)
-research-validate:
-	python3 digiquant/scripts/research/validate-providers.py $(SKIP)
-
-# Guard the `core` Supabase migration chain: config.toml present, every file named
-# NNN_name.sql, no duplicate numeric prefix. Pure bash, no deps — the same check
-# test-digiquant.yml runs as its first step. Run before adding a migration.
-supabase-migrations-check:
-	bash digiquant/scripts/research/verify-supabase-migrations.sh
-
-# Repo-health panel for housekeeping shifts (advisory only — never a gate, never a pre-flight).
-# Prints 8 metric rows and exits 0. Use readiness-write to refresh docs/agents/READINESS.md.
-readiness:
-	python3 scripts/readiness.py $(ARGS)
-
-readiness-write:
-	python3 scripts/readiness.py --write
-
-# Visual dashboard artifact (gitignored build output). Regenerate and open locally;
-# bots can quote `make readiness ARGS=--format=json` and point at this file.
-readiness-html:
-	mkdir -p dist && python3 scripts/readiness.py --format html > dist/readiness.html && python3 -c "import webbrowser; webbrowser.open('dist/readiness.html')" || true
-
-# Detect unused Python imports with ruff (dry-run by default; set APPLY=1 to fix in-place)
-clean-imports:
-	python3 scripts/clean_imports.py $(if $(APPLY),--fix,)
-
-# Detect unused functions, classes, and variables across Python source dirs
-find-stale:
-	python3 scripts/find_stale.py
-
-# Conventional commit helper — validates type(component): description format
-# Usage: make commit MSG="feat(digigraph): add new workflow step"
-commit:
-	@scripts/commit_helper.sh $(MSG)
-
-# Create a PR using the project template (requires gh CLI + gh auth login)
-pr:
-	@scripts/create_pr.sh
-
-# ── Orchestration ──────────────────────────────────────────────────────────────
-
-# Execute a backlog task end-to-end in an isolated worktree (ISSUE=N required)
-# Usage: make task ISSUE=42
-task:
-	@[ -n "$(ISSUE)" ] || (echo "Usage: make task ISSUE=<number>"; exit 1)
-	@scripts/check-worktree-conflicts.sh $(ISSUE)
-	@scripts/run_task.sh $(ISSUE)
-
-# Create a new GitHub Issue for the agent backlog (interactive)
-new-task:
-	@scripts/create_issue.sh
-
-# List open agent-task issues (optional: COMPONENT=digisearch)
-status:
-	@scripts/list_tasks.sh $(if $(COMPONENT),--component $(COMPONENT),)
-
-# Group open agent-task issues by phase/area for parallel execution
-# Optional filters: PHASE="Phase 3 — Domain unification"  AREA=digigraph
-batch-candidates:
-	@bash scripts/batch_candidates.sh $(if $(PHASE),--phase "$(PHASE)",) $(if $(AREA),--area "$(AREA)",)
-
-# Parse a Python traceback and identify the component
-# Usage: make parse-error TRACEBACK=file.txt  OR  cat err.log | make parse-error
-parse-error:
-	@python3 scripts/parse_traceback.py $(if $(TRACEBACK),--input $(TRACEBACK),)
-
-# Install git hooks (currently: pre-push guard against non-origin remotes + main pushes + unreviewed live-trading touches)
-hooks-install:
-	@scripts/install-hooks.sh
-
-.PHONY: digiquant-cron-check
-digiquant-cron-check:
-	python scripts/digiquant_cron_check.py
-
-# Run gitleaks locally across git history. Mirrors the CI scan so
-# developers can reproduce findings before pushing.
-#   Install:  brew install gitleaks   OR   go install github.com/gitleaks/gitleaks/v8@latest
-# The CI job uses the same .gitleaks.toml config at repo root.
-secrets-scan:
-	@command -v gitleaks >/dev/null 2>&1 || { \
-	  echo "gitleaks not installed. Install with:  brew install gitleaks  (or: go install github.com/gitleaks/gitleaks/v8@latest)"; \
-	  exit 127; \
-	}
-	@gitleaks detect --source . --config .gitleaks.toml --redact --verbose --no-banner
-
-# Refuse a payload carrying an unmasked customer email address. No-argument form
-# scans the working tree, which is the one to run before committing a new seed
-# payload; `make pii-scan-all` is the whole-tree form (use after containment).
-# Mirrors the PR step in .github/workflows/security-gitleaks.yml.
-.PHONY: pii-scan pii-scan-all
-pii-scan:
-	python3 scripts/check_pii_seed_payloads.py
-
-pii-scan-all:
-	python3 scripts/check_pii_seed_payloads.py --all
-
-# Match every `secrets.*` read under .github/ against each level (repo secret, repo
-# variable, org secret, environment secret) and report `dead`, `not repo-level`,
-# `unresolved`, `repo-over-org` and `env-over-repo`. `--strict` exits 1 on a dead repo
-# secret; `--strict-unresolved` does the same for a read no level defines.
-#
-# This is the LIVE read: it asks `gh` for every level, so it needs a token carrying the
-# `repo` scope (and `admin:org` for the org level). It exits 1 today, on `dead`:
-# `CRON_KICK_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` are repo secrets nothing reads.
-# That is a rotation finding, not a broken reference — the inventory records the
-# decision on `SUPABASE_SERVICE_ROLE_KEY`.
-#
-# CI cannot run this: the secret listings need the `repo` scope, and a workflow's
-# GITHUB_TOKEN is a GitHub App installation token whose `permissions:` vocabulary has
-# no key for secrets (run 37235973852, #5063). So CI checks the committed manifest
-# instead — see `secrets-audit-manifest`.
-.PHONY: secrets-audit
-secrets-audit:
-	python3 scripts/secrets_audit.py --strict
-
-# The CI gate, run by hand: the same command the `workflow-secret-refs` lane in ci.yml
-# runs, against the committed names-only manifest `.github/secret-names.json`. Needs no
-# `gh`, no token and no network, so it works from any checkout.
-.PHONY: secrets-audit-manifest
-secrets-audit-manifest:
-	python3 scripts/secrets_audit.py --manifest .github/secret-names.json --strict-unresolved
-
-# Refresh the committed manifest from the live API. Run this by hand, from a shell whose
-# `gh auth` token carries `repo` (and `admin:org`, for the org level), after a secret is
-# created, renamed or removed.
-#
-# It replaces the FACTS, not the decisions: the `accepted_missing` entries in the file
-# it overwrites are carried over. A name that has become real stops being unresolved,
-# and `tests/scripts/test_secrets_audit.py` then fails until the matching acceptance is
-# deleted — which is the point of dating and owning them.
-.PHONY: secrets-audit-refresh
-secrets-audit-refresh:
-	python3 scripts/secrets_audit.py --write-manifest .github/secret-names.json
-
-# Age every GitHub secret name (repo, org and the `cron` environment), list the ones
-# past the rotation window, and open or update one tracking issue.
-#
-# Run this by hand, from a shell whose `gh auth` token carries `repo` (and
-# `admin:org`, for the org level). It is deliberately NOT automated: the Actions
-# secrets endpoints need a token with the `repo` scope, which a workflow's
-# GITHUB_TOKEN never has, so from CI this script would read nothing. The monthly
-# `secret-staleness-check.yml` run therefore does the environment-gate drift half
-# only, via `--gates-only` (the board an internal ticket, option D). Reads names and
-# last-written dates only — GitHub never returns a value here.
-.PHONY: secrets-staleness
-secrets-staleness:
-	python3 scripts/secret_staleness_check.py --open-issue
-
-# --- local self-host stack (an internal ticket, S7) ------------------------------------
-# One command: `make local-stack` (alias `dt up`) brings up the local
-# self-host stack and refuses to report success unless the health gate passes.
-#
-# This block is additive and self-contained. The targets delegate to
-# `scripts/dt`; the preflight, secrets render, supabase, compose, wrangler
-# dev, proxy and seed artefacts it calls are owned by slices S1-S6 and are
-# SKIPPED (never failed) while they are still open PRs.
-#
-# Local check only, like the other stack targets above. CI parity is S9
-# (an internal ticket); the gate reuses this same code path via `local-stack-health`.
-.PHONY: local-stack local-stack-down local-stack-status local-stack-seed
-.PHONY: local-stack-reset local-stack-health local-stack-preflight local-stack-urls
-local-stack:
-	./scripts/dt up --profile $(or $(PROFILE),core)
-
-local-stack-down:
-	./scripts/dt down --profile $(or $(PROFILE),core)
-
-local-stack-status:
-	./scripts/dt status --profile $(or $(PROFILE),core)
-
-local-stack-seed:
-	./scripts/dt seed --profile $(or $(PROFILE),core)
-
-# Destructive: drops and rebuilds the local database. Requires SEED=... to set
-# the deterministic seed; RESET_YES=1 confirms, because `dt reset` otherwise
-# exits 2 without it.
-local-stack-reset:
-	./scripts/dt reset --profile $(or $(PROFILE),core) $(if $(SEED),--seed $(SEED),) $(if $(RESET_YES),--yes,)
-
-# The gate alone. Exits nonzero on any failure; `--require-all` additionally
-# fails on a skipped check, so CI can demand that nothing went unverified.
-local-stack-health:
-	./scripts/dt status --profile $(or $(PROFILE),core) $(if $(REQUIRE_ALL),--require-all,)
-
-local-stack-preflight:
-	./scripts/dt preflight
-
-local-stack-urls:
-	./scripts/dt urls --profile $(or $(PROFILE),core)

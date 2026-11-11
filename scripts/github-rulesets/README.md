@@ -4,10 +4,11 @@ Branch-protection rulesets for `digithings-ai/digithings`. Apply them to the
 GitHub repo to enforce the branch taxonomy defined in `BRANCHING.md`.
 
 **Desired state, not live state.** `"enforcement": "active"` in a file says
-nothing about the live repo. None of these four is applied there: no *ruleset*
-is applied on the repo (`module-branch-protection` was retired with the
-`module/*` branches), and the name taxonomy is enforced
-client-side by `scripts/hooks/pre-push.sh`.
+nothing about the live repo. None of these four is applied there: the rulesets
+applied on the repo are not these (`module-branch-protection` was retired with
+the `module/*` branches), and they are maintained outside this directory because
+their payloads name live ids and are applied by the repository owner. The name
+taxonomy is enforced client-side by `scripts/hooks/pre-push.sh`.
 
 That is a statement about rulesets, not about protection. `main` and `develop`
 also carry **classic branch protection**, which the rulesets API cannot see —
@@ -73,9 +74,11 @@ done
 | `03-protect-develop.json` | `develop`: block delete, block force-push. |
 | `04-protect-releases.json` | `release/v*`: block delete, block force-push. |
 
-Rulesets do not currently require PR reviews (solo-contributor mode). When a
-second contributor joins, add a `pull_request` rule to `02-protect-main.json`
-and `03-protect-develop.json`.
+These four files do not require PR reviews. The rulesets that are actually
+applied on the repo do: `main` and `develop` require at least one approving
+review plus a code-owner review, and their payloads are maintained outside this
+directory with their own runbook. So `02`–`04` staying review-free describes
+these files only — do not read it as the repo's merge policy.
 
 ## Update a ruleset
 

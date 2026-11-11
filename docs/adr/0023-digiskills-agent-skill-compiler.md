@@ -1,7 +1,7 @@
 # ADR-0023 — digiskills: agent-skill compiler and distribution module
 
 **Status:** Proposed (2026-07-09)
-**Context:** Epic [#1453](https://github.com/digithings-ai/digithings/issues/1453), task [#1454](https://github.com/digithings-ai/digithings/issues/1454)
+**Context:** Epic [#1453](#1453), task [#1454](#1454)
 
 ## Context
 
@@ -56,8 +56,8 @@ Scaffold a new top-level module, `digiskills/`, following the standard digithing
 
 ## Links
 
-- Epic: [#1453](https://github.com/digithings-ai/digithings/issues/1453)
-- This task: [#1454](https://github.com/digithings-ai/digithings/issues/1454)
+- Epic: [#1453](#1453)
+- This task: [#1454](#1454)
 - Reference module shape: `digivault/ARCHITECTURE.md`
 - Reused libraries: `digisearch/ARCHITECTURE.md`, `digifetch/ARCHITECTURE.md`, `digillm/ARCHITECTURE.md`
 - Existing (narrower) `SKILL.md` precedent: `docs/agent-skills/README.md`, `.claude/skills/`

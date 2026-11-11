@@ -1,5 +1,5 @@
 import type { ComponentProps, CSSProperties } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../../../lib/utils";
 
 const GRID = 5;
 const CENTER = (GRID - 1) / 2;

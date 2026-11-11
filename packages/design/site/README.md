@@ -354,7 +354,7 @@ placed directly above the footer: one literal headline, one primary kit
 `Button` (React), and an optional mono secondary link. Compose with `.reveal-up` (above) for a
 scroll-in enter; reduced motion is already honored by the shared block. Copy
 tone follows [`COPY_GUIDE.md`](../COPY_GUIDE.md)
-(literal verbs, no hype). Landing-page wiring is [#1227](https://github.com/digithings-ai/digithings/issues/1227) — this primitive owns only the markup/CSS contract.
+(literal verbs, no hype). Landing-page wiring is [#1227](#1227) — this primitive owns only the markup/CSS contract.
 
 ```html
 <section class="closing-cta reveal-up">

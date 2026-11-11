@@ -36,7 +36,7 @@ digichat is **not** only personal chat-form customization.
 These are hard sequencing constraints, not a roadmap:
 
 - After the three UI craft lanes (home / dashboard / digiquant-web) are inspected and unified.
-- Does **not** jump ahead of GitHub issue/PR [#4761](https://github.com/digithings-ai/digithings/issues/4761) Phase 3 house-run.
+- Does **not** jump ahead of GitHub issue/PR [#4761](#4761) Phase 3 house-run.
 - The parked digichat workbench on `module/digichat` ([#4692](https://github.com/digithings-ai/digithings/pull/4692)) until UI review **still stands**.
 
 ## Runtime: BYOK, adaptive UI, deployments
@@ -84,7 +84,7 @@ Entry flow powered by a proprietary investment profiling sub-graph. User inputs 
 A client organization deploys digichat pointed at their own digisearch index. Users log in via their corporate SSO (Microsoft, Google) — digikey identifies them, maps them to their organization's project, and issues a JWT with the appropriate index and tool scopes. The UI adapts: only their organization's indexes and approved tools appear. Index results are filtered by user access level.
 
 **Current state (shipped):**
-Next.js BFF + React UI, Auth.js sessions, Drizzle ORM, AI SDK, Postgres for conversation history, BYOK UI flow live — and `apps/digichat` is deployed publicly. The digichat Worker owns the `digithings.ai` zone routes listed above and proxies them to the digichat Cloudflare Container (`DigiChatContainer`); the Pages site serves the `/chat` shell per [ADR-0018](../adr/0018-digichat-path-routing.md). The bespoke widget this section used to describe is retired: `apps/digithings-web/functions/api/chat.ts` is now a `410` stub. Epic [#1248](https://github.com/digithings-ai/digithings/issues/1248) is closed (2026-07-06) and ADR-0018 was amended 2026-08-10 for the Container move.
+Next.js BFF + React UI, Auth.js sessions, Drizzle ORM, AI SDK, Postgres for conversation history, BYOK UI flow live — and `apps/digichat` is deployed publicly. The digichat Worker owns the `digithings.ai` zone routes listed above and proxies them to the digichat Cloudflare Container (`DigiChatContainer`); the Pages site serves the `/chat` shell per [ADR-0018](../adr/0018-digichat-path-routing.md). The bespoke widget this section used to describe is retired: `apps/digithings-web/functions/api/chat.ts` is now a `410` stub. Epic [#1248](#1248) is closed (2026-07-06) and ADR-0018 was amended 2026-08-10 for the Container move.
 
 **12-month roadmap:**
 Does not override the locked product or the sequencing constraints above.

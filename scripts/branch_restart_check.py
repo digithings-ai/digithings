@@ -206,22 +206,49 @@ def _git(repo: os.PathLike[str] | str, *args: str) -> str:
     return proc.stdout
 
 
+def base_refs(repo: os.PathLike[str] | str) -> list[str]:
+    """Upstream refs that exist locally, in priority order.
+
+    Work already merged into any of these is done, so it does not count as
+    unmerged work. ``origin/develop`` is the GitHub mirror; ``local/develop``
+    is the local Forgejo develop, which can be ahead of the mirror.
+
+    ``BRANCH_RESTART_BASE_REFS`` (space-separated) overrides the list for tests.
+    """
+    override = os.environ.get("BRANCH_RESTART_BASE_REFS")
+    candidates = override.split() if override is not None else ["origin/develop", "local/develop"]
+    result: list[str] = []
+    for ref in candidates:
+        ref = ref.strip()
+        if not ref:
+            continue
+        proc = _run(repo, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+        if proc.returncode == 0:
+            result.append(ref)
+    return result
+
+
 def _is_reachable_from_base(repo: os.PathLike[str] | str, tip: str) -> bool:
-    """True when ``tip`` is already merged into ``origin/develop``.
+    """True when ``tip`` is already merged into ANY base ref.
 
     ``git merge-base --is-ancestor`` returns 0 (reachable), 1 (not reachable) and
     128 for an unknown ref. Only the last is an error, and it means we cannot
     tell a merged branch from an unmerged one — which must fail open rather than
     guess, because guessing "unmerged" manufactures siblings that do not exist.
     """
-    proc = _run(repo, "merge-base", "--is-ancestor", tip, BASE_REF)
-    if proc.returncode == 0:
-        return True
-    if proc.returncode == 1:
-        return False
-    raise _Unknown(
-        f"`git merge-base --is-ancestor` failed: {proc.stderr.strip() or proc.returncode}"
-    )
+    bases = base_refs(repo)
+    if not bases:
+        raise _Unknown("no base ref found (origin/develop / local/develop)")
+    for base in bases:
+        proc = _run(repo, "merge-base", "--is-ancestor", tip, base)
+        if proc.returncode == 0:
+            return True
+        if proc.returncode == 1:
+            continue
+        raise _Unknown(
+            f"`git merge-base --is-ancestor` failed: {proc.stderr.strip() or proc.returncode}"
+        )
+    return False
 
 
 def unmerged_patch_ids(repo: os.PathLike[str] | str, candidate: str) -> set[str]:
@@ -239,7 +266,10 @@ def unmerged_patch_ids(repo: os.PathLike[str] | str, candidate: str) -> set[str]
     zero sha. A merge commit in the range contributes no patch (git shows none
     by default), so it is counted as neither work in flight nor overlap.
     """
-    patches = _run(repo, "log", "-p", "--pretty=format:%H", candidate, f"^{BASE_REF}")
+    bases = base_refs(repo)
+    if not bases:
+        raise _Unknown("no base ref found (origin/develop / local/develop)")
+    patches = _run(repo, "log", "-p", "--pretty=format:%H", candidate, *[f"^{b}" for b in bases])
     if patches.returncode != 0:
         detail = (patches.stderr or "").strip().splitlines()
         raise _Unknown(f"`git log -p` failed: {detail[-1] if detail else patches.returncode}")
@@ -259,37 +289,73 @@ def unmerged_patch_ids(repo: os.PathLike[str] | str, candidate: str) -> set[str]
     return {line.split()[0] for line in ids.stdout.splitlines() if line.split()}
 
 
+def git_supports_ahead_behind(repo: os.PathLike[str] | str) -> bool:
+    """Whether this git supports ``%(ahead-behind:...)`` in for-each-ref."""
+    if os.environ.get("BRANCH_RESTART_FORCE_OLD_GIT") == "1":
+        return False
+    proc = subprocess.run(["git", "--version"], capture_output=True, text=True, check=False)
+    version = (proc.stdout or proc.stderr or "").strip()
+    return _version_supports_ahead_behind(version)
+
+
+def _version_supports_ahead_behind(version_str: str) -> bool:
+    """Pure parser: git >= 2.41 supports ``%(ahead-behind:...)``."""
+    match = re.search(r"(\d+)\.(\d+)", version_str or "")
+    if not match:
+        return False
+    major, minor = int(match.group(1)), int(match.group(2))
+    return (major, minor) >= (2, 41)
+
+
 def unmerged_remote_branches(repo: os.PathLike[str] | str) -> list[tuple[str, str]]:
     """Return ``(branch, tip)`` for every origin/* branch still holding work.
 
-    Reachability comes from ``%(ahead-behind:origin/develop)``, which reports
-    ahead/behind counts for every ref in a *single* ``for-each-ref``. Asking
-    git one question per ref instead cost 19s on this repo's 478 remote refs —
-    far too slow for a hook that runs on every push, and slow enough that people
-    would reach for ``--no-verify``. Ahead == 0 means fully merged, which is the
-    same test ``merge-base --is-ancestor`` answers, at a fraction of the cost.
-
-    Branches with fewer unmerged commits than the threshold are skipped here: a
-    branch holding 1 or 2 commits cannot overlap a candidate by 3, so computing
-    its patch-ids would be work that cannot change the answer. That prunes 420
-    unmerged refs to 179 on this repo today.
+    Reachability comes from the ahead count against all base refs. Branches with
+    fewer unmerged commits than the threshold are skipped.
     """
-    listing = _git(
-        repo,
-        "for-each-ref",
-        "--format=%(refname:short) %(objectname) %(ahead-behind:origin/develop)",
-        "refs/remotes/origin",
-    )
+    bases = base_refs(repo)
+    if not bases:
+        raise _Unknown("no base ref found (origin/develop / local/develop)")
+
+    use_ab = len(bases) == 1 and git_supports_ahead_behind(repo)
+    if use_ab:
+        first = bases[0]
+        listing = _git(
+            repo,
+            "for-each-ref",
+            f"--format=%(refname:short) %(objectname) %(ahead-behind:{first})",
+            "refs/remotes/origin",
+        )
+    else:
+        listing = _git(
+            repo,
+            "for-each-ref",
+            "--format=%(refname:short) %(objectname)",
+            "refs/remotes/origin",
+        )
+
     branches: list[tuple[str, str]] = []
     for line in listing.splitlines():
         parts = line.split()
-        if len(parts) < 3:
+        if len(parts) < 2:
             continue
-        branch, tip, ahead_behind = parts[0], parts[1], parts[2]
+        branch, tip = parts[0], parts[1]
         # origin/HEAD is a symbolic placeholder, not a branch.
         if branch in ("origin", "origin/HEAD") or is_protected_branch(branch):
             continue
-        ahead = ahead_behind.split()[0] if ahead_behind else "0"
+
+        if use_ab:
+            ahead_behind = parts[2] if len(parts) >= 3 else ""
+            ahead = ahead_behind.split()[0] if ahead_behind else "0"
+        else:
+            proc = _run(repo, "rev-list", "--count", tip, *[f"^{b}" for b in bases])
+            if proc.returncode != 0:
+                detail = (proc.stderr or proc.stdout or "").strip().splitlines()
+                raise _Unknown(
+                    f"`git rev-list --count` failed: {detail[-1] if detail else proc.returncode}"
+                )
+            ahead = (proc.stdout or "").strip() or "0"
+
         if ahead.isdigit() and int(ahead) < MIN_UNMERGED_PATCH_OVERLAP:
             continue
         if _is_reachable_from_base(repo, tip):

@@ -2875,7 +2875,7 @@ def create_mcp_server(
         Returns the bound ticket plus `approval_token` for
         `digifetch_ibkr_execute_order` (single-use, 15-minute TTL). A limit
         order requires `limit_price`. The approval key comes from
-        GLOOMBERB_APPROVAL_KEY (server-side, never committed).
+        the private approval key (server-side, never committed).
         """
         try:
             envelope = _build_gloomberb_client().ibkr_preview_order(

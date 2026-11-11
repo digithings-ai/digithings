@@ -17,7 +17,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "./ui/collapsible";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../lib/utils";
 import { useExportKeepMounted } from "../../../replay/export-mount";
 import { OverlayScrollbar } from "../overlay-scrollbar";
 import { useTraceT } from "../trace-i18n";

@@ -25,7 +25,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { useCopyToClipboard } from "../../stock/use-copy-to-clipboard";
 import { ArtifactLink, isArtifactBlobHref } from "../../stock/artifacts-panel";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../../lib/utils";
 
 type MarkdownTextProps = Partial<TextMessagePartProps> & {
   components?: Parameters<typeof memoizeMarkdownComponents>[0];

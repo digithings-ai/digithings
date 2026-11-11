@@ -14,7 +14,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-06-06  
-**Issue:** [#613](https://github.com/digithings-ai/digithings/issues/613)
+**Issue:** [#613](#613)
 
 ---
 

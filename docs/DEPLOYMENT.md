@@ -82,12 +82,12 @@ See [config/MODELS.md](../config/MODELS.md) for model lists, modes (`test` / `me
 
 ## Metrics and observability
 
-Every HTTP service in the core stack exposes a `/health` endpoint. digitrace additionally exposes `/v1/status` (public — keep secret-free). Full Prometheus dashboards are a roadmap item (see [epic #4](https://github.com/digithings-ai/digithings/issues/4)).
+Every HTTP service in the core stack exposes a `/health` endpoint. digitrace additionally exposes `/v1/status` (public — keep secret-free). Full Prometheus dashboards are a roadmap item (see [epic #4](#4)).
 
 Current audit artifacts:
 
 - `digibot/audit.py` — append-only JSONL; single source of truth for the heartbeat/audit flow.
-- `digigraph/src/digigraph/audit.py` + `digiquant/src/digiquant/audit.py` — per-component audit sinks; to be consolidated into `digibase.audit` (Phase 5 of the cleanup epic [#31](https://github.com/digithings-ai/digithings/issues/31)).
+- `digigraph/src/digigraph/audit.py` + `digiquant/src/digiquant/audit.py` — per-component audit sinks; to be consolidated into `digibase.audit` (Phase 5 of the cleanup epic [#31](#31)).
 - Optional `AUDIT_SINK_URL` on digibot for NDJSON POST mirror.
 
 ## Tests
@@ -227,7 +227,7 @@ curl -sf https://digichat.digithings.ai/api/health | jq .
 
 ## Post-deploy smoke test
 
-Run after every deploy that touches either public surface. Each check is a one-line command where possible; browser-only steps are called out explicitly. Out of scope: synthetic / continuous monitoring (tracked separately under epic [#4](https://github.com/digithings-ai/digithings/issues/4)).
+Run after every deploy that touches either public surface. Each check is a one-line command where possible; browser-only steps are called out explicitly. Out of scope: synthetic / continuous monitoring (tracked separately under epic [#4](#4)).
 
 ### digithings.ai — static landing
 

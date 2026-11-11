@@ -318,3 +318,27 @@ priced scope rows (optional items carry an "optional" chip and total
 separately), headline figure, timeline, payment terms, and a running-costs /
 assumptions block for third-party services the client pays directly. See
 `quote/README.md`.
+
+## Publishing
+
+This package is published to npm as part of the digithings R0 release. Its
+`exports` point at the CSS, vanilla-JS and TypeScript files in this package —
+there is no build output, so the published tarball is the same code the
+workspace consumes.
+
+Consumers import by subpath:
+
+```ts
+import "@digithings/design/tokens.css";
+import { designTokens } from "@digithings/design/tokens";
+```
+
+A CSS or plain-JS import needs no bundler configuration. A Next.js app that
+imports the TypeScript entry (`@digithings/design/tokens`) must list the package
+in `transpilePackages`:
+
+```js
+const nextConfig = {
+  transpilePackages: ["@digithings/design"],
+};
+```

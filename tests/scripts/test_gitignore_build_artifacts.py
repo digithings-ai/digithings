@@ -98,19 +98,23 @@ def test_no_tracked_source_is_shadowed() -> None:
 def test_the_rules_that_cover_a_naked_app_live_in_the_root_gitignore() -> None:
     """The root rule is the whole fix: no app-level edit can replace it.
 
-    `apps/digiquant-app` exists only on feat/dig-183, so there is no app-level
-    `.gitignore` to add it to on develop. A root rule also covers the next app
-    that ships without one, which is the actual failure mode. These two probes
+    `apps/digiquant-app` now ships its own `.gitignore` (containing `.next/`),
+    so it can no longer prove the root rule: git check-ignore resolves the probe
+    to the app's file instead of the root one. Use a path under an app directory
+    that does not exist in the repo (`apps/no-gitignore-probe`); git
+    check-ignore resolves rules for nonexistent paths, so a nonexistent dir is
+    guaranteed to have no nearer `.gitignore`. A root rule also covers the next
+    app that ships without one, which is the actual failure mode. These two probes
     have no nearer `.gitignore`, so they can only resolve through the root file.
     """
     hits = _check_ignore(
         (
-            "apps/digiquant-app/.next/dev/build-manifest.json",
+            "apps/no-gitignore-probe/.next/dev/build-manifest.json",
             "apps/digichat/.opencode/storage/message.json",
         )
     )
     root = str(REPO_ROOT / ".gitignore")
     assert hits == {
-        "apps/digiquant-app/.next/dev/build-manifest.json": root,
+        "apps/no-gitignore-probe/.next/dev/build-manifest.json": root,
         "apps/digichat/.opencode/storage/message.json": root,
     }

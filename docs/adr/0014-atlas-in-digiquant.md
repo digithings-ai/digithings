@@ -2,7 +2,7 @@
 
 **Status:** Accepted (product names historical — see [ADR-0026](0026-retire-olympus-atlas-hermes-kairos.md))
 **Date:** 2026-04-23
-**Related epic:** [#297](https://github.com/digithings-ai/digithings/issues/297) (closed 2026-04-27)
+**Related epic:** [#297](#297) (closed 2026-04-27)
 **Amends:** [ADR-0009](0009-frontend-umbrella.md) (un-defers the Atlas frontend relocation item)
 **Amended by:** [ADR-0015](0015-atlas-vs-hermes.md) (2026-04-28) — splits the Atlas package into research (`digiquant.olympus.atlas`) and analysis (`digiquant.olympus.hermes`) sub-packages. The "Atlas in `digiquant/`" decision stands; this ADR's "Atlas package" references should now be read as "the research half of the Atlas package."
 
@@ -106,8 +106,8 @@ Specifically:
 
 | Phase | Issue | Description |
 |-------|-------|-------------|
-| 1 | [#315](https://github.com/digithings-ai/digithings/issues/315) | Python package move — `digiquant_atlas` → `digiquant.olympus.atlas`; update all import sites in digigraph, tests, and CI |
-| 2 | [#300](https://github.com/digithings-ai/digithings/issues/300) | Frontend move — `apps/digiquant-atlas/cloudflare/` → `cloudflare/atlas/`; drop `apps/*/frontend` glob, update CI path filters |
+| 1 | [#315](#315) | Python package move — `digiquant_atlas` → `digiquant.olympus.atlas`; update all import sites in digigraph, tests, and CI |
+| 2 | [#300](#300) | Frontend move — `apps/digiquant-atlas/cloudflare/` → `cloudflare/atlas/`; drop `apps/*/frontend` glob, update CI path filters |
 | 3 | TBD | Supabase migration consolidation — decide canonical home for `supabase/migrations/`; update CI and RUNBOOK paths |
 | 4 | TBD | `apps/digiquant-atlas/` cleanup — delete shell, migrate ancillary docs/scripts into `digiquant/`, remove stale CI workflows |
 
@@ -116,8 +116,8 @@ be complete before phase 4.
 
 ## Links
 
-- Related epic: [#297](https://github.com/digithings-ai/digithings/issues/297) — Migrate Atlas from `apps/` into `digiquant` module
-- Child issues: [#315](https://github.com/digithings-ai/digithings/issues/315) (Python move), [#300](https://github.com/digithings-ai/digithings/issues/300) (frontend move)
+- Related epic: [#297](#297) — Migrate Atlas from `apps/` into `digiquant` module
+- Child issues: [#315](#315) (Python move), [#300](#300) (frontend move)
 - Amends (un-defers): [ADR-0009](0009-frontend-umbrella.md) — frontend umbrella (Atlas frontend relocation was explicitly deferred)
 - Cross-reference: [ADR-0010](0010-atlas-first-class-thesis-deliberation.md) — Atlas first-class deliberation tables
 - Cross-reference: [ADR-0011](0011-atlas-supabase-persistence.md) — Atlas Supabase persistence

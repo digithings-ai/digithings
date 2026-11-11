@@ -2,7 +2,7 @@
 
 import type { FC, ReactNode } from "react";
 import { formatJsonDump } from "../gallery-thread/format-json-dump";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../lib/utils";
 import { stockRadius, useStockShape } from "./stock-shape";
 
 /**

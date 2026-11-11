@@ -55,7 +55,8 @@ Beyond root `AGENTS.md`:
 | `digiquant/tearsheet_stats.py` | HTML stats from Nautilus/Pandas-origin metrics (#1185) | Defer — same as tearsheet |
 | `digiquant/tearsheet_page.py` | HTML page assembly for Plotly tearsheet (#1185) | Defer — same as tearsheet |
 | `digiquant/tearsheet_charts.py` | Plotly/quantstats expect pandas Series for rolling stats | Defer — same as tearsheet |
-| `digiquant/scripts/research/*.py` | Legacy ops: yfinance / pandas-ta / treasury XML (REM-058 allowlist) | Migrate per-script to Polars in [#579](https://github.com/digithings-ai/digithings/issues/579); `compute-technicals.py` Polars date fix (REM-009) |
+| `digiquant/scripts/generate_tearsheets.py` | Operator CLI around `digiquant.tearsheet`: Nautilus `account_report` / `fills_report` are pandas | Defer — same as tearsheet |
+| `digiquant/scripts/research/*.py` | Legacy ops: yfinance / pandas-ta / treasury XML (REM-058 allowlist) | Migrate per-script to Polars in [#579](#579); `compute-technicals.py` Polars date fix (REM-009) |
 | `digiquant/scripts/research/preload-history.py` | Same research ops family | Delegate to `scripts/preload-history.py` (Polars) when touched |
 | `digiquant/strategies/bollinger_mr.py` | Nautilus strategy bar helpers | Issue backlog — migrate to stdlib `timedelta` pattern (see `rsi_momentum.py`) |
 | `digiquant/strategies/macd_trend.py` | Same | Same |

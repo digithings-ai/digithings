@@ -1,14 +1,28 @@
 {
   "name": "@digithings/catalog",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Framework-neutral shared catalogs: BYOK provider catalog + OpenAPI service registry. No React, no Next.js, no app aliases \u2014 importable from any runtime. Publishing waits for the registry ticket's decision.",
+  "version": "0.1.0",
+  "description": "Framework-neutral shared catalogs: BYOK provider catalog + OpenAPI service registry. No React, no Next.js, no app aliases \u2014 importable from any runtime.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "packages/catalog"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./byok-providers": "./src/byok-providers.ts",
     "./openapi": "./src/openapi.ts",
     "./page-context-sanitize": "./src/page-context-sanitize.ts"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "test": "vitest run",

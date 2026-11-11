@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn } from "../../../lib/utils";
 import { MarkdownText } from "../stock/markdown-text";
 import { MessageExportMenu } from "../stock/message-export-menu";
 import { SkinCredit, useSkinChrome } from "../stock";

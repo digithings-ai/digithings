@@ -2,7 +2,7 @@
 
 Conventions and inventory for `.github/workflows/` in the digithings monorepo.
 
-Tracked in issue [#292](https://github.com/digithings-ai/digithings/issues/292).
+Tracked in issue [#292](#292).
 
 Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 
@@ -45,7 +45,6 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | *(retired 2026-10-15, DIG-3845)* ~~`ci-dco-sign-off.yml`~~ | ~~CI: DCO sign-off~~ | — | DCO sign-off dropped entirely on the maintainer's decision: no `Signed-off-by` anywhere, workflow deleted, inventory entries removed. The develop merge rule (template description + green CI + addressed agentic review) replaces it — see CONTRIBUTING.md | Retired | none |
 | `pipeline-provider-review.yml` | Pipeline: provider review | schedule (Sun 00:00), dispatch | `pytest tests/provider_review/ -m unit` then weekly probe + Claude agent; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
 | `pipeline-maintenance.yml` | Pipeline: scheduled maintenance | schedule (Mon 08:00), dispatch | Weekly sweep: CVE audit, stale branches, broken doc links, agents-init drift, stale issues/PRs, label coverage, workflow health | Working | none |
-| `ci-type-check.yml` | CI: type check | push (main/develop), PR | mypy type checking for digibase + digikey | Working | `digibase/**`, `digikey/**`, `mypy.ini` |
 | `test-digivault.yml` | Test: digivault | workflow_call | digivault unit tests | Working | `digivault/**`, `tests/dv/**` |
 | `pipeline-research-metrics.yml` | Pipeline: research metrics refresh | schedule (daily, post-EOD), dispatch | Deterministic Polars/SQL recompute of `portfolio_metrics` + `position_attribution` the dashboard reads; zero LLM cost; runs after EOD price ingest | Working | none |
 | ~~`pipeline-digiquant-backfill.yml`~~ | *(retired)* | — | Deleted in #4053: migration 127 dropped the Supabase `price_history`/`price_technicals` tables it backfilled; the R2 refresh/backfill owns ingest now | — | none |
@@ -58,14 +57,12 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `book-pdf.yml` | Book: print the PDF | push, dispatch | Build the digibook's printed PDF as an artifact (DIG-2821) | Working | `paths:` filter |
 | `ci-pr-title.yml` | CI: PR title | pull_request | Conventional Commit title lint with the module scope list; squash merges use the PR title | Working | none |
 | `ci-review-coverage.yml` | CI: review coverage | pull_request | Gate before production: every PR in a promotion must carry a review | Working | none |
-| `tenanta-answer-check.yml` | Check: tenanta answer integrity | dispatch (manual only — the CF clock was retired 2026-10-18, DIG-4435) | Answer-integrity probe against tenanta production (DIG-306). Retired: the client manages their own infrastructure, so we do not probe them on a schedule. | Retired (manual dispatch only) | none |
 | `deploy-digiquant-runner.yml` | Deploy: digiquant-runner | push (`main`), dispatch | Deploy the private digiquant-runner Worker and container image (#4761) | Working | `paths:` filter |
 | `deploy-digithings-cron.yml` | Deploy: digithings-cron | push (`main`), dispatch | Deploy the digithings-cron Worker that owns production clocks (#3579) | Working | `paths:` filter |
 | `execution-cron-check.yml` | Pipeline: execution cron check | dispatch (CF clock) | Fail-closed probe for overlay dispatch env and execution sync; never `--execute` | Working | none |
 | `tenantb-invite-key-rollout.yml` | Ops: tenantb invite key rollout guards | pull_request, dispatch | tenantb invite key rollout guards (DIG-1612); the key rotates on the Cloudflare side only | Working | `paths:` filter |
 | `openwiki-update.yml` | OpenWiki Update | dispatch (CF clock) | Refresh `openwiki/` | Working | none |
 | `pipeline-checkpoint-archive.yml` | Pipeline: checkpoint archive | dispatch (manual override; clock is digithings-cron → digiquant-runner) | Move checkpoint payloads to R2 (#3761) | Working | none |
-| `pipeline-dependency-freshness.yml` | Pipeline: dependency freshness radar | dispatch (CF clock) | Compare `uv.lock` against PyPI latest (DIG-2277) | Working | none |
 | `pipeline-digiquant-allocation-shadow.yml` | Pipeline: allocation shadow | workflow_run, dispatch | Write-denied shadow evaluation of allocation artifacts (#2762) | Working | none |
 | `pipeline-digiquant-onchain.yml` | Pipeline: digiquant on-chain | dispatch (CF clock) | On-chain valuation ingest (#1086) | Working | none |
 | `pipeline-market-data-refresh.yml` | market-data-refresh | dispatch (manual override; clock is digithings-cron → digiquant-runner) | Daily R2 market-data refresh (#3780) | Working | none |
@@ -78,7 +75,6 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `sync-digiquant-runner-digikey-secret.yml` | Ops: sync digiquant-runner house secrets | dispatch | Put digikey and tracing secrets onto digiquant-runner (#4761); never prints values | Working | none |
 | `sync-digiquant-runner-mail-secrets.yml` | Ops: sync digiquant-runner mail secrets | dispatch | Put mail/notify secrets onto digiquant-runner (#4761); never prints values | Working | none |
 | `test-bun-suites.yml` | Test: bun suites | workflow_call (from `ci.yml`) | Run the `bun test` packages (DIG-2940) | Working | via `ci.yml` |
-| `test-clients-tui.yml` | Test: clients (TUI) | workflow_call (from `ci.yml`) | Run the `clients/` bun packages (DIG-2072) | Working | via `ci.yml` |
 | `test-digifetch.yml` | Test: digifetch | workflow_call (from `ci.yml`) | digifetch unit tests from the committed `uv.lock` | Working | via `ci.yml` |
 | `test-digillm.yml` | Test: digillm | workflow_call (from `ci.yml`) | digillm unit tests from the committed `uv.lock` | Working | via `ci.yml` |
 | `test-digivoice.yml` | Test: digivoice | workflow_call (from `ci.yml`) | digivoice unit tests from the committed `uv.lock` | Working | via `ci.yml` |

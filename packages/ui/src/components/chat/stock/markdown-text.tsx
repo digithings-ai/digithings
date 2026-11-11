@@ -18,7 +18,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { useCopyToClipboard } from "./use-copy-to-clipboard";
 import { ArtifactLink, isArtifactBlobHref } from "./artifacts-panel";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../lib/utils";
 import { stockRadius, useStockShape } from "./stock-shape";
 
 type MarkdownTextProps = Partial<TextMessagePartProps> & {

@@ -18,7 +18,7 @@ import { TooltipIconButton } from "./tooltip-icon-button";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 import { StockShapeProvider } from "./stock-shape";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../lib/utils";
 import { useStockComposerGateSubmit } from "./stock-send-gate";
 import { MessageError } from "./message-error.aui";
 import { SkinCredit } from "./skin-credit";

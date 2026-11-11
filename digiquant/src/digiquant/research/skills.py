@@ -36,7 +36,7 @@ def _research_data_root() -> Path:
     Skills, templates, and config live alongside the research package code
     (``digiquant/src/digiquant/research/{skills,templates,config}/``) so they
     ship inside the wheel via ``[tool.setuptools.package-data]``. See
-    [#486](https://github.com/digithings-ai/digithings/issues/486).
+    [#486](#486).
     """
     return Path(__file__).resolve().parent
 

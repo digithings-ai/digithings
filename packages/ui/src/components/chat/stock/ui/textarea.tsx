@@ -1,5 +1,5 @@
 import * as React from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "../../../../lib/utils"
 import { useStockShape } from "../stock-shape"
 
 function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {

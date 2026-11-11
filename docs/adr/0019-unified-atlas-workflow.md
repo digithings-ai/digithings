@@ -2,7 +2,7 @@
 
 - **Status:** Proposed — **superseded in part by [ADR-0020](0020-olympus-mvp-daily-delta.md)** (its delta premise that "Hermes phases always re-run on delta — they are cheap" is invalidated by the Jun-19 cost forensics; the Hermes 7C/7CD fan-out is the dominant delta cost. The workflow-consolidation half of this ADR is unaffected.) Product names in this ADR are historical — see [ADR-0026](0026-retire-olympus-atlas-hermes-kairos.md).
 - **Date:** 2026-06-17
-- **Related issue:** [#814](https://github.com/digithings-ai/digithings/issues/814)
+- **Related issue:** [#814](#814)
 - **Amends:** [ADR-0015](0015-atlas-vs-hermes.md) (two cron workflows implied; this ADR collapses them)
 
 ---
@@ -310,7 +310,7 @@ unaffected by either phase.
 
 ## Links
 
-- Issue: [#814](https://github.com/digithings-ai/digithings/issues/814)
+- Issue: [#814](#814)
 - Workflow files: `.github/workflows/atlas-baseline.yml`, `.github/workflows/atlas-delta.yml`,
   `.github/workflows/atlas-monthly.yml` (see open question 5)
 - Python entry point: `digiquant/src/digiquant/olympus/hermes/chain.py`

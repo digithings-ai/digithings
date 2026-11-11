@@ -1,0 +1,32 @@
+{
+  "name": "@digithings/perf-math",
+  "version": "0.1.0",
+  "description": "Framework-free portfolio performance math: live KPIs, base-100 continuity, beta/alpha/IR. No React, no DOM, no I/O.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "packages/perf-math"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./live-performance-kpis": "./src/live-performance-kpis.ts"
+  },
+  "files": [
+    "src/index.ts",
+    "src/live-performance-kpis.ts"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0"
+  }
+}
