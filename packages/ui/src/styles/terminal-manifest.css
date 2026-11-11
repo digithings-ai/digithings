@@ -1,5 +1,5 @@
 /* ==========================================================================
-   TerminalManifest (@digithings/ui) — `cli ps` manifest pane.
+   TerminalManifest (@digithings-ai/ui) — `cli ps` manifest pane.
    Owned by components/TerminalManifest.tsx. Only what CANNOT be a token
    utility lives here (canon migrate-vs-leave): the two-colour color-mix pane
    surface and row washes, the row-appear + cursor-blink keyframes, the dot's
@@ -7,7 +7,7 @@
    container-query column collapse — narrow containers drop the port + blurb
    columns; wide containers go two-column with internal scroll on both sides.
    Import once in the app shell:
-     @import "@digithings/ui/styles/terminal-manifest.css";
+     @import "@digithings-ai/ui/styles/terminal-manifest.css";
    ========================================================================== */
 
 /* The wrapper is the size container: column behavior tracks the pane's own

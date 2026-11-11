@@ -15,7 +15,7 @@ describe("web isolation from digichat CLI / react-ink", () => {
 
   it("stock + deploy-config sources do not import ink / react-ink / digichat-cli", () => {
     const forbidden =
-      /@assistant-ui\/react-ink|from ["']ink["']|@digithings\/digichat-cli|digichat\/cli/;
+      /@assistant-ui\/react-ink|from ["']ink["']|@digithings-ai\/digichat-cli|digichat\/cli/;
     const hits: string[] = [];
     for (const root of roots) {
       // Lightweight: scan known entry files rather than a full walk.

@@ -5,14 +5,14 @@
  * linking to its page with a one-line blurb. It reads the same `lib/nav.ts`
  * data the top bar does, so the map and the bar can never disagree.
  *
- * The card is the stock `Card` from `@digithings/ui/ui`. The current-page
+ * The card is the stock `Card` from `@digithings-ai/ui/ui`. The current-page
  * signal stays: the link carries `aria-current`, the Card picks it up through
  * the group-aria variant as an accent ring. Reference-only (`lab`) surfaces
  * render in a separate, de-emphasised row.
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Card, CardContent } from "@digithings/ui/ui";
+import { Card, CardContent } from "@digithings-ai/ui/ui";
 import { LAB_NAV, PRIMARY_NAV, type NavItem } from "@/lib/nav";
 
 function FamilyCard({ item, index }: { item: NavItem; index: number }) {

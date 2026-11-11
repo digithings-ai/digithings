@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { connectedToolIsOn, countToolSurface } from "@digithings/ui/chat/tool-surface";
+import { connectedToolIsOn, countToolSurface } from "@digithings-ai/ui/chat/tool-surface";
 import { connectedTools } from "./embed-mcp-flow";
 
 const tickets = {

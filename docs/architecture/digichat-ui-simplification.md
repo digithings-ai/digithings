@@ -125,7 +125,7 @@ should not be a dependency of ten components.
 
 ### F5 — The skin system is app-owned but the Thread is package-owned
 
-`packages/ui` exports `@digithings/ui/chat/thread`, but the registry
+`packages/ui` exports `@digithings-ai/ui/chat/thread`, but the registry
 (`lib/thread-skins.ts`), the dispatch (`skins/index.tsx`) and all 12 skin
 components live in `apps/digichat`. No other app can reuse a skin.
 

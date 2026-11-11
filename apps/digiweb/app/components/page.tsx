@@ -1,5 +1,5 @@
 import "./components.css";
-import { Badge, Button, Input } from "@digithings/ui/ui";
+import { Badge, Button, Input } from "@digithings-ai/ui/ui";
 import { kitIndex } from "@/lib/kit-index";
 
 /**
@@ -20,8 +20,8 @@ export default function ComponentsPage() {
           The kit, <em>indexed.</em>
         </h1>
         <p>
-          {primitives.length} primitives behind <code>@digithings/ui/ui</code> and{" "}
-          {composites.length} modules behind <code>@digithings/ui</code>, read from the
+          {primitives.length} primitives behind <code>@digithings-ai/ui/ui</code> and{" "}
+          {composites.length} modules behind <code>@digithings-ai/ui</code>, read from the
           package&apos;s barrels at build time. A part that is not exported here is not part of the
           language yet.
         </p>
@@ -59,7 +59,7 @@ export default function ComponentsPage() {
       <section className="section-block">
         <h2 className="title">Primitives</h2>
         <p className="section-copy">
-          Import from <code>@digithings/ui/ui</code>. Each row is one module in{" "}
+          Import from <code>@digithings-ai/ui/ui</code>. Each row is one module in{" "}
           <code>packages/ui/src/ui/</code>.
         </p>
         <ul className="cp-list">
@@ -75,7 +75,7 @@ export default function ComponentsPage() {
       <section className="section-block">
         <h2 className="title">Modules</h2>
         <p className="section-copy">
-          Import from <code>@digithings/ui</code>. Every module the main barrel re-exports —
+          Import from <code>@digithings-ai/ui</code>. Every module the main barrel re-exports —
           composites, motion, navigation and data helpers — relative to{" "}
           <code>packages/ui/src/</code>.
         </p>

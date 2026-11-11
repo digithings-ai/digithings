@@ -18,7 +18,7 @@ import {
   themeColorFor,
   type ThemePreference,
   type ThemeState,
-} from "@digithings/ui/theme";
+} from "@digithings-ai/ui/theme";
 
 /**
  * `/theme light|dark|auto`: change the mode and keep the painted palette. A

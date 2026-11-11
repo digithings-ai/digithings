@@ -1,5 +1,5 @@
 import "./foundations.css";
-import { designTokens } from "@digithings/design/tokens";
+import { designTokens } from "@digithings-ai/design/tokens";
 
 /**
  * Foundations — the language's roles, read from the generated token table.

@@ -4,7 +4,7 @@
   "claims": [
     {
       "id": "claim_438170df43654ce587dde6b7f5116049",
-      "statement": "digichat is a Next.js 16 BFF where the browser never calls Python services directly; all LLM, auth-exchange, and probe work runs in server Route Handlers with one shared @digithings/digichat-ui package.",
+      "statement": "digichat is a Next.js 16 BFF where the browser never calls Python services directly; all LLM, auth-exchange, and probe work runs in server Route Handlers with one shared @digithings-ai/digichat-ui package.",
       "evidence": [
         {
           "resource": "repo://apps/digichat/AGENTS.md#L5-L5",

@@ -42,10 +42,10 @@ vi.mock("@assistant-ui/ai-sdk", () => ({
   useAISDKRuntime: () => ({} as AssistantRuntime),
 }));
 
-vi.mock("@digithings/ui/chat/skins", async (importOriginal) => {
+vi.mock("@digithings-ai/ui/chat/skins", async (importOriginal) => {
   // Keep the real registry exports (WS4 barrel) — only stub the dispatch.
   const actual =
-    await importOriginal<typeof import("@digithings/ui/chat/skins")>();
+    await importOriginal<typeof import("@digithings-ai/ui/chat/skins")>();
   return {
     ...actual,
     ThreadSkinView: ({ skin }: { skin: string }) => (

@@ -36,7 +36,7 @@ import { useMotionSafe } from "../../motion/primitives";
  *
  * Wiring (in the consuming app): the word-reveal sheet carries this component's
  * few rules too —
- *   globals.css  @import "@digithings/ui/styles/word-reveal.css";
+ *   globals.css  @import "@digithings-ai/ui/styles/word-reveal.css";
  */
 
 /** Where in the element's travel the typing runs. */

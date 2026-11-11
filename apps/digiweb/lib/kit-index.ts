@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * The kit index — what `@digithings/ui` actually exports, read from source.
+ * The kit index — what `@digithings-ai/ui` actually exports, read from source.
  *
  * The components page does not keep a second hand-written catalogue: it parses
  * the package's own barrel files, so a new primitive or composite appears on
@@ -20,7 +20,7 @@ export const REPO_ROOT = path.resolve(HERE, "..", "..", "..");
 export type KitEntry = {
   /** The exported symbol or primitive name. */
   name: string;
-  /** The module path inside `@digithings/ui`. */
+  /** The module path inside `@digithings-ai/ui`. */
   module: string;
   /** The import specifier a consumer writes. */
   from: string;
@@ -36,7 +36,7 @@ export function uiPrimitives(): KitEntry[] {
   return [...source.matchAll(/export \* from "\.\/([^"]+)"/g)].map((match) => ({
     name: match[1],
     module: `ui/${match[1]}`,
-    from: "@digithings/ui/ui",
+    from: "@digithings-ai/ui/ui",
   }));
 }
 
@@ -50,7 +50,7 @@ export function uiComposites(): KitEntry[] {
   return [...modules].sort().map((module) => ({
     name: module.split("/").pop() ?? module,
     module,
-    from: "@digithings/ui",
+    from: "@digithings-ai/ui",
   }));
 }
 

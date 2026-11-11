@@ -12,15 +12,15 @@ import { render } from "@testing-library/react";
 import {
   SkinChromeProvider,
   DEFAULT_SKIN_CHROME,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import {
   EmbedChatPrefsProvider,
   DEFAULT_EMBED_CHAT_PREFS,
   type EmbedChatPrefsApi,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import { takePendingWebSearchForce } from "@/lib/pending-chat-headers";
 import { DIGICHAT_SKIN_OPTIONS } from "@/lib/digichat-skin-options";
-import { DigichatSkin } from "@digithings/ui/chat/skins/digichat";
+import { DigichatSkin } from "@digithings-ai/ui/chat/skins/digichat";
 const composerState = vi.hoisted(() => ({ text: "" }));
 const capture = vi.hoisted(() => ({
   submit: null as null | ((event: { preventDefault: () => void }) => void),
@@ -50,7 +50,7 @@ vi.mock("@assistant-ui/react", async () => {
   };
 });
 
-vi.mock("@digithings/ui/chat/thread", () => ({
+vi.mock("@digithings-ai/ui/chat/thread", () => ({
   DigichatThread: ({
     onComposerSubmit,
   }: {

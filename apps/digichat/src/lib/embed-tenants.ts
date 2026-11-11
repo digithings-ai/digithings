@@ -44,7 +44,7 @@ import {
   type TenantAccess,
   type TenantChatSlugClaim,
 } from "@/lib/deploy-config/tenant-chrome";
-import { normalizeTraceDensity } from "@digithings/ui/chat/trace-spacing";
+import { normalizeTraceDensity } from "@digithings-ai/ui/chat/trace-spacing";
 import { LANGUAGES } from "@/lib/languages";
 import {
   THINKING_MODES,
@@ -59,7 +59,7 @@ import {
   isThreadSkin,
   threadSkinChoices,
   type ThreadSkin,
-} from "@digithings/ui/chat/skins";
+} from "@digithings-ai/ui/chat/skins";
 
 const PAGE_CONTEXT_MODES: readonly PageContextMode[] = ["off", "silent", "visible"];
 const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));

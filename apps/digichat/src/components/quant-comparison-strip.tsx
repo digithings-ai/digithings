@@ -10,7 +10,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@digithings/ui/ui";
+} from "@digithings-ai/ui/ui";
 
 export type QuantMetricRow = {
   runId: string;

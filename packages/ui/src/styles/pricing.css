@@ -2,7 +2,7 @@
    pricing.css — CSS leave-rules for the pricing family
    (components/pricing/Pricing.tsx + components/pricing/PricingMatrix.tsx).
    Import once in an app's globals.css, after web-theme.css:
-     @import "@digithings/ui/styles/pricing.css";
+     @import "@digithings-ai/ui/styles/pricing.css";
 
    Static structure is token-backed Tailwind utilities in the components.
    Only what utilities can't express lives here: the accent tier's two-color

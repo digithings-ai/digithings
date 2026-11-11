@@ -17,8 +17,8 @@
  * `data-palette` keeps a single writer.
  */
 
-import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
-import { normalizePalette, themeColorFor, type PaletteName } from "@digithings/ui/theme";
+import type { EmbedChatPrefsApi } from "@digithings-ai/ui/chat/stock";
+import { normalizePalette, themeColorFor, type PaletteName } from "@digithings-ai/ui/theme";
 
 export const THEME_MESSAGE_TYPE = "digichat:theme" as const;
 

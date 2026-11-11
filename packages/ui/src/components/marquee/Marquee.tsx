@@ -22,7 +22,7 @@ import { ICONS } from "../logos";
  * `children` are also duplicated into the two groups. The overflow + edge-fade
  * mask, the loop keyframes, the pause control and the reduced-motion stop live in
  * styles/marquee.css. Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/marquee.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/marquee.css";
  *                 @source "<path-to>/packages/ui/src/components/marquee";
  */
 export type MarqueeItem = {

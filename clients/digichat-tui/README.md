@@ -4,7 +4,7 @@ OpenTUI chat screen for digichat. Same labels as the web thread: session
 rail, message list, a composer with no filled field, and the digichat credit.
 
 Talks to the **DigiChat BFF** (Surfaces 1.0 C1 / ADR D3), not the digiquant
-runner. Base URL comes from `endpoint("chat")` in `@digithings/surface-config`
+runner. Base URL comes from `endpoint("chat")` in `@digithings-ai/surface-config`
 (`DIGI_CHAT_URL`, else deprecated `DIGICHAT_DEVKIT_URL`, else
 `http://127.0.0.1:3000` for `DIGI_ENV=local`).
 

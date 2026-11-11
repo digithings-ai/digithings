@@ -25,7 +25,7 @@ import {
 import {
   ThreadSkinView,
 
-} from "@digithings/ui/chat/skins";
+} from "@digithings-ai/ui/chat/skins";
 import {
   StockSendGateProvider,
   DeployUiProvider,
@@ -34,15 +34,15 @@ import {
   type StockSendGateHandlers,
   type DeployUiValue,
   type SkinChromeValue,
-} from "@digithings/ui/chat/stock";
-import type { ComposerLayout } from "@digithings/ui/chat/thread";
+} from "@digithings-ai/ui/chat/stock";
+import type { ComposerLayout } from "@digithings-ai/ui/chat/thread";
 import {
   BootLabOverlay,
   type BootLabVariant,
-} from "@digithings/ui/chat/boot-lab";
-import { DigichatBootLoader } from "@digithings/ui/chat/boot-loader";
-import type { DigichatHandoff } from "@digithings/ui/chat/boot-signal";
-import { useDigichatWarmupPhase } from "@digithings/ui/chat/use-warmup-phase";
+} from "@digithings-ai/ui/chat/boot-lab";
+import { DigichatBootLoader } from "@digithings-ai/ui/chat/boot-loader";
+import type { DigichatHandoff } from "@digithings-ai/ui/chat/boot-signal";
+import { useDigichatWarmupPhase } from "@digithings-ai/ui/chat/use-warmup-phase";
 import type {
   DigichatClientConfig,
   DigichatClientFeatures,

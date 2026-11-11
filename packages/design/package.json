@@ -1,5 +1,5 @@
 {
-  "name": "@digithings/design",
+  "name": "@digithings-ai/design",
   "version": "0.1.0",
   "description": "Shared digithings design tokens and the CSS and vanilla-JS modules live surfaces still import.",
   "license": "MIT",

@@ -14,7 +14,7 @@
  * transformed app shell cannot trap its fixed positioning. Reference specimens
  * can set `portal={false}` to contain it inside a positioned stage.
  *
- * Import `@digithings/ui/styles/digichat-launcher.css` once in the app shell.
+ * Import `@digithings-ai/ui/styles/digichat-launcher.css` once in the app shell.
  */
 import {
   useCallback,

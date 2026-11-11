@@ -19,7 +19,7 @@ import {
 import type { DigichatDeployment } from "./deploy-config/schema";
 import type { EmbedTenantClientConfig } from "./embed-client-config";
 import type { DigichatClientConfig } from "./deploy-config";
-import type { StockChatPrefsConfig } from "@digithings/ui/chat/stock";
+import type { StockChatPrefsConfig } from "@digithings-ai/ui/chat/stock";
 import { isEmbedHexColor } from "./embed-accent-style";
 import { parseEmbedThemeParam } from "./embed-theme-messages";
 import { HOUSE_BACKEND_ID } from "./provider-label";

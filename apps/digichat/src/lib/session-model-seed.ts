@@ -1,4 +1,4 @@
-import { contextWindowFor } from "@digithings/ui/chat/context-meter";
+import { contextWindowFor } from "@digithings-ai/ui/chat/context-meter";
 
 /**
  * Product hosts for digithings.ai. `contextMeterEnabled` is the toolbar

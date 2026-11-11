@@ -8,7 +8,7 @@
  * "default" leaves the theme's own accent; "mono" is the umbrella treatment
  * (accent collapses to ink). Per-section `accent-*` scopes still win locally.
  */
-import { modules } from "@digithings/ui";
+import { modules } from "@digithings-ai/ui";
 
 import { escapeUnsafeChars } from "@/lib/escape-unsafe-chars";
 
@@ -18,7 +18,7 @@ export type LiveryOption = { id: string; label: string; hex: string };
 // research/portfolio/execution are backend langgraph names, not colored products — they
 // are intentionally absent (and their accent tokens collapse to ink anyway).
 // The module list itself is derived from the single modules registry
-// (@digithings/ui, also what FeaturePickerReference and the architecture
+// (@digithings-ai/ui, also what FeaturePickerReference and the architecture
 // graph consume) rather than hand-maintained here — a prior version hardcoded
 // 7 modules, omitting digitrace/digibot/digibase (which do have real, ruled
 // --accent-<module> tokens) while including digistore (a roadmap-tier module

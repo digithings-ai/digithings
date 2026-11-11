@@ -34,11 +34,11 @@ describe("product CSS isolation", () => {
     expect(importLines).not.toMatch(/terminal-loaders/);
     expect(importLines).not.toMatch(/digichat-ui/);
     expect(importLines).toMatch(/product-chrome\.css/);
-    expect(importLines).toMatch(/@digithings\/ui\/styles\/chat-core\.css/);
-    expect(importLines).toMatch(/@digithings\/ui\/styles\/chat-aui\.css/);
-    expect(importLines).toMatch(/@digithings\/ui\/styles\/chat-digichat\.css/);
+    expect(importLines).toMatch(/@digithings-ai\/ui\/styles\/chat-core\.css/);
+    expect(importLines).toMatch(/@digithings-ai\/ui\/styles\/chat-aui\.css/);
+    expect(importLines).toMatch(/@digithings-ai\/ui\/styles\/chat-digichat\.css/);
     expect(importLines).toMatch(
-      /@digithings\/ui\/styles\/digichat-app-theme\.css/,
+      /@digithings-ai\/ui\/styles\/digichat-app-theme\.css/,
     );
   });
 

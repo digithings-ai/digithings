@@ -1,4 +1,4 @@
-# Hero banner spec (`@digithings/hero-banner`)
+# Hero banner spec (`@digithings-ai/hero-banner`)
 
 Status: proposed (DIG-2864). Approver: the maintainer (L lane).
 

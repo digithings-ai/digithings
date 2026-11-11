@@ -1,5 +1,5 @@
 {
-  "name": "@digithings/catalog",
+  "name": "@digithings-ai/catalog",
   "version": "0.1.0",
   "description": "Framework-neutral shared catalogs: BYOK provider catalog + OpenAPI service registry. No React, no Next.js, no app aliases \u2014 importable from any runtime.",
   "license": "MIT",

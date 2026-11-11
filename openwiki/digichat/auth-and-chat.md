@@ -428,7 +428,7 @@ localStorage-only mode.
 Turn and thread markdown export is implemented in
 `packages/ui/src/components/chat/transcript/transcript-markdown.ts`
 (`serializeAssistantMarkdown`, `serializeThreadMarkdown`,
-`copyMarkdownWithFallback`) and re-exported by `@digithings/digichat-ui`.
+`copyMarkdownWithFallback`) and re-exported by `@digithings-ai/digichat-ui`.
 Both `ChatPanel` and embed sessions use it
 with the fallback chain:
 

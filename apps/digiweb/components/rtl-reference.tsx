@@ -17,7 +17,7 @@
  * uses `root`, so the reference's own NavShell mirrors too.
  */
 import { useState, type ReactNode } from "react";
-import { DirectionProvider, TabStrip, type TabItem } from "@digithings/ui";
+import { DirectionProvider, TabStrip, type TabItem } from "@digithings-ai/ui";
 import {
   Alert,
   AlertDescription,
@@ -80,7 +80,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@digithings/ui/ui";
+} from "@digithings-ai/ui/ui";
 
 const BUTTON_VARIANTS = ["default", "outline", "secondary", "ghost", "destructive", "link"] as const;
 const BUTTON_SIZES = ["default", "xs", "sm", "lg", "icon", "icon-xs", "icon-sm", "icon-lg"] as const;

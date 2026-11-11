@@ -1,10 +1,10 @@
 /* ==========================================================================
-   @digithings/ui — numbered-stages structural CSS (components/stages/*).
+   @digithings-ai/ui — numbered-stages structural CSS (components/stages/*).
    Import AFTER the token bridge, in the app's globals.css:
      @import "tailwindcss";
-     @import "@digithings/design/tokens.css";
-     @import "@digithings/ui/styles/web-theme.css";
-     @import "@digithings/ui/styles/stages.css";
+     @import "@digithings-ai/design/tokens.css";
+     @import "@digithings-ai/ui/styles/web-theme.css";
+     @import "@digithings-ai/ui/styles/stages.css";
      @source "<path-to>/packages/ui/src/components/stages";
    The @source line is load-bearing (path relative to the app's globals.css):
    the component carries token-backed utilities, and Tailwind does not scan
@@ -14,7 +14,7 @@
    file holds only what must stay CSS: the ::before spine art running through
    the badge column, the :last-child stop rules, and the badge's two-color
    color-mix border/fill (re-tinted per stage by an `accent-<module>` livery
-   scope from @digithings/design/tokens.css).
+   scope from @digithings-ai/design/tokens.css).
    ========================================================================== */
 
 .ns-stage:last-child {

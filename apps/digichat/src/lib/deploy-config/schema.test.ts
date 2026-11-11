@@ -18,8 +18,8 @@ import {
   welcomeTitle,
 } from "./schema";
 import { allowedForceTools } from "./force-tool";
-import { resolveBootLabVariant } from "@digithings/ui/chat/boot-lab";
-import { THREAD_SKINS } from "@digithings/ui/chat/skins";
+import { resolveBootLabVariant } from "@digithings-ai/ui/chat/boot-lab";
+import { THREAD_SKINS } from "@digithings-ai/ui/chat/skins";
 
 const examplesDir = resolve(__dirname, "../../../config/examples");
 

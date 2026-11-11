@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { m, useReducedMotion } from "motion/react";
-import { Button } from "@digithings/ui/ui";
-import { modules } from "@digithings/ui";
+import { Button } from "@digithings-ai/ui/ui";
+import { modules } from "@digithings-ai/ui";
 
 /**
  * Livery switcher — a self-contained swatch strip demoing the per-module accent

@@ -5,7 +5,7 @@
    digiweb terminal pane. SCOPED to `.digichat-thread` so the 11 official
    catalog skins keep their own `--background` / radius.
    Import once in the app shell (gallery globals, or via DigichatThread.tsx):
-     @import "@digithings/ui/styles/chat-aui.css";
+     @import "@digithings-ai/ui/styles/chat-aui.css";
    ========================================================================== */
 
 @theme inline {

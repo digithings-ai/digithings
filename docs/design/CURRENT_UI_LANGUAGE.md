@@ -10,7 +10,7 @@ consumers), no rendered inspection. Anything that needed a browser is listed und
 [What I could not determine](#9-what-i-could-not-determine) rather than guessed.
 
 **Live baseline:** digiweb's home page (`apps/digiweb/app/page.tsx`, run with
-`npm run dev --workspace @digithings/digiweb -- --port 4013`) renders these rules
+`npm run dev --workspace @digithings-ai/digiweb -- --port 4013`) renders these rules
 in the shipped tile grammar — hairline mosaic, tile chrome, density ladder, and
 the deltas named rather than hidden.
 
@@ -287,7 +287,7 @@ gallery cannot drift from the source.
   integrations band (`app/_bands/integrations.tsx:5`), footer
   (`app/_chrome/FooterWordmark.tsx:45`).
 - **digithings.ai landing + footer** — the kit's `PixelWordmark`
-  (`@digithings/ui/pixel-wordmark`, `LandingPage.tsx:9,53`;
+  (`@digithings-ai/ui/pixel-wordmark`, `LandingPage.tsx:9,53`;
   `.../landing/FooterWordmark.tsx:6,21`), not the package renderer.
 - **Terminals** — `clients/digichat-tui/src/{hero-banner,wordmark,hero-preview}.tsx`,
   `clients/digichat-devkit/src/wordmark.tsx`.
@@ -483,7 +483,7 @@ Two more, from code comments rather than docs, worth fixing when touched:
 
 - `packages/hero-banner/src/definitions/index.ts:31` points at
   `apps/digithings-web/components/landing/PixelWordmark.tsx`, which moved to
-  `@digithings/ui/pixel-wordmark` (DIG-3695, `LandingPage.tsx:9`).
+  `@digithings-ai/ui/pixel-wordmark` (DIG-3695, `LandingPage.tsx:9`).
 - `LANDING_SECTIONS` (`sections.ts:4-12`) labels the first band "stack" while its id is
   `architecture` (`ModuleGrid.tsx:92`) — the rail and the anchor disagree on the name.
 

@@ -7,7 +7,7 @@
  * grammar. The split ruling lives in packages/ui/CHARTS.md.
  *
  * Wiring (consuming app):
- *   globals.css   @import "@digithings/ui/styles/finance-tearsheet.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/finance-tearsheet.css";
  *                 (plainly — the sheet manages its own layering)
  *                 @source "<path-to>/packages/ui/src/components/finance-tearsheet";
  * Data derivation (series clipping, pivot stats, trade sorting, CAGR et al.)
@@ -102,10 +102,10 @@ export {
   type LiveKpiBenchmarkPoint,
   type LivePerformanceKpis,
   type LivePerformanceKpisInput,
-  // Moved to @digithings/perf-math so framework-free consumers (contract, the R5
+  // Moved to @digithings-ai/perf-math so framework-free consumers (contract, the R5
   // Worker bundle) never pull React. Re-exported here so existing imports from
-  // `@digithings/ui` keep working.
-} from "@digithings/perf-math/live-performance-kpis";
+  // `@digithings-ai/ui` keep working.
+} from "@digithings-ai/perf-math/live-performance-kpis";
 export { TEARSHEET_DEMO } from "./demo-data";
 export { StrategyTearsheet } from "./StrategyTearsheet";
 export {

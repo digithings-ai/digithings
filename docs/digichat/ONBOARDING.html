@@ -232,19 +232,19 @@
         <td><strong>The product.</strong> Next.js 16 App Router app: the chat surfaces, the BFF route handlers, auth, Postgres persistence (Drizzle), the deployment-config loader, and the dev skin gallery. This is what gets containerised and published.</td>
       </tr>
       <tr>
-        <td><code>packages/ui</code></td><td><code>@digithings/ui</code></td>
+        <td><code>packages/ui</code></td><td><code>@digithings-ai/ui</code></td>
         <td><strong>The shared UI layer.</strong> The first-party chat <em>Thread</em> (<code>chat/gallery-thread/</code>), the boot loader, the launcher, <code>DotMatrix</code>, and <em>every</em> stylesheet digichat uses (<code>src/styles/</code>). Also the generic component kit (<code>ui/</code>) and the finance/docs/deck components other products share.</td>
       </tr>
       <tr>
-        <td><code>packages/digichat-ui</code></td><td><code>@digithings/digichat-ui</code></td>
+        <td><code>packages/digichat-ui</code></td><td><code>@digithings-ai/digichat-ui</code></td>
         <td>Chat-specific shared bits: the wordmark, <code>MiniMarkdown</code>, the canonical activity rows, transcript-to-markdown serialisation, the slash-command definitions, and the <code>cursor.css</code> / <code>session.css</code> sheets. Deliberately <em>not</em> a session shell.</td>
       </tr>
       <tr>
-        <td><code>packages/design</code></td><td><code>@digithings/design</code></td>
+        <td><code>packages/design</code></td><td><code>@digithings-ai/design</code></td>
         <td>The design tokens — the <code>--bg / --surface / --ink / --hair / --term-*</code> palette, dark and light, plus per-module accents. Everything visual resolves back to this file.</td>
       </tr>
       <tr>
-        <td><code>apps/digiweb</code></td><td><code>@digithings/digiweb</code></td>
+        <td><code>apps/digiweb</code></td><td><code>@digithings-ai/digiweb</code></td>
         <td>The design reference app. <strong>Important:</strong> the reference app imports the canonical first-party digichat stylesheet from <code>packages/ui/src/styles/chat-digichat.css</code> — the package is the source of truth for the digichat look (WS1).</td>
       </tr>
       <tr>
@@ -252,7 +252,7 @@
         <td>The marketing site. Its <code>/chat</code> page iframes digichat's <code>/embed</code> surface — that is the live production instance today.</td>
       </tr>
       <tr>
-        <td><code>apps/digichat/cli</code></td><td><code>@digithings/digichat-cli</code></td>
+        <td><code>apps/digichat/cli</code></td><td><code>@digithings-ai/digichat-cli</code></td>
         <td>A separate Ink/terminal client (v1.4.0) sharing the same chat vocabulary. Not part of the web product.</td>
       </tr>
     </tbody>
@@ -365,7 +365,7 @@
     <div class="skin"><div class="id">expo-react-native</div><div class="what">Web facsimile of the phone frame.</div><div class="src">skins/expo-react-native.tsx</div></div>
     <div class="skin"><div class="id">webpage-assistant</div><div class="what">Docs layout + assistant. Owns the page chrome.</div><div class="src">skins/webpage-assistant/</div></div>
     <div class="skin"><div class="id">product-page-assistant</div><div class="what">Product dashboard + floating assistant. Owns the page chrome.</div><div class="src">skins/product-page-assistant/</div></div>
-    <div class="skin first"><div class="id">digichat <span class="chip pink" style="font-size:9.5px;padding:0 4px">first-party</span></div><div class="what">Our own look: the gallery Thread from <code>@digithings/ui</code>, with slash commands, mentions, copy/export, page context.</div><div class="src">skins/digichat.tsx → packages/ui/src/components/chat/gallery-thread/thread.aui.tsx</div></div>
+    <div class="skin first"><div class="id">digichat <span class="chip pink" style="font-size:9.5px;padding:0 4px">first-party</span></div><div class="what">Our own look: the gallery Thread from <code>@digithings-ai/ui</code>, with slash commands, mentions, copy/export, page context.</div><div class="src">skins/digichat.tsx → packages/ui/src/components/chat/gallery-thread/thread.aui.tsx</div></div>
   </div>
 
   <h3>How a skin is chosen</h3>

@@ -131,11 +131,11 @@ digifetch:
 digichat:
   - apps/digichat/**
   # #1941 moved digichat's whole render path into these two packages —
-  # MiniMarkdown delegates to @digithings/ui's ChatMarkdown, and the activity
+  # MiniMarkdown delegates to @digithings-ai/ui's ChatMarkdown, and the activity
   # feed renders on its chat primitives. Without them an edit to
   # ChatMarkdownSource or ChatMermaidBlock changed the embed transcript and
   # fired no digichat lint, test or build.
-  # @digithings/catalog supplies digichat's BYOK provider table and its
+  # @digithings-ai/catalog supplies digichat's BYOK provider table and its
   # page-context sanitizer (apps/digichat/src/lib/byok-providers.ts and
   # page-context-sanitize.ts), so an edit there changes what digichat ships.
   - packages/catalog/**
@@ -148,19 +148,19 @@ digichat:
 
 dashboard:
   - apps/dashboard/**
-  # Dashboard is the third consumer of @digithings/ui: it declares the dep, imports
+  # Dashboard is the third consumer of @digithings-ai/ui: it declares the dep, imports
   # chat-core.css, and renders <ChatMarkdown> via SafeMarkdown. Without this, a PR
   # editing only packages/ui/** runs no dashboard lint, tests or static-export
   # check while measurably changing what the dashboard ships — the `.chat-md h5` selector
   # added in #1948 lands in the dashboard's built stylesheet. Not digichat-ui: the
   # dashboard does not consume it.
-  # apps/dashboard/lib/digichat-popup.ts imports @digithings/catalog's
+  # apps/dashboard/lib/digichat-popup.ts imports @digithings-ai/catalog's
   # page-context sanitizer, so a change there changes the dashboard's output.
   - packages/catalog/**
   - packages/ui/**
   - packages/design/**
   # DIG-5212: lib/tui-preview.ts takes the recorded-frame type and its guard
-  # from @digithings/tui-frame, so a change there changes what the preview
+  # from @digithings-ai/tui-frame, so a change there changes what the preview
   # accepts and labels.
   - packages/tui-frame/**
   - package.json
@@ -197,7 +197,7 @@ web:
   - packages/durable-object-reconnect/**
   # digithings-web /chat renders digichat-ui's DigiChatSession and imports its
   # session.css + cursor.css, so a change there is a change to this app.
-  # apps/digithings-web/lib/openapiCatalog.ts imports @digithings/catalog's
+  # apps/digithings-web/lib/openapiCatalog.ts imports @digithings-ai/catalog's
   # openapi and byok-providers exports, so the catalog is a build input here too.
   - packages/catalog/**
   - packages/digichat-ui/**
@@ -221,7 +221,7 @@ web:
   # that script). None of those is a lint or a typecheck.
   #
   # It rides the `web` lane rather than a lane of its own because test-web.yml already
-  # pays the root `npm ci` that wires the @digithings/design and @digithings/ui symlinks
+  # pays the root `npm ci` that wires the @digithings-ai/design and @digithings-ai/ui symlinks
   # this workspace declares; a separate workflow would duplicate that install to run two
   # commands.
   #

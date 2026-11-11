@@ -31,7 +31,7 @@ import { Button } from "../../ui";
  * it is a real button) toggles it, aria-pressed carries the state.
  *
  * Client component (interval state). Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/effects-chrome.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/effects-chrome.css";
  *                 @source "<path-to>/packages/ui/src/components/effects-chrome";
  */
 export type RotatingPromptsProps = {

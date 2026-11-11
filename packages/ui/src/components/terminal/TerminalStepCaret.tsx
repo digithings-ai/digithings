@@ -46,7 +46,7 @@ import { ChatStreamCursor } from "../chat/ChatStreamCursor";
  * `activeIndex` still swaps the label: that is information, not decoration.
  * With scripts off the first step renders from `<noscript>`.
  *
- * Frame styles: `.tl-*` in `@digithings/ui/styles/terminal-loaders.css`.
+ * Frame styles: `.tl-*` in `@digithings-ai/ui/styles/terminal-loaders.css`.
  */
 export type TerminalStepCaretProps = {
   /** The steps, in order. The first is the reduced-motion / no-JS state. */

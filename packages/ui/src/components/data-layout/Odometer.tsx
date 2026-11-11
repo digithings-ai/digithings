@@ -22,7 +22,7 @@ import { useInView, useReducedMotion } from "motion/react";
  * styles/data-layout.css, re-derived for the 2-up collapse below 720px).
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/data-layout.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/data-layout.css";
  *                 @source "<path-to>/packages/ui/src/components/data-layout";
  */
 export function Odometer({

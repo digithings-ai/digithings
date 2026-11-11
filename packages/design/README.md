@@ -6,7 +6,7 @@ utilitarian, dark-first aesthetic with per-module accent colors.
 
 This document describes the token package. `docs/design/CURRENT_UI_LANGUAGE.md` is the current description of the shipped language; where the two disagree, `tokens.css` wins. The canonical implementation
 lives in `packages/design/tokens.css` and `packages/design/site/site.css`,
-packaged as the `@digithings/design` npm workspace. Consumers
+packaged as the `@digithings-ai/design` npm workspace. Consumers
 import the package (or reference the files via relative paths for the
 static sites).
 
@@ -23,7 +23,7 @@ for the layout rationale.
 - `apps/digithings-web/` — digithings.ai (Next.js; imports `tokens.css` + `site/site.css` directly)
 - `apps/digiquant-web/` — digiquant.io (Next.js; imports `tokens.css` + `site/site.css` directly)
 - `apps/digichat/` — digithings.ai/chat (Next.js; workspace dep, token adoption tracked by #240)
-- `apps/dashboard/` — token adopter: imports `tokens.css`, the `@digithings/ui` `web-theme.css` bridge and ~15 kit sheets
+- `apps/dashboard/` — token adopter: imports `tokens.css`, the `@digithings-ai/ui` `web-theme.css` bridge and ~15 kit sheets
 
 ---
 
@@ -207,7 +207,7 @@ Or directly in CSS:
 The legacy `components.css` sheet (global reset plus `.nav`, `.hero`,
 `.module-card`, `.terminal`, and the `--scroll` direction rules) had no
 importer. It was removed. Live primitives are `site/site.css`, consumed by
-digithings.ai and digiquant.io, and the React kit in `@digithings/ui`.
+digithings.ai and digiquant.io, and the React kit in `@digithings-ai/ui`.
 
 The vanilla `starfield.js` and `typewriter.js` modules had no importer either
 (`apps/dashboard` only declared the starfield module). They were removed.
@@ -219,7 +219,7 @@ reference is `apps/digiweb`.
 
 - Light and dark both ship under `[data-theme]` in `tokens.css`. The legacy
   `:root` block above that layer stays dark-first for pages that have not migrated.
-- No component JS framework here. React components live in `@digithings/ui`;
+- No component JS framework here. React components live in `@digithings-ai/ui`;
   this package keeps tokens and the few vanilla-JS modules documented below.
 - Confidential internal projects are out of scope. This design system
   documents only public-facing surfaces.
@@ -236,8 +236,8 @@ belong in `apps/digiweb`.
 ### `quant-native/` — blueprint grid, ticker, metric + chart utilities
 
 ```js
-import { initTicker } from '@digithings/design/quant-native';
-import '@digithings/design/quant-native/styles.css';
+import { initTicker } from '@digithings-ai/design/quant-native';
+import '@digithings-ai/design/quant-native/styles.css';
 
 initTicker({
   elementId: 'ticker',
@@ -266,8 +266,8 @@ padding; up/down colors unchanged.
 
 ```js
 import { initAppShell, SlashCommandRegistry }
-  from '@digithings/design/app-shell-terminal';
-import '@digithings/design/app-shell-terminal/styles.css';
+  from '@digithings-ai/design/app-shell-terminal';
+import '@digithings-ai/design/app-shell-terminal/styles.css';
 
 const registry = new SlashCommandRegistry();
 registry.register('route', {
@@ -329,16 +329,16 @@ workspace consumes.
 Consumers import by subpath:
 
 ```ts
-import "@digithings/design/tokens.css";
-import { designTokens } from "@digithings/design/tokens";
+import "@digithings-ai/design/tokens.css";
+import { designTokens } from "@digithings-ai/design/tokens";
 ```
 
 A CSS or plain-JS import needs no bundler configuration. A Next.js app that
-imports the TypeScript entry (`@digithings/design/tokens`) must list the package
+imports the TypeScript entry (`@digithings-ai/design/tokens`) must list the package
 in `transpilePackages`:
 
 ```js
 const nextConfig = {
-  transpilePackages: ["@digithings/design"],
+  transpilePackages: ["@digithings-ai/design"],
 };
 ```

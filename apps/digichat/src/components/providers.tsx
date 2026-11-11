@@ -3,9 +3,9 @@
 import { useEffect } from "react";
 import { SessionProvider } from "next-auth/react";
 import type { Session } from "next-auth";
-import { ThemeProvider } from "@digithings/ui";
+import { ThemeProvider } from "@digithings-ai/ui";
 import { LocalBootstrapGate } from "@/components/local-bootstrap-gate";
-import { TooltipProvider } from "@digithings/ui/ui";
+import { TooltipProvider } from "@digithings-ai/ui/ui";
 import { BASE_PATH } from "@/lib/base-path";
 
 /**
@@ -14,7 +14,7 @@ import { BASE_PATH } from "@/lib/base-path";
  * /embed wrapper key off classes. Watching the attribute (rather than wrapping
  * useTheme) covers all writers with one rule: the shared ThemeProvider's
  * toggle/OS-sync AND the /embed tenant-theme override, without forking
- * @digithings/ui. The pre-paint twin lives in layout.tsx
+ * @digithings-ai/ui. The pre-paint twin lives in layout.tsx
  * (themeClassSyncScript) — keep the two in lockstep.
  */
 function ThemeClassSync() {

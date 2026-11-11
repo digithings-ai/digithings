@@ -1,5 +1,5 @@
 {
-  "name": "@digiquant/contract",
+  "name": "@digithings-ai/contract",
   "version": "0.1.0",
   "description": "Shared types and pure functions for the digiquant desk and dashboard-api. No React, no DOM, no I/O.",
   "license": "MIT",
@@ -29,7 +29,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@digithings/perf-math": "0.1.0"
+    "@digithings-ai/perf-math": "0.1.0"
   },
   "scripts": {
     "test": "vitest run",

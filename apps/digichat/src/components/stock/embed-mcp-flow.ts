@@ -8,7 +8,7 @@ import {
   expandToolRows,
   HOUSE_BUILTIN_TOOL_IDS,
   HOUSE_SERVER_IDS as SHARED_HOUSE_SERVER_IDS,
-} from "@digithings/ui/chat/tool-surface";
+} from "@digithings-ai/ui/chat/tool-surface";
 
 export const MCP_AUTH = ["none", "bearer", "oauth"] as const;
 export type McpAuthKind = (typeof MCP_AUTH)[number];
@@ -48,7 +48,7 @@ export type ConnectedToolRow = {
  * The digisearch tools that follow the digisearch switch: the set digigraph's
  * tool policy turns on and off with it (digigraph/src/digigraph/tool_policy.py).
  * Ids only — a row names a backend tool by its id and by nothing else. The
- * expansion lives in `@digithings/ui/chat/tool-surface` so the composer toolbar
+ * expansion lives in `@digithings-ai/ui/chat/tool-surface` so the composer toolbar
  * counts exactly what `/tools` lists.
  */
 export const DIGISEARCH_BUILTIN_TOOLS: ReadonlyArray<{ id: string }> = (
@@ -216,7 +216,7 @@ export function catalogSlashId(id: string): string {
 export const HOUSE_SERVER_IDS: ReadonlySet<string> = SHARED_HOUSE_SERVER_IDS;
 
 /**
- * Whether a row is on. The rule lives in `@digithings/ui/chat/tool-surface` and the
+ * Whether a row is on. The rule lives in `@digithings-ai/ui/chat/tool-surface` and the
  * composer toolbar counts with the same one.
  */
 export const connectedToolIsOn = sharedConnectedToolIsOn;

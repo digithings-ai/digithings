@@ -21,8 +21,8 @@ const COMPONENTS = join(REF, "components");
 const APP = join(REF, "app");
 
 /**
- * Package families — sources under `@digithings/ui` that have no digiweb
- * importer. The gallery proves the shadcn kit with `@digithings/ui/ui`, not a
+ * Package families — sources under `@digithings-ai/ui` that have no digiweb
+ * importer. The gallery proves the shadcn kit with `@digithings-ai/ui/ui`, not a
  * `@/components/*` path, so no page maps it and the digiweb walk's
  * `components/ui` skip leaves it unindexed (#4225).
  */
@@ -111,7 +111,7 @@ function docSummary(src) {
  * Exported component/const names, PascalCase or hook-like only.
  *
  * Both declaration and re-export forms count. A component PROMOTED into
- * @digithings/ui leaves a `export { X } from "@digithings/ui"` behind so the
+ * @digithings-ai/ui leaves a `export { X } from "@digithings-ai/ui"` behind so the
  * specimen keeps a stable import path against one implementation — and matching
  * only the DECLARATION forms (`export function` / `export const`) silently
  * dropped all three of the first batch out of the index, which is the one place
@@ -165,7 +165,7 @@ function pascalCase(id) {
  * for. Emitting `promotedTo` there is the whole point of the field.
  */
 function promotedTo(src, name) {
-  for (const m of src.matchAll(/export\s*\{([^}]*)\}\s*from\s*"(@digithings\/[^"]+)"/g)) {
+  for (const m of src.matchAll(/export\s*\{([^}]*)\}\s*from\s*"(@digithings-ai\/[^"]+)"/g)) {
     const names = m[1].split(",").map((s) => s.trim().split(/\s+as\s+/).pop().trim());
     if (names.includes(name)) return m[2];
   }

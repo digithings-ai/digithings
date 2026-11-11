@@ -17,15 +17,15 @@ import type { AssistantRuntime } from "@assistant-ui/react";
 import { ProductStockShell } from "./product-shell";
 import { DEFAULT_CLIENT_CONFIG } from "@/lib/deploy-config";
 
-vi.mock("@digithings/ui/chat/stock/thread", () => ({
+vi.mock("@digithings-ai/ui/chat/stock/thread", () => ({
   Thread: () => <div data-testid="stock-thread">stock thread</div>,
 }));
 
-vi.mock("@digithings/ui/chat/skins", async (importOriginal) => {
+vi.mock("@digithings-ai/ui/chat/skins", async (importOriginal) => {
   // The barrel now carries the registry alongside the dispatch (WS4) — keep
   // the real registry exports and only stub the dispatch.
   const actual =
-    await importOriginal<typeof import("@digithings/ui/chat/skins")>();
+    await importOriginal<typeof import("@digithings-ai/ui/chat/skins")>();
   return {
     ...actual,
     ThreadSkinView: ({

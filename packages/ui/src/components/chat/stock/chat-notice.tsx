@@ -3,7 +3,7 @@
 import type { FC, ReactNode } from "react";
 import { DotMatrix } from "../DotMatrix";
 // Relative, not `@/lib/utils`: host apps (digithings-web) import this file
-// through `@digithings/ui/chat/notice`, where `@/` is their own root.
+// through `@digithings-ai/ui/chat/notice`, where `@/` is their own root.
 import { cn } from "../../../lib/utils";
 import { stockRadius, useStockShape } from "./stock-shape";
 

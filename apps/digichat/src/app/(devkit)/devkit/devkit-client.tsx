@@ -13,7 +13,7 @@ import {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
-} from "@digithings/ui/ui";
+} from "@digithings-ai/ui/ui";
 import { DevkitPreview } from "./devkit-preview";
 import { DevkitSummary } from "./devkit-summary";
 import { DevkitEditors, type EditorsCommit } from "./devkit-editors";

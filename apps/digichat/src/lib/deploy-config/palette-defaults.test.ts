@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
 import { describe, expect, it } from "vitest";
-import { TRACE_DENSITIES } from "@digithings/ui/chat/trace-spacing";
+import { TRACE_DENSITIES } from "@digithings-ai/ui/chat/trace-spacing";
 import { DensitySchema, type DigichatDeployment } from "./schema";
 import { materializeDigichatConfig } from "./loader";
 

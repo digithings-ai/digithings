@@ -11,9 +11,9 @@ import { TenantColorsSchema } from "@/lib/tenant-colors";
 import { z } from "zod";
 import { MAX_MCP_TOOL_ENTRIES, MAX_MCP_TOOL_NAME_LENGTH } from "./mcp-servers";
 import { DEFAULT_LANGUAGE_CODE, LANGUAGES } from "@/lib/languages";
-import { THREAD_SKINS, DEFAULT_THREAD_SKIN } from "@digithings/ui/chat/skins";
-import { DEFAULT_TRACE_DENSITY } from "@digithings/ui/chat/trace-spacing";
-import { isPaletteId } from "@digithings/ui/theme";
+import { THREAD_SKINS, DEFAULT_THREAD_SKIN } from "@digithings-ai/ui/chat/skins";
+import { DEFAULT_TRACE_DENSITY } from "@digithings-ai/ui/chat/trace-spacing";
+import { isPaletteId } from "@digithings-ai/ui/theme";
 import {
   DEFAULT_THINKING_MODE,
   DEFAULT_VIEW_MODE,

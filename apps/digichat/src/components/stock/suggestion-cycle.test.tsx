@@ -19,7 +19,7 @@ import {
   suggestionWindow,
   useSuggestionCycle,
   useThreadActivity,
-} from "@digithings/ui/chat/suggestions";
+} from "@digithings-ai/ui/chat/suggestions";
 
 const EIGHT = [
   "What does digigraph orchestrate?",

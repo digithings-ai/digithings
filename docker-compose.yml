@@ -670,7 +670,7 @@ services:
   digichat:
     build:
       # Repo-root context: digichat is an npm workspace member; its lockfile and
-      # the private @digithings/design package only exist at the root (#675).
+      # the private @digithings-ai/design package only exist at the root (#675).
       context: .
       dockerfile: apps/digichat/Dockerfile
     image: digi-digichat:latest

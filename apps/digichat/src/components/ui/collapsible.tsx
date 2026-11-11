@@ -1,6 +1,6 @@
 "use client"
 
-// Thin re-export of the kit @digithings/ui/ui Collapsible (#1419, wave 4) —
+// Thin re-export of the kit @digithings-ai/ui/ui Collapsible (#1419, wave 4) —
 // an unstyled 1:1 passthrough of @base-ui/react's Collapsible, exactly like
 // the previous local wrapper (call sites keep dressing trigger/panel).
 
@@ -8,4 +8,4 @@ export {
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
-} from "@digithings/ui/ui"
+} from "@digithings-ai/ui/ui"

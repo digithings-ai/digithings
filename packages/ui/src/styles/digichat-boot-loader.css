@@ -8,7 +8,7 @@
  *
  * Import once in the consumer shell, after chat-core.css (tokens used:
  * --font-mono, --bg, --ink, --ink-soft, --ink-mute, --accent):
- *   @import "@digithings/ui/styles/digichat-boot-loader.css";
+ *   @import "@digithings-ai/ui/styles/digichat-boot-loader.css";
  */
 
 .dboot {

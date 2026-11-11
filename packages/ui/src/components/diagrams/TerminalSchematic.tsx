@@ -8,7 +8,7 @@
  * telemetry only (a mark on the trunk, a cluster on the live bus, status
  * words, a snapping meter, a scrolling receipt). Nothing draws on.
  *
- * Styles: `@digithings/ui/styles/diagrams.css` (the `.tschem` block).
+ * Styles: `@digithings-ai/ui/styles/diagrams.css` (the `.tschem` block).
  */
 
 import { useEffect, useState } from "react";

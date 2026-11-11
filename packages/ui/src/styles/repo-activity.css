@@ -1,11 +1,11 @@
 /* ==========================================================================
-   @digithings/ui — repo-activity family (components/repo-activity/*:
+   @digithings-ai/ui — repo-activity family (components/repo-activity/*:
    <RepoActivity/> compact + detailed). Import AFTER the token bridge:
 
      @import "tailwindcss";
-     @import "@digithings/design/tokens.css";
-     @import "@digithings/ui/styles/web-theme.css";
-     @import "@digithings/ui/styles/repo-activity.css";
+     @import "@digithings-ai/design/tokens.css";
+     @import "@digithings-ai/ui/styles/web-theme.css";
+     @import "@digithings-ai/ui/styles/repo-activity.css";
      @source "<path-to>/packages/ui/src/components/repo-activity";
 
    Self-layering: dress defaults in @layer components so call-site utilities

@@ -37,7 +37,7 @@ import { ChatToolCall } from "./ChatToolCall";
  * `MotionProvider`, gated by `useMotionSafe`; the static branch renders none.
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/chat-widgets.css";   (ChatToolCall rail + running pulse)
+ *   globals.css   @import "@digithings-ai/ui/styles/chat-widgets.css";   (ChatToolCall rail + running pulse)
  *                 @source "<path-to>/packages/ui/src/components/chat";
  * Chrome is utilities-only (no family sheet, no keyframes of its own).
  */

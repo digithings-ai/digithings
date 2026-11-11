@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useAuiState } from "@assistant-ui/react";
-import { useEmbedChatPrefsOptional } from "@digithings/ui/chat/stock";
+import { useEmbedChatPrefsOptional } from "@digithings-ai/ui/chat/stock";
 import {
   applySessionTool,
   sessionToolCallsFromMessages,

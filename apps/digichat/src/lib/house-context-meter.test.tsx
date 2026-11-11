@@ -4,12 +4,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
 import { cleanup, render, screen } from "@testing-library/react";
-import { DigichatContextMeter } from "@digithings/ui/chat/context-meter";
-import { DigichatComposerToolbar } from "@digithings/ui/chat/composer-toolbar";
+import { DigichatContextMeter } from "@digithings-ai/ui/chat/context-meter";
+import { DigichatComposerToolbar } from "@digithings-ai/ui/chat/composer-toolbar";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   type EmbedChatPrefsApi,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import { deploymentToEmbedTenant, materializeDigichatConfig } from "./deploy-config/loader";
 import { toEmbedClientConfig } from "./embed-client-config";
 import { clientConfigFromEmbedTenant } from "./deploy-config/embed-bridge";

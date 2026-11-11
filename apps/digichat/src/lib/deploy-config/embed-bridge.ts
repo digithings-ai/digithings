@@ -10,7 +10,7 @@ import {
   toDigichatClientConfig,
   type DigichatClientConfig,
 } from "./client-projection";
-import { defaultThreadSkinForTenant } from "@digithings/ui/chat/skins";
+import { defaultThreadSkinForTenant } from "@digithings-ai/ui/chat/skins";
 
 /**
  * An embed that omits `showContextMeter` does not inherit the house meter.

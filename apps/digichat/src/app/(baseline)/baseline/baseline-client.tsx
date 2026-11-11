@@ -4,12 +4,12 @@ import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/ai-sdk";
-import { ThreadSkinView } from "@digithings/ui/chat/skins";
+import { ThreadSkinView } from "@digithings-ai/ui/chat/skins";
 import { DIGICHAT_SKIN_OPTIONS } from "@/lib/digichat-skin-options";
 import {
   StockChatPrefsHost,
   useStockChatPrefs,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import {
   resolveRouteClientConfig,
   toStockChatPrefsConfig,
@@ -21,8 +21,8 @@ import {
   parseThreadSkin,
 
   THREAD_SKINS,
-} from "@digithings/ui/chat/skins";
-import { SkinRuntimeProvider } from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/skins";
+import { SkinRuntimeProvider } from "@digithings-ai/ui/chat/stock";
 import { parseEmbedChatError, formatEmbedChatError } from "@/lib/embed-chat-error";
 import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
 import {

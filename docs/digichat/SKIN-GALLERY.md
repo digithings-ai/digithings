@@ -59,7 +59,7 @@ first-party Thread. All 12 are in the image — not a CDN switch.
 | `expo-react-native` | `ExpoReactNative` | `skins/expo-react-native.tsx` | Web facsimile of the Expo phone frame |
 | `webpage-assistant` | `WebpageAssistant` | `skins/webpage-assistant/` | Owns the page chrome (`LAYOUT_SKINS`) |
 | `product-page-assistant` | `ProductPageAssistant` | `skins/product-page-assistant/` | Owns the page chrome; also the fallback branch |
-| `digichat` | `DigichatSkin` | `skins/digichat.tsx` | First-party Thread from the shared UI package (`@digithings/ui/chat/thread`) |
+| `digichat` | `DigichatSkin` | `skins/digichat.tsx` | First-party Thread from the shared UI package (`@digithings-ai/ui/chat/thread`) |
 
 Registry helpers: `THREAD_SKINS`, `DEFAULT_THREAD_SKIN` (`"base"`), `CLONE_SKINS`,
 `LAYOUT_SKINS`, `isCloneSkin()`, `skinOwnsPageChrome()`, `parseThreadSkin()`.

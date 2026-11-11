@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
-// Behavioral tests for the shared @digithings/ui ContactMailto as consumed
+// Behavioral tests for the shared @digithings-ai/ui ContactMailto as consumed
 // by the embed paywall card (implementation contracts live beside the
 // component in the web workspace).
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ContactMailto } from "@digithings/ui";
+import { ContactMailto } from "@digithings-ai/ui";
 
 describe("ContactMailto", () => {
   it("assigns the real mailto: href and swaps in the address text after mount", () => {

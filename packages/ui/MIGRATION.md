@@ -12,11 +12,11 @@ in `ci.yml` on every PR/push (#1434) — it scans the whole `apps/` + `packages/
 
 ```css
 @import "tailwindcss";
-@import "@digithings/design/tokens.css";
-@import "@digithings/design/site/site.css" layer(components); /* if used — see below */
-@import "@digithings/ui/styles/web-theme.css";               /* THE bridge */
-@import "@digithings/ui/styles/nav-shell.css";               /* if using NavShell */
-@import "@digithings/ui/styles/docs.css";                    /* if using the docs family */
+@import "@digithings-ai/design/tokens.css";
+@import "@digithings-ai/design/site/site.css" layer(components); /* if used — see below */
+@import "@digithings-ai/ui/styles/web-theme.css";               /* THE bridge */
+@import "@digithings-ai/ui/styles/nav-shell.css";               /* if using NavShell */
+@import "@digithings-ai/ui/styles/docs.css";                    /* if using the docs family */
 
 /* Tailwind never scans package sources — point it at the shared components you use: */
 @source "../../../packages/ui/src/components/NavShell.tsx";
@@ -51,7 +51,7 @@ Three rules that are load-bearing, learned the hard way:
    own CSS file masks most of it).
 
 Theming: `data-theme` on `<html>` is authoritative (shared `ThemeProvider` +
-`themeInitScript` from `@digithings/ui`). If an app needs `.dark`/`.light`
+`themeInitScript` from `@digithings-ai/ui`). If an app needs `.dark`/`.light`
 classes (shadcn-style selectors), mirror them from the attribute (see
 digichat's `ThemeClassSync`) — never the other way around.
 
@@ -78,11 +78,11 @@ review.
 ## Shared primitives first
 
 Before writing new UI, check `packages/ui/MANIFEST.json` (41 components,
-5 families) and `@digithings/ui` exports: NavShell, Footer/Colophon,
+5 families) and `@digithings-ai/ui` exports: NavShell, Footer/Colophon,
 DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages,
 PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family (ChatTranscript/
 ChatMessage/ChatMarkdown/ChatToolCall/…), the vendored shadcn kit
-(`@digithings/ui/ui`, below — the **only primitive source**; the legacy
+(`@digithings-ai/ui/ui`, below — the **only primitive source**; the legacy
 controls layer was retired in batch K3), Terminal,
 Emblem/StackRow, ModuleCard, Reveal/Stagger/HeroEntrance,
 useScrollyFeatures/ScrollyRail. Motion always via `m` under `MotionProvider`
@@ -91,9 +91,9 @@ The reference app, digiweb (port 4013), is the live catalog.
 
 ## The vendored UI kit (shadcn, #4206 wave 0)
 
-The migration's first stock shadcn/ui components live in `@digithings/ui`:
+The migration's first stock shadcn/ui components live in `@digithings-ai/ui`:
 `web/src/ui/` — Button, Card, Dialog, Input — barrel `web/src/ui/index.ts`,
-package export `@digithings/ui/ui`. Base UI (`@base-ui/react`) underneath,
+package export `@digithings-ai/ui/ui`. Base UI (`@base-ui/react`) underneath,
 `base-lyra` preset (radius 0, Lucide), wearing the same single bridge — the
 kit has **no CSS file of its own**.
 
@@ -101,7 +101,7 @@ kit has **no CSS file of its own**.
   `packages/ui` — its `components.json` is authoritative
   (`"ui": "@/ui"`). Never vendor into an app; the kit is package-owned, the
   same as any promoted primitive.
-- **Consume**: import from `@digithings/ui/ui`, and add
+- **Consume**: import from `@digithings-ai/ui/ui`, and add
   `@source "../../../packages/ui/src/ui";` to the app entry (rule 3 above). The shipped
   components import `cn` package-relative (`../lib/utils`); `npx shadcn add`
   re-introduces `@/lib/utils` in new files, so re-point those imports before
@@ -147,7 +147,7 @@ The controls copies remained at zero consumers until K3.
 Batch K3 (#4306) **retired the legacy controls layer**. The last main-barrel
 consumers (dashboard `Button`/`Dialog`/`DropdownMenu`/`Tooltip`,
 digiquant-web/digithings-web `Table`/`Select`, digichat's adapter re-exports)
-were re-pointed to `@digithings/ui/ui`, `Pager`/`PagerPage` were promoted into
+were re-pointed to `@digithings-ai/ui/ui`, `Pager`/`PagerPage` were promoted into
 `ui/pager.tsx` for the canon nav-buttons specimen, and `cx` moved to
 `lib/cx.ts` for `ContactMailto`. `packages/ui/src/components/controls/*` and
 its `src/index.ts` exports were deleted, and the dead `.ctl-*` CSS
@@ -172,9 +172,9 @@ The repeatable shape K1 used for each of the seven:
    Anything that cannot be a utility (a `::after` shimmer, `@keyframes`) goes to
    the kit's styling layer — `styles/web-theme.css` for the bridge-level
    `sk-shimmer` keyframes. Re-export from `ui/index.ts`.
-3. **Repoint consumers, one import at a time.** `@digithings/ui` (main barrel →
-   controls copy) becomes `@digithings/ui/ui` (kit). Move the symbol into an
-   existing `@digithings/ui/ui` import block in the file rather than adding a
+3. **Repoint consumers, one import at a time.** `@digithings-ai/ui` (main barrel →
+   controls copy) becomes `@digithings-ai/ui/ui` (kit). Move the symbol into an
+   existing `@digithings-ai/ui/ui` import block in the file rather than adding a
    second import from the same module. Leave every other main-barrel import
    (Pager, TabStrip, Tooltip, …) where it is.
 4. **No specimen registry to update.** digiweb's `/components` page parses
@@ -197,7 +197,7 @@ New UI is born in the reference, promoted, then adopted — never built app-loca
 `scripts/frontend_class_families.json` fails CI).
 
 1. **Promote**: reference specimen → importable, props-driven primitive in
-   `@digithings/ui`; the specimen becomes a thin consumer. Shape props against
+   `@digithings-ai/ui`; the specimen becomes a thin consumer. Shape props against
    the real adoption targets (read the app code first).
 2. **Wire**: exports in `web/src/index.ts`, a `package.json` exports entry per
    new css file, `@import` + `@source` lines in consumers, MANIFEST regen.
@@ -211,7 +211,7 @@ New UI is born in the reference, promoted, then adopted — never built app-loca
    write the gap into a ledger (`digichat-ui/ARCHITECTURE.md`,
    `digichat/CONTROLS.md` are the precedents).
 
-   **The kit wins wherever it covers the part.** `@digithings/ui/ui` is the
+   **The kit wins wherever it covers the part.** `@digithings-ai/ui/ui` is the
    canonical home for every part it ships — promote into `web/src/ui/` there,
    and prefer adding a `dress`/`skin` axis to the kit part over keeping a second
    app-local copy. The legacy controls layer was retired in batch K3 (#4306),
@@ -238,7 +238,7 @@ Unlayered author CSS beats every `@layer`, including `utilities`. Therefore:
 
 The kit now ships logical properties, so an app opts into RTL with one prop,
 not a restyle: wrap the tree in `<ThemeProvider dir="rtl">` (or a subtree in
-`<DirectionProvider dir="rtl">`) from `@digithings/ui`. Nothing else changes —
+`<DirectionProvider dir="rtl">`) from `@digithings-ai/ui`. Nothing else changes —
 LTR rendering is identical. Two rules for app code:
 
 - Author **logical** directional utilities/properties only (`ms-/me-`, `ps-/pe-`,

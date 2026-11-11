@@ -23,7 +23,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { Button, Input, Label } from "@digithings/ui/ui";
+import { Button, Input, Label } from "@digithings-ai/ui/ui";
 import {
   EXPORT_CHOICES,
   nextPaletteIndex,
@@ -31,14 +31,14 @@ import {
   paneDraftForId,
   submenuRows,
   VIEW_LABELS,
-} from "@digithings/digichat-ui";
-import { chatExportStrings } from "@digithings/ui/chat/transcript";
+} from "@digithings-ai/digichat-ui";
+import { chatExportStrings } from "@digithings-ai/ui/chat/transcript";
 import {
   committedChatPrefs,
   slashRowPreview,
   useEmbedChatPrefs,
   type EmbedChatPrefsPreview,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import {
   applyWellKnownMcp,
   wellKnownMcpGrouped,
@@ -94,8 +94,8 @@ import {
 } from "@/components/stock/embed-provider-flow";
 import { listenMcpOAuthResult, startMcpOAuth } from "@/components/stock/embed-mcp-oauth";
 import { THINKING_MODES, VIEW_MODES } from "@/lib/view-modes";
-import { TRACE_DENSITIES, TRACE_DENSITY_LABELS } from "@digithings/ui/chat/trace-spacing";
-import { matchThemeStep, themeCycle } from "@digithings/ui/theme";
+import { TRACE_DENSITIES, TRACE_DENSITY_LABELS } from "@digithings-ai/ui/chat/trace-spacing";
+import { matchThemeStep, themeCycle } from "@digithings-ai/ui/theme";
 
 export type ComposerMenuKind =
   | "settings"

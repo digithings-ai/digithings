@@ -20,7 +20,7 @@ import { Button } from "../../ui";
  * .annc-link keeps its class for the parent-hover-descendant CTA underline.
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/effects-chrome.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/effects-chrome.css";
  *                 @source "<path-to>/packages/ui/src/components/effects-chrome";
  */
 export type AnnouncementBarProps = {

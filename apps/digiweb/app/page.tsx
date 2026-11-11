@@ -1,7 +1,7 @@
 import "./baseline.css";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Badge, Button } from "@digithings/ui/ui";
+import { Badge, Button } from "@digithings-ai/ui/ui";
 import { ContentsOverview } from "@/components/contents-overview";
 import { BrandWordmark } from "@/components/brand/wordmark";
 import { LiverySwitcher } from "@/components/livery-switcher";

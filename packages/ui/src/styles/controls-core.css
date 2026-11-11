@@ -1,5 +1,5 @@
 /* ==========================================================================
-   @digithings/ui — chat-dress control CSS (styles/controls-core.css).
+   @digithings-ai/ui — chat-dress control CSS (styles/controls-core.css).
 
    The legacy controls layer (`components/controls/*`, #1419) was retired in
    batch K3 (#4306). What the kit still emits lives here: the chat dress
@@ -37,9 +37,9 @@
 
    Wiring — import AFTER the token bridge in the app's globals.css:
      @import "tailwindcss";
-     @import "@digithings/design/tokens.css";
-     @import "@digithings/ui/styles/web-theme.css";
-     @import "@digithings/ui/styles/controls-core.css";
+     @import "@digithings-ai/design/tokens.css";
+     @import "@digithings-ai/ui/styles/web-theme.css";
+     @import "@digithings-ai/ui/styles/controls-core.css";
    The controls components carry NO Tailwind utilities (all dress lives
    here, keyed off data-slot / data-size / aria state), so no @source line
    is needed for this family. Import PLAINLY (no layer(...)) — this file

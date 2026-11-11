@@ -1,5 +1,5 @@
 /**
- * `@digithings/tui-frame` — the one declaration of a recorded TUI frame
+ * `@digithings-ai/tui-frame` — the one declaration of a recorded TUI frame
  * (DIG-2698, ADR D7), shared by every TUI exporter and the dashboard.
  *
  * ADR D7: a TUI preview is a recorded frame, not a live socket. Each client

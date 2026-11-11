@@ -30,7 +30,7 @@ import {
 import { DigichatComposerToolbar } from "./digichat-composer-toolbar";
 
 // The slash wiring types moved to the skin-agnostic palette module; the
-// re-export keeps `@digithings/ui/chat/skins` imports unchanged.
+// re-export keeps `@digithings-ai/ui/chat/skins` imports unchanged.
 export type {
   DigichatSkinSlash,
   SkinPaletteApply,

@@ -1,7 +1,7 @@
 "use client";
 
-import { DIGITHINGS } from "@digithings/hero-banner/definitions";
-import { HeroBanner } from "@digithings/hero-banner/web";
+import { DIGITHINGS } from "@digithings-ai/hero-banner/definitions";
+import { HeroBanner } from "@digithings-ai/hero-banner/web";
 
 /** @deprecated Pages use `BrandWordmark` (the studio 4×4 mask). This still
  *  draws the hero-banner `DIGITHINGS` cells for anything that has not moved.

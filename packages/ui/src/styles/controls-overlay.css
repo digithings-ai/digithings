@@ -1,5 +1,5 @@
 /* ==========================================================================
-   @digithings/ui — behavioral controls CSS (styles/controls-overlay.css).
+   @digithings-ai/ui — behavioral controls CSS (styles/controls-overlay.css).
 
    The legacy controls layer (`components/controls/*`, #1419) was retired in
    batch K3 (#4306); the kit's own parts emit `kit-pop` and utility classes, so
@@ -8,9 +8,9 @@
    Sheet, Tooltip (Collapsible is an unstyled passthrough and needs no CSS).
    Import AFTER the token bridge, in the app's globals.css:
      @import "tailwindcss";
-     @import "@digithings/design/tokens.css";
-     @import "@digithings/ui/styles/web-theme.css";
-     @import "@digithings/ui/styles/controls-overlay.css";
+     @import "@digithings-ai/design/tokens.css";
+     @import "@digithings-ai/ui/styles/web-theme.css";
+     @import "@digithings-ai/ui/styles/controls-overlay.css";
      @source "<path-to>/packages/ui/src/components/controls";
    The @source line is load-bearing (MIGRATION.md rule 3): the components carry
    token-backed utilities and Tailwind does not scan package sources on its own.
@@ -19,7 +19,7 @@
    - `@layer components` blocks hold every DEFAULT that a digichat call site
      overrides via className (pane width, fonts, colors, shadows). digichat's
      old ui/* wrappers relied on tailwind-merge to resolve base-vs-call-site
-     utility conflicts; @digithings/ui has no tailwind-merge, so the base
+     utility conflicts; @digithings-ai/ui has no tailwind-merge, so the base
      dress sits in the `components` layer where the app's `utilities` layer
      deterministically wins.
    - Unlayered rules hold everything that must keep BEATING plain call-site

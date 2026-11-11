@@ -30,7 +30,7 @@ also the prerequisite for the runtime-swap goal and for per-skin `React.lazy`.
 | support contexts (see verdicts) | `src/components/chat/skins/` or `stock/` | via above |
 
 Rules: never the main barrel (pinned by `gallery-thread.source.test.ts:158-165`);
-`@digithings/ui/chat/thread` subpath style. Placing everything under
+`@digithings-ai/ui/chat/thread` subpath style. Placing everything under
 `src/components/chat/` inherits the existing host `@source` scan line for free
 (`chat-widgets.css:12-13`, host `globals.css:26` / `baseline.css:17`) — zero
 stylesheet/`@source` changes. Anywhere else costs a contract + host-CSS update.
@@ -112,7 +112,7 @@ constants, slash/pending = real fns, hidden name = `PAGE_CONTEXT_ATTACHMENT_NAME
 
 Serializers move to the kit: `transcript-markdown.ts` + `activity-view.ts` (+
 `types.ts` after an import check — they import only `./activity-view`, type-only
-`@digithings/ui`, and local types) relocate to `packages/ui`, with
+`@digithings-ai/ui`, and local types) relocate to `packages/ui`, with
 `packages/digichat-ui` re-exporting for compat. `toolRowTitle`
 (`tool-display.ts:3-6`, pure) co-moves to package `stock/`; `ToolFallback` keeps
 `title={toolRowTitle(toolName)}` via a relative import — no prop needed, test
@@ -128,10 +128,10 @@ only their skin/component imports re-point to the package; force-web passes
 slash+pending as the new props with real app fns. `skins-isolation.test.ts` moves
 with updated paths. Mock re-points (specifier-only, identical factories):
 `product-shell.test:18`, `chat-panel.test:122`, `home-stock-client.memory:45` →
-`@digithings/ui/chat/skins`; `product-shell.test:14` → NEW deep export
+`@digithings-ai/ui/chat/skins`; `product-shell.test:14` → NEW deep export
 `./chat/stock/thread` (barrel would widen blast radius onto product-shell's
 send-gate/deploy-ui/chrome imports). Path-as-text updates: `baseline-isolation:48`
-(read package `stock/thread.aui.tsx`), `:50` (new `@digithings/ui/chat/skins`
+(read package `stock/thread.aui.tsx`), `:50` (new `@digithings-ai/ui/chat/skins`
 specifier); `product-isolation:72` (read package `skins/digichat.tsx`).
 `presentation-modes` needs no change. CSS: delete `baseline.css:9,11` and
 `globals.css:19,20` `@source` lines (covered by the kit scan lines `:17` / `:26`).

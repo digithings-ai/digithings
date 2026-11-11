@@ -52,8 +52,8 @@ vi.mock("@assistant-ui/ai-sdk", () => ({
   useAISDKRuntime: () => ({}) as AssistantRuntime,
 }));
 
-vi.mock("@digithings/ui/chat/skins", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@digithings/ui/chat/skins")>();
+vi.mock("@digithings-ai/ui/chat/skins", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@digithings-ai/ui/chat/skins")>();
   return {
     ...actual,
     ThreadSkinView: () => <div data-testid="stock-thread" />,

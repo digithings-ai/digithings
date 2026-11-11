@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { buttonVariants } from "@digithings/ui/ui";
+import { buttonVariants } from "@digithings-ai/ui/ui";
 
 /**
  * The app has one root layout now, so an unmatched URL inherits the shared

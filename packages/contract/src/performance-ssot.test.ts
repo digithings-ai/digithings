@@ -7,10 +7,10 @@ import {
 
 /**
  * Runtime edge check for the package boundary: `performance-ssot` is the only
- * module in this package that reaches into `@digithings/perf-math`, so a broken
+ * module in this package that reaches into `@digithings-ai/perf-math`, so a broken
  * or React-carrying resolution there fails here rather than in a Worker bundle.
  */
-describe("performance SSOT over @digithings/perf-math", () => {
+describe("performance SSOT over @digithings-ai/perf-math", () => {
   const nav = [
     { date: "2026-01-02", nav: 100 },
     { date: "2026-01-05", nav: 101, day_return_pct: 1 },

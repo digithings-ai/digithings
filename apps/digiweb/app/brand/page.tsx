@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 /**
  * Brand studio — the working brand surface.
  *
- * Local design-reference only (`npm run dev --workspace @digithings/digiweb`).
+ * Local design-reference only (`npm run dev --workspace @digithings-ai/digiweb`).
  * It replaces the old upload-kit page: compose, preview and export here; the
  * generated files stay canonical in `packages/brand/`.
  */

@@ -19,12 +19,12 @@ packages/ui/
 ├── MANIFEST.json          generated machine index of every digiweb + kit component
 ├── scripts/
 │   └── build-manifest.mjs regenerates MANIFEST.json from the digiweb + kit sources
-├── design/                @digithings/design — tokens.css + CSS primitives
+├── design/                @digithings-ai/design — tokens.css + CSS primitives
 │   ├── BLEND.md           utilitarian-terminal preference ledger (v0.1 locked)
 │   ├── ROLLOUT.md         phased apply across digiweb → all product frontends
 │   └── references/        external north-star scans (Cursor, herdr, …)
 ├── brand/                 generated identity kit (avatars, headers, OG) — previewed at digiweb `/brand`, not on digithings.ai
-├── web/                   @digithings/ui — shared React component layer
+├── web/                   @digithings-ai/ui — shared React component layer
 └── digiweb/               the live reference app (Next.js 16 / React 19 / Tailwind v4 / Motion)
     ├── app/               reference, foundations, components, rtl
     ├── app/brand/         the upload kit (`/brand`) and the brand studio (`/brand/studio`)
@@ -32,11 +32,11 @@ packages/ui/
     └── README.md          what the app is and how it stays honest
 ```
 The app is the **reference**, not a pattern dump: it renders the current
-generation from `@digithings/design` tokens, the `@digithings/ui` kit and the
-`@digithings/hero-banner` definitions. The old fifteen-family specimen gallery
+generation from `@digithings-ai/design` tokens, the `@digithings-ai/ui` kit and the
+`@digithings-ai/hero-banner` definitions. The old fifteen-family specimen gallery
 (`apps/reference`) was deleted in October 2026.
 
-Live apps import `@digithings/design` tokens and `@digithings/ui` primitives —
+Live apps import `@digithings-ai/design` tokens and `@digithings-ai/ui` primitives —
 they do not fork a second look. Phase 3 product-local fights on this branch:
 digichat shadcn `--radius` pinned to 0, dashboard `.glass-card` retired, leftover
 `rounded-*` chrome stripped. Marketing Fraunces heroes are gone (Phase 2).
@@ -48,8 +48,8 @@ is irrelevant to resolution — every other frontend imports them the same way:
 
 | Package | Directory | Provides |
 | ------- | --------- | -------- |
-| `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/ui` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family including `DigichatLauncher`, the vendored shadcn kit `ui/` (**the only primitive source**, `dress` axis), the conviction primitives, Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+| `@digithings-ai/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
+| `@digithings-ai/ui` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family including `DigichatLauncher`, the vendored shadcn kit `ui/` (**the only primitive source**, `dress` axis), the conviction primitives, Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
 
 `SocialRow` (`web/src/components/SocialRow.tsx`, dress in `./styles/nav-shell.css`)
 is the quiet company-profile utility row: the same borderless `.btn-icon`
@@ -70,7 +70,7 @@ account page (`AuthCardProposals`) as a layout catalog. The dashboard login
 screen imports compact `AuthCard` (`apps/dashboard/components/login-screen.tsx`).
 
 `DigichatLauncher` (`web/src/components/chat/DigichatLauncher.tsx`, CSS
-`./styles/digichat-launcher.css`, import `@digithings/ui/chat/launcher`) is the standard embedded-chat entry point
+`./styles/digichat-launcher.css`, import `@digithings-ai/ui/chat/launcher`) is the standard embedded-chat entry point
 (`chrome.mode: modal`). Its idle state is a 30px square using the canonical
 compact `TerminalMark`; hover/focus types `digichat` in the shared mono chrome
 size while preserving height and border. Opening runs a two-step expansion out
@@ -82,15 +82,15 @@ closes immediately. After the first open, the hidden panel keeps its children
 mounted so an iframe conversation survives close/reopen. It portals to
 `document.body` by default to escape transformed/backdrop-filter app shells;
 `portal={false}` contains reference specimens. Product can mount
-`DigichatThread` (`@digithings/ui/chat/thread`) as `children`. That subpath
+`DigichatThread` (`@digithings-ai/ui/chat/thread`) as `children`. That subpath
 **is** the first-party Thread (`gallery-thread/thread.aui.tsx` + slots),
 not a second ChatMarkdown tree. Import the subpath — never the
-`@digithings/ui` main barrel (webpack OOM). The design-reference `/chatbot`
+`@digithings-ai/ui` main barrel (webpack OOM). The design-reference `/chatbot`
 page is a fixture lab on **that same import** — see
 [`CHAT_THEME.md`](CHAT_THEME.md). Tool rows whose result payload carries the
 Gloomberb `attribution` block render the attribution line (canonical string,
 delay notice, `term.gloom.sh` deep link) beneath the JSON result pane, driven
-by the shared `web/src/lib/gloomberb.ts` helper that the `@digithings/ui`
+by the shared `web/src/lib/gloomberb.ts` helper that the `@digithings-ai/ui`
 barrel exports (`GLOOMBERB_*`, `gloomberbTickerUrl`, `readGloomberbAttribution`).
 The full assistant-ui elements catalog (every `/elements` slug, purpose, fetch command,
 and digichat attach kind) lives in
@@ -98,7 +98,7 @@ and digichat attach kind) lives in
 from the registry on demand; do not dump the catalog into `MANIFEST.json`.
 
 The F1 promotion campaign (#1450) added four more component families to
-`@digithings/ui`, each a `web/src/components/<family>/` directory with its own
+`@digithings-ai/ui`, each a `web/src/components/<family>/` directory with its own
 barrel, re-exported from `src/index.ts`:
 
 | Family | Components | CSS subpath |
@@ -120,16 +120,16 @@ print-grade SVG tearsheet grammar (`.ts-*`) promoted from
 
 Engine ruling: canvas families are for screen-only dashboards; any surface
 with a PDF export composes finance-tearsheet — see [CHARTS.md](CHARTS.md).
-`@digithings/design/tearsheet/styles.css` is deprecated in favour of the
+`@digithings-ai/design/tearsheet/styles.css` is deprecated in favour of the
 family sheet (kept only until digiquant-web/dashboard swap their imports).
 
 The family's **performance math is not in this package.** `live-performance-kpis`
 (live KPIs, base-100 continuity, since-inception, beta/alpha/IR) moved to
-[`@digithings/perf-math`](../perf-math/README.md), which has no React, DOM or
-`@digithings/*` dependency. `finance-tearsheet/index.ts` re-exports every symbol
-from `@digithings/perf-math/live-performance-kpis`, so `@digithings/ui` imports
-keep working — but framework-free consumers (`@digiquant/contract`, Worker
-bundles) import `@digithings/perf-math` directly so they never pull this
+[`@digithings-ai/perf-math`](../perf-math/README.md), which has no React, DOM or
+`@digithings-ai/*` dependency. `finance-tearsheet/index.ts` re-exports every symbol
+from `@digithings-ai/perf-math/live-performance-kpis`, so `@digithings-ai/ui` imports
+keep working — but framework-free consumers (`@digithings-ai/contract`, Worker
+bundles) import `@digithings-ai/perf-math` directly so they never pull this
 package and its React tree. Do not re-add the math here: a React edge on that
 module is what the split exists to prevent.
 
@@ -201,12 +201,12 @@ and every `packages/ui/src/components/controls/*` file plus its exports in
 `ctl-badge-ref*`, `ctl-search-row`, and `ctl-sheet*` in
 `styles/controls-core.css` / `controls-overlay.css` — while the chat-dress
 families the kit still emits (`ctl-btn-chat*`, `ctl-badge-chat*`,
-`ctl-card-chat*`, `ctl-input-chat`, `ctl-label-chat`) stay live. `@digithings/ui`
-is no longer a primitive source; the kit (`@digithings/ui/ui`) is the only one.
+`ctl-card-chat*`, `ctl-input-chat`, `ctl-label-chat`) stay live. `@digithings-ai/ui`
+is no longer a primitive source; the kit (`@digithings-ai/ui/ui`) is the only one.
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
-| `ui` | Alert, Avatar (+ parts), Badge, Breadcrumbs, Button (+ `buttonVariants`), Card (+ parts), Checkbox, Collapsible, DatePager, Dialog (+ parts), DropdownMenu (+ parts), EmptyState, Field, Form, IconButton, Input, Label, Pager, Pagination, Radio/RadioGroup, SearchBar, SegmentedControl, Select (+ parts), Separator, Sheet (+ parts), Skeleton/SkeletonGroup, Slider, Switch, Table (+ parts), Tabs, TagsInput, Textarea, Tooltip (+ parts) — barrel `web/src/ui/index.ts`, export `@digithings/ui/ui` | `styles/web-theme.css` (the `sk-shimmer` keyframes plus the ported `.nb-cal*` calendar grid and `.kit-pop` travel; otherwise utility-only — consumers add `@source "../../../packages/ui/src/ui"`) |
+| `ui` | Alert, Avatar (+ parts), Badge, Breadcrumbs, Button (+ `buttonVariants`), Card (+ parts), Checkbox, Collapsible, DatePager, Dialog (+ parts), DropdownMenu (+ parts), EmptyState, Field, Form, IconButton, Input, Label, Pager, Pagination, Radio/RadioGroup, SearchBar, SegmentedControl, Select (+ parts), Separator, Sheet (+ parts), Skeleton/SkeletonGroup, Slider, Switch, Table (+ parts), Tabs, TagsInput, Textarea, Tooltip (+ parts) — barrel `web/src/ui/index.ts`, export `@digithings-ai/ui/ui` | `styles/web-theme.css` (the `sk-shimmer` keyframes plus the ported `.nb-cal*` calendar grid and `.kit-pop` travel; otherwise utility-only — consumers add `@source "../../../packages/ui/src/ui"`) |
 
 The five parts digichat needed a chat tone for carry the `dress="chat"` axis
 (Button/Card/Badge/Input/Label), which emits the existing `ctl-*-chat` classes
@@ -216,15 +216,15 @@ from `styles/controls-core.css` instead of the kit utilities; `Card` propagates
 `secondary` surface (not the brand accent).
 
 `Spinner` is **not** part of the `ui` family: it lives in the main barrel
-(`web/src/index.ts` → `./components/Spinner`, export `@digithings/ui`), so
-`import { Spinner } from '@digithings/ui/ui'` is a build error.
+(`web/src/index.ts` → `./components/Spinner`, export `@digithings-ai/ui`), so
+`import { Spinner } from '@digithings-ai/ui/ui'` is a build error.
 
 Refresh it with `npx shadcn@latest add <name>` inside `packages/ui`
 (the `components.json` there is authoritative); local deltas stay limited to
 import adaptations (`cn` from `../lib/utils`, sibling `./button`). The kit is
 indexed in `MANIFEST.json` under family `ui` (one row per `web/src/ui/<name>.tsx`,
 `path` relative to the digiweb root), because the gallery proves it through the
-package export `@digithings/ui/ui` rather than a `@/components/*` path (#4225);
+package export `@digithings-ai/ui/ui` rather than a `@/components/*` path (#4225);
 the barrel remains the export source of truth and
 [MIGRATION.md](MIGRATION.md) the adoption guide.
 
@@ -398,12 +398,12 @@ Two indexing rules are worth calling out (#4225): next.js route groups are
 transparent, so a family page at `app/<fam>/page.tsx` lands under `<fam>` and
 `app/page.tsx` under `foundations`; and the vendored shadcn kit at
 `web/src/ui/*.tsx` — importable only as the package export
-`@digithings/ui/ui`, so no digiweb page ever maps it — is indexed directly
+`@digithings-ai/ui/ui`, so no digiweb page ever maps it — is indexed directly
 from source, one row per `<name>.tsx`, under family `ui`.
 
 ## Brand identity — the terminal marks
 
-`@digithings/ui` `components/symbols/terminal-marks.tsx` is the canonical
+`@digithings-ai/ui` `components/symbols/terminal-marks.tsx` is the canonical
 identity; digiweb renders the same exports on `/components` and the home banner.
 Three components, each matching the weight of the surface it imitates:
 
@@ -486,7 +486,7 @@ and run `make agents-init` (CI enforces idempotence).
 - **New design family (page)** → add `reference/app/<family>/page.tsx` +
   `<family>.css`, register it in the nav (`reference/components/site-nav.tsx`)
   and the contents overview, then update this map and the reference README.
-- **New token** → lives in `@digithings/design/tokens.css` (the shared package);
+- **New token** → lives in `@digithings-ai/design/tokens.css` (the shared package);
   reference it, never hardcode the literal.
 - **Contrast contract** → `styles/contrast.contract.test.ts` pins the
   canon-audit S2 pairs (money tokens as text, the accent-as-text mix, the
@@ -507,7 +507,7 @@ The tables are generated from
 `scripts/generate_platform_palettes.py` (`packages/design/palettes.css`,
 `palette-registry.ts`, `themeInit.ts`). `default` leaves `tokens.css` in
 charge. The dashboard keeps its own provider and never writes `dt-palette`.
-TUIs read the same ids from `@digithings/ui/theme/tui` and share
+TUIs read the same ids from `@digithings-ai/ui/theme/tui` and share
 `~/.digithings/theme.json`.
 
 ## RTL & logical properties (#4306)
@@ -592,7 +592,7 @@ chrome (canvas gestures, native `<summary>`, custom timelines). See
 
 The reference app is **linted and type-checked** in CI by the `web` lane
 (`test-web.yml`), gated on `apps/digiweb/**`: `npm run lint` and
-`npm run typecheck` (`tsc --noEmit`) for the `@digithings/digiweb` workspace (#1981).
+`npm run typecheck` (`tsc --noEmit`) for the `@digithings-ai/digiweb` workspace (#1981).
 Run the same two commands locally from `apps/digiweb/`, plus a live browser check —
 that last half is the only one CI cannot do.
 
@@ -708,7 +708,7 @@ palette list.
 ## DotMatrix — one name per control (DIG-4669)
 
 `DotMatrix` (`packages/ui/src/components/chat/DotMatrix.tsx`, exported as
-`@digithings/ui/chat/dot-matrix`) is the 5x5 dot-matrix status glyph the chat
+`@digithings-ai/ui/chat/dot-matrix`) is the 5x5 dot-matrix status glyph the chat
 family draws where it used to draw lucide icons. It has **two modes**, and
 they are mutually exclusive:
 

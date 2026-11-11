@@ -12,7 +12,7 @@
  *      system.
  *
  * Import once in an app's globals.css, after web-theme.css:
- *   @import "@digithings/ui/styles/diagrams.css";
+ *   @import "@digithings-ai/ui/styles/diagrams.css";
  * and add the source path so Tailwind sees the family:
  *   @source "<path-to>/packages/ui/src/components/diagrams";
  */
