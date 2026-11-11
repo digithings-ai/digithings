@@ -16,7 +16,7 @@
 > `@digithings/digichat-cli` is **1.4.0** (`apps/digichat/cli/package.json`).
 > Do not read the CLI version as the web app's. See
 > [ADR-0028](../../docs/adr/0028-digichat-web-foundation-and-opencode-distribution.md)
-> and [#3626](https://github.com/digithings-ai/digithings/issues/3626).
+> and [#3626](#3626).
 > AG-UI is out of scope.
 
 ---

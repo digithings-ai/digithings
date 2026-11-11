@@ -1,7 +1,7 @@
 # Unified model catalog
 
 **Part of [digithings](../README.md) (digithings.ai).**
-**Issue:** [#4994](https://github.com/digithings-ai/digithings/issues/4994) ·
+**Issue:** [#4994](#4994) ·
 **Spec:** `docs/superpowers/specs/2026-10-03-unified-model-catalog-design.md` ·
 **Plan:** `docs/superpowers/plans/2026-10-03-unified-model-catalog.md`
 

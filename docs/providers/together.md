@@ -1,6 +1,6 @@
 # Together AI
 
-**Free tier:** **None** (as of mid-2025 / confirmed 2026-07). Together's billing docs require a minimum **$5 prepaid purchase** with a payment method — the old ~$25 no-CC signup credit is gone. A separate startup credit program exists for qualifying applicants but is not a standing free tier. See [#1590](https://github.com/digithings-ai/digithings/issues/1590).
+**Free tier:** **None** (as of mid-2025 / confirmed 2026-07). Together's billing docs require a minimum **$5 prepaid purchase** with a payment method — the old ~$25 no-CC signup credit is gone. A separate startup credit program exists for qualifying applicants but is not a standing free tier. See [#1590](#1590).
 
 **Best for:** open-weight hosting, fine-tuning, FLUX image models (paid).
 

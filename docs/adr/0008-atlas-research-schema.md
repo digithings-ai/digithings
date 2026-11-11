@@ -5,7 +5,7 @@
 
 ## Context
 
-[ADR-0004](0004-atlas-pricing.md) was accepted on 2026-04-19, unblocking Atlas execution. Epic [#10](https://github.com/digithings-ai/digithings/issues/10) now needs a concrete research subgraph (scaffolding spike in [issue #146](https://github.com/digithings-ai/digithings/issues/146)) that produces outputs the Atlas UI can render across sessions and after process restarts.
+[ADR-0004](0004-atlas-pricing.md) was accepted on 2026-04-19, unblocking Atlas execution. Epic [#10](#10) now needs a concrete research subgraph (scaffolding spike in [issue #146](#146)) that produces outputs the Atlas UI can render across sessions and after process restarts.
 
 Two separate data concerns sit inside "Atlas research":
 
@@ -115,7 +115,7 @@ This is the cheapest versioning scheme that still gives us a rollback/rollforwar
 
 ## Links
 
-- Related: [issue #10](https://github.com/digithings-ai/digithings/issues/10) (epic), [issue #146](https://github.com/digithings-ai/digithings/issues/146) (scaffolding spike), [issue #147](https://github.com/digithings-ai/digithings/issues/147) (this ADR)
+- Related: [issue #10](#10) (epic), [issue #146](#146) (scaffolding spike), [issue #147](#147) (this ADR)
 - Related: [ADR-0004](0004-atlas-pricing.md) — Atlas pricing (accepted 2026-04-19)
 - Related: [`docs/VISION.md`](../VISION.md) — Atlas tiering
 - State-model convention: [`digigraph/src/digigraph/graph/state.py`](../../digigraph/src/digigraph/graph/state.py)

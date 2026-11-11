@@ -6,7 +6,7 @@ import { type FC, forwardRef, type ReactNode } from "react";
 import { AssistantModalPrimitive } from "@assistant-ui/react";
 
 import { Thread } from "../../stock/thread.aui";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../../lib/utils";
 
 export const AssistantModal: FC<{
   children?: ReactNode;

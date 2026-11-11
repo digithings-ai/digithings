@@ -91,9 +91,10 @@ deployment: &house
   # shared allowance. Anonymous traffic is keyed by the server-derived
   # client IP.
   # rateLimit is the chat request limiter (per visitor, and per IP for an
-  # anonymous embed). A visitor's own key skips this limiter and the
-  # per-visitor minute. The tool-call cap, the answer guard, and a shared
-  # deployment minute stay on.
+  # anonymous embed). A visitor's own key does not skip this limiter: the
+  # header is client-set, and the turn still runs house tools (#6217). An
+  # own key skips only the per-visitor minute. The tool-call cap, the answer
+  # guard, and a shared deployment minute stay on.
   guardrails:
     maxToolCallsPerTurn: 20
     answerAt: 0.7

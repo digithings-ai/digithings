@@ -248,6 +248,12 @@ docs/superpowers/specs/review-*
 # Agent scratch — temporary artifacts, screenshots, logs (never commit)
 .agent-tmp/
 
+# Stray Python wheels (e.g. tool installs)
+*.whl
+
+# Local private name list for check_r0_no_client_literals.py --private-names (never commit)
+r0-private-names.txt
+
 # digisearch websets cache written by local runs and tests
 .digisearch/
 .digisearch_embed_cache.db

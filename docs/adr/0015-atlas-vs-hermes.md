@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (amended 2026-06-20; product names historical — see [ADR-0026](0026-retire-olympus-atlas-hermes-kairos.md))
 - **Date:** 2026-04-28
-- **Related epic:** [#471](https://github.com/digithings-ai/digithings/issues/471) · [#930](https://github.com/digithings-ai/digithings/issues/930) (thesis-first Hermes)
+- **Related epic:** [#471](#471) · [#930](#930) (thesis-first Hermes)
 - **Amends:** [ADR-0014](0014-atlas-in-digiquant.md) (Atlas in `digiquant/` is preserved; this ADR splits the Atlas package itself).
 
 ## Context
@@ -134,16 +134,16 @@ Operator full refresh: `--refresh-scope all` — not a separate graph.
 
 ## Migration
 
-Tracked in epic [#471](https://github.com/digithings-ai/digithings/issues/471).
+Tracked in epic [#471](#471).
 Six child tasks:
 
-1. [#477](https://github.com/digithings-ai/digithings/issues/477) — this ADR.
-2. [#472](https://github.com/digithings-ai/digithings/issues/472) — Hermes Python package + phase moves.
-3. [#473](https://github.com/digithings-ai/digithings/issues/473) — Hermes graph + atlas→hermes chain.
-4. [#474](https://github.com/digithings-ai/digithings/issues/474) — Skills + templates split.
-5. [#475](https://github.com/digithings-ai/digithings/issues/475) — Test split.
-6. [#478](https://github.com/digithings-ai/digithings/issues/478) — Docs reshape.
-7. [#476](https://github.com/digithings-ai/digithings/issues/476) — CI path filters.
+1. [#477](#477) — this ADR.
+2. [#472](#472) — Hermes Python package + phase moves.
+3. [#473](#473) — Hermes graph + atlas→hermes chain.
+4. [#474](#474) — Skills + templates split.
+5. [#475](#475) — Test split.
+6. [#478](#478) — Docs reshape.
+7. [#476](#476) — CI path filters.
 
 ## Links
 

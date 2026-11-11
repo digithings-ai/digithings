@@ -4,7 +4,7 @@
 **Related:** [ADR-0028](../adr/0028-digichat-web-foundation-and-opencode-distribution.md),
 [digichat modular frontend](digichat-modular-frontend.md),
 [`apps/digichat/ARCHITECTURE.md`](../../apps/digichat/ARCHITECTURE.md),
-implementation [#3626](https://github.com/digithings-ai/digithings/issues/3626)
+implementation [#3626](#3626)
 (**digichat 2.0** — do not merge to `develop` until the 2.0 cut)
 
 digichat-the-**product** is the containerized **BFF** plus an optional default UI.
@@ -24,7 +24,7 @@ Cloud, digigraph MCP, or Foundry’s native event stream.
 
 “Compatible” means the **stream + headers**, not importing a digichat skin.
 CLI-flavored chrome (`CliThread`) is **deferred** — not the 2.0 default substrate
-(owner decision on [#3626](https://github.com/digithings-ai/digithings/issues/3626), 2026-09-05).
+(owner decision on [#3626](#3626), 2026-09-05).
 
 ## Canonical wire
 

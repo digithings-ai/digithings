@@ -10,11 +10,11 @@ Supabase connection env vars diverged across the codebase:
 - digithings (Olympus/Atlas/prices) wrote to the core project via `SUPABASE_URL` /
   `SUPABASE_SERVICE_ROLE_KEY`.
 - client_repo used `SUPABASE_URL` (hardcoded) / `SUPABASE_SERVICE_KEY` (no `ROLE`).
-- [#1064](https://github.com/digithings-ai/digithings/issues/1064) added a third pair,
+- [#1064](#1064) added a third pair,
   `SUPABASE_URL_DIGIQUANT` / `SUPABASE_SERVICE_ROLE_KEY_DIGIQUANT`, for the strategy store.
 
 With Olympus and client_repo now distinct Supabase projects ([ADR 0021](0021-digiquant-supabase-project-topology.md))
-and the calendar consolidated into `core` ([#1066](https://github.com/digithings-ai/digithings/issues/1066)),
+and the calendar consolidated into `core` ([#1066](#1066)),
 a single naming scheme is needed so any repo can reference the shared core project and its
 own project unambiguously. The org-level core secret was renamed in GitHub already, so code
 + workflows must conform.
@@ -66,6 +66,6 @@ are out of scope.
 
 ## Links
 
-- Implements [#1090](https://github.com/digithings-ai/digithings/issues/1090).
+- Implements [#1090](#1090).
 - Builds on [ADR 0021](0021-digiquant-supabase-project-topology.md) (project topology) and
   the #1066 calendar consolidation.

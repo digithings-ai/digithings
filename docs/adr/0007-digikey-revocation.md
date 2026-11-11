@@ -110,6 +110,6 @@ Rows where `exp < now()` are dead and can be purged by a nightly job or a short-
 
 ## Links
 
-- Related: [issue #6](https://github.com/digithings-ai/digithings/issues/6)
+- Related: [issue #6](#6)
 - Architecture background: [digikey/ARCHITECTURE.md](../../digikey/ARCHITECTURE.md) §6 (security gap), §11 (Phase 2 gaps), §12(a) (recommended approach), §12(c) (introspection alternative)
 - Precedent for fail-closed Redis: [ADR-0005](0005-guest-rate-limits.md) (guest-tier rate limits)

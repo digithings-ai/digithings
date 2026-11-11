@@ -6,7 +6,7 @@
 
 ## Context
 
-ADR-0008 (2026-04-19) proposed a dedicated Postgres table `atlas_research` owned by digigraph to hold Atlas research outputs. Issue [#176](https://github.com/digithings-ai/digithings/issues/176) then landed the actual Atlas → digigraph migration, and during implementation it became clear that:
+ADR-0008 (2026-04-19) proposed a dedicated Postgres table `atlas_research` owned by digigraph to hold Atlas research outputs. Issue [#176](#176) then landed the actual Atlas → digigraph migration, and during implementation it became clear that:
 
 - The existing `apps/digiquant-atlas/` system already writes every segment research document to Supabase `documents` (keyed by `(date, document_key)`) and digest snapshots to `daily_snapshots` (keyed by `date`). Those tables carry a year of production data and are read by the deployed digiquant Atlas frontend.
 - ADR-0008's proposed `atlas_research` table duplicates what `documents` already stores, with a different shape and ownership. Shipping it would fork Atlas persistence across two tables and force every downstream reader (frontend, Phase 9 evolution, BI queries) to know which bucket to read from.

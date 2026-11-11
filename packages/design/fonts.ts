@@ -2,7 +2,7 @@ import { Geist_Mono } from "next/font/google";
 
 /**
  * The one font loader. Each app re-exports `fontVariables` and puts that
- * class on `<html>`. Geist Mono is the face (the maintainer, 14 Oct 2026). next/font
+ * class on `<html>`. Geist Mono is the face. next/font
  * self-hosts the file at build time, so no request leaves for a font host.
  */
 export const mono = Geist_Mono({

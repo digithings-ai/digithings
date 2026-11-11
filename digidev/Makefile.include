@@ -71,15 +71,3 @@ status:
 # Unlike digithings' own scripts/install-hooks.sh, this installs the working
 # tree's copy — digidev scaffolds arbitrary repos, so there is no known-good
 # ref (origin/develop) it can assume exists here.
-hooks-install:
-	@set -e; \
-	if ! hooks_path="$$(git rev-parse --git-path hooks 2>/dev/null)" || [ -z "$$hooks_path" ]; then \
-		echo "hooks-install: not inside a git work tree — run 'git init' first." >&2; \
-		exit 1; \
-	fi; \
-	bash -n scripts/hooks/pre-push.sh; \
-	mkdir -p "$$hooks_path"; \
-	hooks_dir="$$(cd "$$hooks_path" && pwd)"; \
-	install -m 755 scripts/hooks/pre-push.sh "$$hooks_dir/pre-push"; \
-	echo "installed: $$hooks_dir/pre-push"
-

@@ -23,7 +23,7 @@ import { TooltipIconButton } from "./tooltip-icon-button";
 import { messageHasContent } from "../../trace-grouping";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../../lib/utils";
 import {
   SkinCredit,
   useComposerCopy,

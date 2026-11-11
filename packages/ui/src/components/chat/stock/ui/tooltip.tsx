@@ -1,7 +1,7 @@
 "use client"
 
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
-import { cn } from "@/lib/utils"
+import { cn } from "../../../../lib/utils"
 import { useStockShape } from "../stock-shape"
 
 function TooltipProvider({

@@ -6,7 +6,7 @@
 
 **Status:** superseded
 **Date:** 2026-09-04  
-**Issue:** [#3568](https://github.com/digithings-ai/digithings/issues/3568)  
+**Issue:** [#3568](#3568)  
 **Related ADR:** [ADR-0027](../adr/0027-opencode-digichat-cli-foundation.md), superseded by [ADR-0028](../adr/0028-digichat-web-foundation-and-opencode-distribution.md)
 **Naming:** Digi product names are always lowercase in prose (`digichat`, `digisearch`, `digivault`, `digigraph`, `digithings`).
 
@@ -353,4 +353,4 @@ See §10. Outcome: spike report comment on #3568 + go/no-go for Phase 2.
 - OpenCode docs: https://opencode.ai/docs/ (plugins, MCP, SDK)  
 - digichat modular frontend: [digichat-modular-frontend.md](digichat-modular-frontend.md)  
 - digichat-ui slash: `packages/digichat-ui/src/slash-commands.ts`  
-- Issue: https://github.com/digithings-ai/digithings/issues/3568  
+- Issue: #3568  

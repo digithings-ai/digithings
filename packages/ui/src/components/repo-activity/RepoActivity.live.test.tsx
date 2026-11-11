@@ -89,7 +89,7 @@ describe("RepoActivity live fallback", () => {
                 {
                   number: 11,
                   title: "live open",
-                  html_url: "https://github.com/digithings-ai/digithings/issues/11",
+                  html_url: "#11",
                   updated_at: "2026-09-02T11:00:00Z",
                 },
               ],

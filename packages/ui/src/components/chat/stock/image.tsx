@@ -22,7 +22,7 @@ import type {
   ImageMessagePart,
   ImageMessagePartComponent,
 } from "@assistant-ui/react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../lib/utils";
 import { DotMatrix } from "../DotMatrix";
 
 const extensionForMimeType = (mimeType?: string): string => {

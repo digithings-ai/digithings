@@ -5,7 +5,7 @@
  * square look; nothing in the base skin path may import it
  * (base-skin-theme-surfaces.source.test.ts).
  */
-import { cn } from "@/lib/utils"
+import { cn } from "../../../../../lib/utils"
 
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (

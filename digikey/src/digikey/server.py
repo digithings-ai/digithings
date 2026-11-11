@@ -19,7 +19,11 @@ from sqlalchemy import select, text
 
 from digikey import __version__, blocklist
 from digikey.blocklist_rehydrate import rehydrate_blocklist_from_db
-from digikey.crypto_keys import load_or_create_signing_key, public_key_to_pem
+from digikey.crypto_keys import (
+    ephemeral_key_in_use,
+    load_or_create_signing_key,
+    public_key_to_pem,
+)
 from digikey.db import init_db, session_factory
 from digikey.db_schema import ApiKeyRow, JtiIssuedRow, utcnow
 from digikey.jwt_issue import _issuer as _jwt_issuer
@@ -73,6 +77,9 @@ install_request_id_middleware(app)
 install_request_id_logging()
 
 _private_key, _kid = load_or_create_signing_key()
+#: Recorded by crypto_keys for the key this process signs with, so the startup
+#: banner reports what was loaded rather than re-reading the environment.
+_ephemeral_key = ephemeral_key_in_use()
 
 
 @app.on_event("startup")
@@ -99,16 +106,33 @@ def _startup() -> None:
         except Exception as e:
             logger.error("blocklist rehydrate failed: %s", e)
             raise RuntimeError("blocklist rehydrate failed") from e
-    if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
-        if os.environ.get("DIGIKEY_ALLOW_EPHEMERAL_KEY", "0").strip().lower() in (
-            "1",
-            "true",
-            "yes",
-        ):
-            logger.warning(
-                "DIGIKEY_ALLOW_EPHEMERAL_KEY=1: ephemeral signing key; set DIGIKEY_PRIVATE_KEY_PEM "
-                "for stable JWKS across restarts",
-            )
+    warn_if_ephemeral_key()
+
+
+EPHEMERAL_KEY_BANNER = "\n".join(
+    (
+        "=" * 72,
+        "DIGIKEY IS USING AN EPHEMERAL SIGNING KEY (DIGIKEY_ALLOW_EPHEMERAL_KEY=1)",
+        "  * The RS256 key and its JWKS change on EVERY digikey restart.",
+        "  * Every token issued before a restart stops verifying after it.",
+        "  * NOT FOR PRODUCTION. Local and throwaway self-hosted dev only.",
+        "  * For anything real: set DIGIKEY_ALLOW_EPHEMERAL_KEY=0 and supply a",
+        "    stable DIGIKEY_PRIVATE_KEY_PEM.",
+        "=" * 72,
+    )
+)
+
+
+def warn_if_ephemeral_key() -> None:
+    """Log EPHEMERAL_KEY_BANNER at WARNING when digikey signs with an ephemeral key.
+
+    Logging only. Whether an ephemeral key is allowed, and whether one was
+    made, is decided by crypto_keys.load_or_create_signing_key; this reads the
+    flag it recorded for the key loaded at import (``_ephemeral_key``) and never
+    re-reads the environment, so the two cannot disagree.
+    """
+    if _ephemeral_key:
+        logger.warning("\n%s", EPHEMERAL_KEY_BANNER)
 
 
 @app.get("/health", tags=["health"], summary="Legacy health check")

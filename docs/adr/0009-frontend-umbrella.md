@@ -1,11 +1,11 @@
 # ADR-0009 — Frontend umbrella (monorepo `cloudflare/*` with shared design workspace)
 
 - **Status:** Accepted (2026-04-19)
-- **Amendment (2026-04-27):** the `apps/digiquant-atlas/cloudflare/` carve-out is removed. Atlas's frontend moved to `cloudflare/atlas/` ([#300](https://github.com/digithings-ai/digithings/issues/300)) as part of folding Atlas into the `digiquant` module ([#297](https://github.com/digithings-ai/digithings/issues/297)). The root `package.json` workspace glob is now just `cloudflare/*`; the `apps/*/frontend` entry was dropped.
+- **Amendment (2026-04-27):** the `apps/digiquant-atlas/cloudflare/` carve-out is removed. Atlas's frontend moved to `cloudflare/atlas/` ([#300](#300)) as part of folding Atlas into the `digiquant` module ([#297](#297)). The root `package.json` workspace glob is now just `cloudflare/*`; the `apps/*/frontend` entry was dropped.
 - **Supersedes (in part):** [ADR-0002 — domain unification](0002-domain-unification.md)
 - **Superseded (in part) by:** [ADR-0018 — digichat path routing](0018-digichat-path-routing.md) — the `chat.digithings.ai` domain target shown in this ADR's directory diagram and "Amendment to ADR-0002" section is replaced by path-based routing at `digithings.ai/chat`. The `cloudflare/` umbrella structure and workspace decision are unaffected.
-- **Related epic:** [#254](https://github.com/digithings-ai/digithings/issues/254)
-- **Parent epic:** [#235](https://github.com/digithings-ai/digithings/issues/235)
+- **Related epic:** [#254](#254)
+- **Parent epic:** [#235](#235)
 
 ## Context
 
@@ -26,12 +26,12 @@ Concurrently, Atlas took the opposite approach: the `digiquant-atlas`
 research project lives inside the monorepo under `apps/digiquant-atlas/`,
 with its Next.js frontend at `apps/digiquant-atlas/cloudflare/`.
 
-Epic [#235](https://github.com/digithings-ai/digithings/issues/235) introduced
+Epic [#235](#235) introduced
 a shared design system (tokens, component primitives, starfield module)
 under `website/`. Three of the five subtasks landed (#244, #245, #246).
-The remaining two — [#240](https://github.com/digithings-ai/digithings/issues/240)
+The remaining two — [#240](#240)
 (digichat adopts shared tokens) and
-[#241](https://github.com/digithings-ai/digithings/issues/241)
+[#241](#241)
 (digichat `/embed` route) — blocked immediately:
 
 - #240 wants digichat's `globals.css` to `@import` the design tokens,

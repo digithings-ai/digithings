@@ -123,6 +123,16 @@ with a PDF export composes finance-tearsheet — see [CHARTS.md](CHARTS.md).
 `@digithings/design/tearsheet/styles.css` is deprecated in favour of the
 family sheet (kept only until digiquant-web/dashboard swap their imports).
 
+The family's **performance math is not in this package.** `live-performance-kpis`
+(live KPIs, base-100 continuity, since-inception, beta/alpha/IR) moved to
+[`@digithings/perf-math`](../perf-math/README.md), which has no React, DOM or
+`@digithings/*` dependency. `finance-tearsheet/index.ts` re-exports every symbol
+from `@digithings/perf-math/live-performance-kpis`, so `@digithings/ui` imports
+keep working — but framework-free consumers (`@digiquant/contract`, Worker
+bundles) import `@digithings/perf-math` directly so they never pull this
+package and its React tree. Do not re-add the math here: a React edge on that
+module is what the split exists to prevent.
+
 Family notes: the dashboard time-series primitives ride **TradingView
 Lightweight Charts** (`lightweight-charts` is a package dependency; hosts fill
 their pane via `autoSize`, so consumers must give the pane a definite height);

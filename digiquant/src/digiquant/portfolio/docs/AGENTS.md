@@ -100,5 +100,5 @@ portfolio tests gate on `tests/dq/portfolio/conftest.py` (full set in `test-rese
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — thesis–commit topology (canonical)
 - [`PORTFOLIO_SUBGRAPH.md`](PORTFOLIO_SUBGRAPH.md) — historical Wave 2 spec
-- the research operator guide
+- research operator guide
 - research runbook

@@ -1,7 +1,7 @@
 "use client";
 
 import { useDocsConfig } from "./config-provider";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../../lib/utils";
 
 export function DocsNav({
   currentPageId,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from typing import TYPE_CHECKING
 
 from cryptography.hazmat.primitives import serialization
@@ -53,11 +54,37 @@ def load_public_key_from_pem(pem: str) -> RSAPublicKey:
     return key
 
 
+#: The process's ephemeral signing key, once one has been generated. It lives
+#: only in this module: it is never exported to os.environ, so child processes
+#: and environment dumps cannot see it.
+_ephemeral_key: RSAPrivateKey | None = None
+_ephemeral_key_lock = threading.Lock()
+
+#: Whether the most recent load_or_create_signing_key() call returned an
+#: ephemeral key. Read it through ephemeral_key_in_use(); callers that hold a
+#: key (digikey.server) should capture it right after their own load.
+_ephemeral_used = False
+
+
+def ephemeral_key_in_use() -> bool:
+    """True when the last load_or_create_signing_key() generated an ephemeral key."""
+    return _ephemeral_used
+
+
 def load_or_create_signing_key() -> tuple[RSAPrivateKey, str]:
     """
     Load DIGIKEY_PRIVATE_KEY_PEM, or generate an ephemeral key only when
-    DIGIKEY_ALLOW_EPHEMERAL_KEY=1 (local Docker default; not for production).
+    the operator opts in with DIGIKEY_ALLOW_EPHEMERAL_KEY=1 (off by default;
+    local dev only, never production).
+
+    The ephemeral key is generated once per process and reused, so it stays
+    stable for the life of the process; it is never written to the environment.
+    Records which of the two it did; see ephemeral_key_in_use().
     """
+    global _ephemeral_key, _ephemeral_used
+    # Cleared first, so any path that raises (a bad PEM, a refusal, a failed
+    # generate) never leaves an earlier ephemeral record behind.
+    _ephemeral_used = False
     pem = (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip()
     kid = (os.environ.get("DIGIKEY_KEY_ID") or "digikey-1").strip() or "digikey-1"
     if pem:
@@ -72,6 +99,21 @@ def load_or_create_signing_key() -> tuple[RSAPrivateKey, str]:
             "digikey requires DIGIKEY_PRIVATE_KEY_PEM, or set DIGIKEY_ALLOW_EPHEMERAL_KEY=1 "
             "for a non-persistent dev key (JWKS rotates on restart)."
         )
-    key = generate_rsa_private_key()
-    os.environ.setdefault("_DIGIKEY_EPHEMERAL_PEM", private_key_to_pem(key))
-    return key, kid
+    # Parsed with int(), as uvicorn does; an unparseable value is refused too,
+    # since it is not a clear single-process setting.
+    workers = os.environ.get("WEB_CONCURRENCY") or ""
+    try:
+        many_workers = bool(workers) and int(workers) > 1
+    except ValueError:
+        many_workers = True
+    if many_workers:
+        raise RuntimeError(
+            f"DIGIKEY_ALLOW_EPHEMERAL_KEY=1 needs a single digikey process, but "
+            f"WEB_CONCURRENCY={workers!r}: each worker would sign with its own key and "
+            "publish a different JWKS. Set DIGIKEY_PRIVATE_KEY_PEM or run one worker."
+        )
+    with _ephemeral_key_lock:
+        if _ephemeral_key is None:
+            _ephemeral_key = generate_rsa_private_key()
+        _ephemeral_used = True
+        return _ephemeral_key, kid

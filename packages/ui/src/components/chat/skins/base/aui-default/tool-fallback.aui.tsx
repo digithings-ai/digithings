@@ -24,7 +24,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "./collapsible";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../../../lib/utils";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { useTraceT } from "../../../trace-i18n";

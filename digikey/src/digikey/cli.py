@@ -7,6 +7,15 @@ import json
 import os
 import sys
 
+#: Scopes ``issue-key`` grants when ``--scopes`` is omitted (#6648). Chat and
+#: search reads only: no MCP edge scope, no write, no admin. ``*`` used to be
+#: the default, and a ``*`` key exchanged at ``/v1/oauth/token`` opened every
+#: MCP edge server for its holder. ``*`` now has to be asked for explicitly
+#: (``--scopes '*'``); a ``dev_global`` key with no ``--scopes`` still gets
+#: ``*``, as before, because that kind is already gated on
+#: ``DIGIKEY_ALLOW_DEV_GLOBAL=1``.
+DEFAULT_ISSUE_KEY_SCOPES: tuple[str, ...] = ("digigraph:chat", "digisearch:query")
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="digikey")
@@ -17,8 +26,12 @@ def _build_parser() -> argparse.ArgumentParser:
     issue.add_argument("--label", default="", help="Human-readable label")
     issue.add_argument(
         "--scopes",
-        default="*",
-        help="Comma-separated scopes or * (default: *)",
+        default=None,
+        help=(
+            "Comma-separated scopes, or * for every scope (must be explicit). "
+            f"Default: {','.join(DEFAULT_ISSUE_KEY_SCOPES)}; a dev_global key "
+            "defaults to *"
+        ),
     )
     issue.add_argument(
         "--kind",
@@ -72,9 +85,29 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def resolve_issue_key_scopes(raw: str | None, kind: str) -> list[str]:
+    """The scopes ``issue-key`` stores for ``--scopes raw`` and ``--kind kind``.
+
+    ``None`` (flag omitted) is :data:`DEFAULT_ISSUE_KEY_SCOPES`, or ``*`` for a
+    ``dev_global`` key. ``*`` is only ever granted when asked for by name.
+    """
+    if raw is None:
+        return ["*"] if kind == "dev_global" else list(DEFAULT_ISSUE_KEY_SCOPES)
+    text = raw.strip()
+    if text == "*":
+        return ["*"]
+    scopes = [s.strip() for s in text.split(",") if s.strip()]
+    if kind == "dev_global" and not scopes:
+        return ["*"]
+    return scopes
+
+
 def _cmd_issue_key(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     if not args.tenant.strip():
         parser.error("--tenant must not be empty")
+    scopes = resolve_issue_key_scopes(args.scopes, args.kind)
+    if not scopes:
+        parser.error("--scopes must name at least one scope")
 
     os.environ.setdefault("DIGIKEY_DATABASE_URL", "")
     if not os.environ.get("DIGIKEY_DATABASE_URL"):
@@ -92,10 +125,6 @@ def _cmd_issue_key(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
 
     init_db()
     raw, prefix = generate_raw_key()
-    scopes_str: str = args.scopes.strip()
-    scopes = ["*"] if scopes_str == "*" else [s.strip() for s in scopes_str.split(",") if s.strip()]
-    if args.kind == "dev_global" and (not scopes or scopes == ["*"]):
-        scopes = ["*"]
 
     row = ApiKeyRow(
         key_hash=hash_secret(raw),

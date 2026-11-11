@@ -41,7 +41,7 @@ This ADR stays **proposed** until the Phase 1 spike in the architecture doc repo
 
 ## Links
 
-- Issue: [#3568](https://github.com/digithings-ai/digithings/issues/3568)
+- Issue: [#3568](#3568)
 - Architecture plan: [`docs/architecture/opencode-digichat-adoption.md`](../architecture/opencode-digichat-adoption.md)
 - digichat modular frontend: [`docs/architecture/digichat-modular-frontend.md`](../architecture/digichat-modular-frontend.md)
 - Superseded by: [ADR-0028](0028-digichat-web-foundation-and-opencode-distribution.md)

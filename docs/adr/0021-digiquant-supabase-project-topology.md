@@ -5,14 +5,14 @@
 
 ## Context
 
-Epic [#1063](https://github.com/digithings-ai/digithings/issues/1063) introduces a
+Epic [#1063](#1063) introduces a
 **strategy store** (per-strategy config, fitted calibration, executed trades, tearsheets,
-live signals) to back DB-driven live tearsheets ([#1069](https://github.com/digithings-ai/digithings/issues/1069)),
+live signals) to back DB-driven live tearsheets ([#1069](#1069)),
 and treats the market datasets (`price_history`, `price_technicals`, `trading_calendar`,
 `economic_calendar`) as a **shared digiquant data layer** repurposable across the suite
 (Olympus, client_repo, the Slapper book).
 
-[#1064](https://github.com/digithings-ai/digithings/issues/1064)'s first acceptance
+[#1064](#1064)'s first acceptance
 criterion originally read *"new Supabase project, separate from the Olympus project."* On
 inspection that is not feasible: the `digiquant.io` Supabase org is on the **free tier
 (2-project limit)** and both slots are used — the Olympus/Atlas project (`project_id
@@ -38,7 +38,7 @@ renamed `core`** (Supabase display name; `config.toml` keeps the stable local al
   — `CREATE TABLE IF NOT EXISTS` + `CREATE POLICY` on the five new tables, with **no**
   `DROP`/`ALTER`/`TRUNCATE` and zero references to existing objects.
 - **No data migration.** The market datasets already reside here; nothing is moved or
-  copied. This obviates [#1065](https://github.com/digithings-ai/digithings/issues/1065)'s
+  copied. This obviates [#1065](#1065)'s
   cross-project copy (superseded — there are no longer two projects to copy between).
 - **Logical separation preserved in code.** The accessor
   ([`digiquant.data.store`](../../digiquant/src/digiquant/data/store/)) resolves
@@ -82,11 +82,11 @@ renamed `core`** (Supabase display name; `config.toml` keeps the stable local al
 
 ## Links
 
-- Epic: [#1063](https://github.com/digithings-ai/digithings/issues/1063).
-- Implements [#1064](https://github.com/digithings-ai/digithings/issues/1064); supersedes the
-  cross-project copy in [#1065](https://github.com/digithings-ai/digithings/issues/1065);
-  consumed by [#1066](https://github.com/digithings-ai/digithings/issues/1066),
-  [#1069](https://github.com/digithings-ai/digithings/issues/1069).
+- Epic: [#1063](#1063).
+- Implements [#1064](#1064); supersedes the
+  cross-project copy in [#1065](#1065);
+  consumed by [#1066](#1066),
+  [#1069](#1069).
 - Migration: `digiquant/supabase/migrations/prod/046_strategy_store.sql`.
 - Accessor: [`digiquant/src/digiquant/data/store/`](../../digiquant/src/digiquant/data/store/).
 - RLS idiom precedent: migration 033.

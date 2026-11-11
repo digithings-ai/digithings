@@ -1,6 +1,6 @@
 # The Cloudflare stack: how it is wired
 
-What runs where, how a request finds it, and what the digithings chat and the tenantb
+What runs where, how a request finds it, and what the digithings chat and the client-tenant
 chat share versus what keeps them apart. Every claim here names the file that
 makes it true.
 
@@ -21,9 +21,9 @@ is reachable only through the Worker that hosts it.
 
 | Worker | Owns | Source |
 |---|---|---|
-| `digithings-digichat` | `digithings.ai` — `/chat*`, `/chat/tenantb*`, `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/api/mcp/helpdesk*`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*` | `apps/digichat-cloudflare/wrangler.toml:57-133` |
+| `digithings-digichat` | `digithings.ai` — `/chat*`, `/chat/<client>*`, `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/api/mcp/helpdesk*`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*` | `apps/digichat-cloudflare/wrangler.toml:57-133` |
 | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (custom domains) | `apps/digithings-stack-cloudflare/wrangler.toml:43-83` |
-| `digiquant-runner`, `fxdesk-runner` | no routes; service-bound workers (`fxdesk-runner` also serves the client_repo data API, ex-`digidata-api`) | `apps/digiquant-runner/wrangler.toml:34-39`, `apps/fxdesk-runner/wrangler.toml:38-43` |
+| `digiquant-runner`, `<client>-runner` | no routes; service-bound workers (`<client>-runner` also serves the client data API, ex-`digidata-api`) | `apps/digiquant-runner/wrangler.toml:34-39`, `apps/<client>-runner/wrangler.toml:38-43` |
 | `digitrace-langfuse` | `trace.digithings.ai` (route commented out) | `apps/digitrace-langfuse/wrangler.toml:27-30` |
 | `digithings-cron`, `corpus-index`, `dashboard-api` | workers.dev only, no routes | `apps/digithings-cron/wrangler.toml:9-13` etc. |
 
@@ -37,7 +37,7 @@ The two that matter for chat are `digithings-digichat` and `digithings-stack`.
 | `DigiStackContainer` | stack | 8000 | 5m | digigraph 8000, digikey 8005, digisearch 8002, digivault 8004, litellm 4000, searxng 8080, redis 6379, and the MCP servers digisearch-mcp 8765, digigraph-mcp 8766, digivault-mcp 8769 |
 | `DigiQuantMcpContainer` | stack | 8767 | 1m | quant MCP |
 | `DigiQuantRunnerContainer` | digiquant-runner | 8080 | 1m→30m | backtests |
-| `FxDeskRunnerContainer` | fxdesk-runner | 8080 | 2m | strategy runner |
+| `<Client>RunnerContainer` | <client>-runner | 8080 | 2m | strategy runner |
 | `LangfuseWebContainer` / `LangfuseWorkerContainer` | digitrace-langfuse | 3000 / 3030 | 5m / 7d | tracing |
 
 Ports are from `apps/digithings-stack-cloudflare/container/supervisor/supervisord.conf:23-177`
@@ -51,7 +51,7 @@ and the per-app `wrangler.toml` container blocks.
 | KV | `TENANT_CONFIG` | **the same id** | stack Worker: `digikey-jwks` |
 | R2 | `MARKET_DATA` | `digithings-archive` | stack market data |
 | R2 | `ARCHIVE` | `digithings-archive` | digiquant-runner |
-| D1 | `FXDESK_DB` | `fxdesk` | digidata-api |
+| D1 | `<CLIENT>_DB` | `<client>` | digidata-api |
 
 One KV namespace is shared by two Workers (`apps/digichat-cloudflare/wrangler.toml:214`,
 `apps/digithings-stack-cloudflare/wrangler.toml:287-289`). That is deliberate: the
@@ -86,12 +86,12 @@ The Pages shell waits for the iframe's `digichat:ready` for **30 seconds**, then
 shows the error card (`apps/digithings-web/components/ChatEmbedShell.tsx:21-22,488,502`).
 A cold start longer than that is what a stuck loading banner actually is.
 
-### 2. `digithings.ai/chat/tenantb`
+### 2. `digithings.ai/chat/<client>`
 
 ```
 browser → digithings-digichat Worker (/chat*)
-  → istenantbShellPath → tenantbGate
-  → valid ?token= or tenantb_invite cookie?  (tenantb_INVITE_KEY, constant-time)
+  → isLegacyInviteShellPath → legacyInviteGate
+  → valid ?token= or <client>_invite cookie?  (<CLIENT>_INVITE_KEY, constant-time)
       no  → fetch /__not-found__ → the site's own 404
       yes → set cookie, rewrite to /chat/embed?host=the gated tenant host,
             move the key to x-embed-token, drop ?token=
@@ -99,8 +99,8 @@ browser → digithings-digichat Worker (/chat*)
   → the app's embed route renders the chat directly (no Pages shell, no iframe)
 ```
 
-One gate, one behaviour: `apps/digichat-cloudflare/src/tenantb-gate.ts` is the only
-place the invite is checked. The token is `tenantb_INVITE_KEY`; the Pages shell and
+One gate, one behaviour: `apps/digichat-cloudflare/src/legacy-invite-gate.ts` is the only
+place the invite is checked. The token is `<CLIENT>_INVITE_KEY`; the Pages shell and
 its twin gate were removed in the 2026-10-27 consolidation.
 
 ### 3. MCP: `search.digithings.ai/_stack/mcp/digisearch/mcp`
@@ -134,19 +134,19 @@ dialled. Auth modes are in `src/mcp-edge-auth.ts:507-539`, the host rewrite in
 
 **Siloed, by tenant key:**
 
-| | digithings chat | tenantb chat |
+| | digithings chat | client-tenant chat |
 |---|---|---|
-| entry URL | `/chat` | `/chat/tenantb` |
-| gate | none | `tenantb_INVITE_KEY` (token or cookie) |
+| entry URL | `/chat` | `/chat/<client>` |
+| gate | none | `<CLIENT>_INVITE_KEY` (token or cookie) |
 | tenant key | `digithings.ai` | `the gated tenant host` |
 | config source | KV `config-yaml` → `deployment` | KV `embed-tenants` → `the gated tenant host` |
 | identity | `authScheme: jwt`, minted in the app | same path, same identity key |
 | MCP servers | digisearch, digivault | helpdesk (static key), digisearch, digivault |
-| tool visibility | house catalog | tenantb catalog + skills pack `tenantb` |
+| tool visibility | house catalog | client catalog + skills pack `<client>` |
 
-The separation is made in exactly two places: the Worker's `tenantbGate` rewrites
-`/chat/tenantb` onto the app's `/chat/embed` route with `host=tenantb.example.com`
-(`apps/digichat-cloudflare/src/tenantb-gate.ts`), and the `tenantb.example.com` row exists
+The separation is made in exactly two places: the Worker's `legacyInviteGate` rewrites
+`/chat/<client>` onto the app's `/chat/embed` route with `host=<client>.digithings.ai`
+(`apps/digichat-cloudflare/src/legacy-invite-gate.ts`), and the `<client>.digithings.ai` row exists
 only in KV (`embed-tenants`) and in the `config-yaml` document. There is no second
 Worker, no second container, no second KV, and no second shell.
 
@@ -160,9 +160,9 @@ could mint a token.
 | What | Where | Precedence |
 |---|---|---|
 | house deployment | KV `config-yaml` | KV → `[vars]`/secret `DIGICHAT_CONFIG_YAML` → file `DIGICHAT_CONFIG_PATH` → `defaults.yaml` |
-| tenants (tenantb, trials) | KV `embed-tenants` | KV host row (after `tokenEnv` refs resolve) → legacy secret → host dropped |
+| tenants (client tenants, trials) | KV `embed-tenants` | KV host row (after `tokenEnv` refs resolve) → legacy secret → host dropped |
 | MCP credentials | Worker secrets, referenced by name (`tokenEnv`) | never in KV |
-| digikey JWKS | KV `digikey-jwks` | KV → `DIGIKEY_SELF` fetch → 401 |
+| digikey JWKS | KV `digikey-jwks` (`{keys, fetchedAt}`, TTL `MCP_EDGE_JWKS_KV_TTL_SEC`, default 600 s) | KV if fresh → `DIGIKEY_SELF` fetch → 401; an unknown `kid` skips KV and fetches live, at most once per isolate every 30 s (`MCP_EDGE_JWKS_FORCED_COOLDOWN_MS`; inside the window it uses the cached/KV keys). Trade-off of the 600 s TTL: after ~10 idle minutes a cold digikey is back on the first request's path, and the 5 s fetch cap can lose to its cold start (seen at 43 s), so that request 401s until digikey is warm |
 | corpus routing | `DIGI_TENANT_CORPUS_MAP` + `_EXTRA` | primary wins on slug collision |
 
 Config is read **once per container boot**, not per request
@@ -186,4 +186,4 @@ idle — not instantly.
 
 the trial tenant's trial and dev chat do not run on this stack: they are the same image on
 Azure Container Apps, configured by their own YAML. The Cloudflare stack is the
-public surface (digithings.ai, tenantb) plus the internal runners.
+public surface (digithings.ai, client tenants) plus the internal runners.
