@@ -24,6 +24,10 @@ ALLOWLIST=(
   "digiquant/src/digiquant/strategies/sdca/nautilus_evaluator.py"
   # Operator ad-hoc Yahoo fetch; yfinance returns pandas DataFrames (#1719).
   "digiquant/scripts/fetch_real_ohlcv.py"
+  # Tearsheet generator: Nautilus account_report/fills_report are pandas and
+  # quantstats/Plotly consume pandas Series. Same documented boundary as
+  # digiquant/src/digiquant/tearsheet.py, which this script wraps.
+  "digiquant/scripts/generate_tearsheets.py"
   # Sandbox shim: re-exports pandas_ta_classic for agent image acceptance (#396).
   "digiquant/sandbox/pandas_ta/__init__.py"
 )

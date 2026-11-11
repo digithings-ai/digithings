@@ -101,5 +101,43 @@ each squashed commit, separated by `---------`, on the squash commit itself,
 on `develop`. Only history states that older commits carry `Signed-off-by`
 trailers; nothing requires them anymore.
 
+## Commit attribution
+
+Every commit names the platform that wrote it in a `Source-Platform:` git
+trailer. The value is one of `claude`, `cursor`, `grok` or `paperclip`
+(matched without regard to case). `grok` means Grok Bot, and Paperclip board
+seats use `paperclip`:
+
+```
+feat(scope): what the commit does
+
+Why it does it.
+
+Source-Platform: grok
+```
+
+- The committer (and author) stays the platform's own identity,
+  `<platform>@local.invalid` (for example
+  `git -c user.name=grok -c user.email=grok@local.invalid commit`). The trailer
+  matches it.
+- The trailer survives a squash merge, because GitHub keeps every squashed
+  commit's message body.
+- Paperclip commits keep their `Paperclip-Run-Id:` and `Paperclip-Agent-Id:`
+  trailers as well.
+- The PR description carries the same value on its `Source-Platform:` line,
+  under `## Source platform` in the template.
+
+The `local-ci` runner checks both (`scripts/local-ci/source_platform.py`) and
+**only warns**: a missing or invalid value, more than one value, or a trailer that
+disagrees with a `<platform>@local.invalid` committer is logged as
+`source-platform WARN:` and never fails a PR. It ignores HTML comments and
+fenced code blocks in the PR body.
+
+**Source-Platform is an unverified, self-declared claim.** Anyone who can write
+a commit message or a PR body can write any value, and nothing ties it to the
+platform that really wrote the change until commits are signed. No gate may
+ever treat it as evidence of authorship, review or trust: it is attribution for
+people reading history, nothing more.
+
 MIT covers copyright only. See [TRADEMARKS.md](TRADEMARKS.md) for what you may
 not reuse.

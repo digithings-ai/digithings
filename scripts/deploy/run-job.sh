@@ -82,12 +82,12 @@ fi
 git -C "$REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
   || { echo "not a git checkout: $REPO" >&2; exit 1; }
 
-# The shared verifier pins the SSH backend, refuses an empty signers file
-# before "Good signature" can be printed, and refuses GPG/X.509. --head binds
-# the tag to the commit this checkout is on.
+# The shared verifier pins the absolute ssh-keygen, refuses an empty signers
+# file before "Good signature" can be printed, refuses GPG/X.509, and requires
+# the release principal. --head binds the tag to the commit this checkout is on.
 VERIFIER="$SCRIPT_DIR/../release/ssh_signers.py"
 if ! verify_out="$(python3 "$VERIFIER" verify-tag --repo "$REPO" --tag "$TAG" \
-    --signers "$SIGNERS" --head 2>&1)"; then
+    --signers "$SIGNERS" --principal "release@digithings" --head 2>&1)"; then
   printf '%s\n' "$verify_out" >&2
   echo "git verify-tag refused '$TAG'." >&2
   exit 1

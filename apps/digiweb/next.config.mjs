@@ -17,7 +17,12 @@ const nextConfig = {
   // One root layout now, so `app/not-found.tsx` is a page body under the
   // shared document. `output: "export"` emits out/404.html from it.
   trailingSlash: true,
-  transpilePackages: ["@digithings/ui", "@digithings/design", "@digithings/hero-banner"],
+  transpilePackages: [
+    "@digithings/ui",
+    "@digithings/perf-math",
+    "@digithings/design",
+    "@digithings/hero-banner",
+  ],
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   turbopack: {
     root: monorepoRoot,

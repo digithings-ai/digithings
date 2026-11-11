@@ -7,7 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../../../lib/utils";
 import type { FC } from "react";
 
 const formatTimingMs = (ms: number | undefined): string => {

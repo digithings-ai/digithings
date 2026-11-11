@@ -612,7 +612,13 @@ def secret_rows() -> list[dict]:
             "name": "CRON_KICK_SECRET",
             "worker": "digithings-cron",
             "required": False,
-            "note": "enables POST /kick and GET /runs/:id",
+            "note": "enables POST /kick, GET /runs/:id, GET /run/backfill/status, and POST /backfill",
+        },
+        {
+            "name": "OPERATOR_KICK_SECRET",
+            "worker": "digithings-cron",
+            "required": False,
+            "note": "optional alternative bearer for the same operator routes; does not rotate CRON_KICK_SECRET",
         },
         {
             "name": "AUTH_SECRET",

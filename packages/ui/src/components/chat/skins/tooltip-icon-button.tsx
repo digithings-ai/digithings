@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn } from "../../../lib/utils";
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 type TooltipIconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {

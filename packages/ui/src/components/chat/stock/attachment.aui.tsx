@@ -35,7 +35,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { useAttachmentSrc } from "./use-attachment-src";
 import { useSkinChrome } from "./skin-chrome";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../lib/utils";
 import { DotMatrix } from "../DotMatrix";
 
 // Protocol literal mirrored from the app's embed-page-context-messages

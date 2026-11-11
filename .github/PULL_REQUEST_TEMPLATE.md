@@ -14,6 +14,20 @@ Fixes #
 
 ---
 
+## Source platform
+
+<!--
+The platform that wrote this PR: claude, cursor, grok or paperclip. Each
+commit carries the same value as a `Source-Platform:` trailer, and the
+committer stays that platform's own <platform>@local.invalid identity. See
+CONTRIBUTING.md "Commit attribution". This is a self-declared claim, not
+evidence: local-ci only warns when it is missing or invalid.
+-->
+
+Source-Platform:
+
+---
+
 ## Component
 
 <!-- Check all that apply -->

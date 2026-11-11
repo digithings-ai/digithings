@@ -1,0 +1,178 @@
+# Forgejo pytest job (non-required): runs the ruff-and-scripts pytest selection
+# (unit/baseline markers only) so no paid or live model call can occur. Keys are
+# blanked and tenantb_SMOKE_SKIP_TURN=1; a single global concurrency group keeps the
+# shared runner's backlog bounded. Reuses the local-ci-cache volume. NOT listed in
+# branch protection required contexts.
+name: pytest
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [develop]
+concurrency:
+  group: local-ci-pytest
+  cancel-in-progress: false
+jobs:
+  pytest:
+    name: pytest
+    runs-on: local-ci
+    timeout-minutes: 45
+    env:
+      tenantb_SMOKE_SKIP_TURN: "1"
+      DO_NOT_TRACK: "1"
+      UV_VERSION: "0.10.2"
+      GITLEAKS_VERSION: "8.30.1"
+      ACTIONLINT_VERSION: "1.7.12"
+      BUN_VERSION: "1.4.2"
+      SHELLCHECK_VERSION: "0.11.0"
+      UV_PYTHON: "3.12"
+      UV_CACHE_DIR: /opt/local-ci-cache/uv
+      UV_PYTHON_INSTALL_DIR: /opt/local-ci-cache/python
+      UV_LINK_MODE: copy
+      # verdict_signing refuses an in-repo cryptography
+      UV_PROJECT_ENVIRONMENT: /tmp/pytest-venv
+      LOCAL_CI_WT: ${{ github.workspace }}  # local_ci.run_step_pool refuses a missing worktree root; point it at the checkout
+      npm_config_cache: /opt/local-ci-cache/npm
+      BUN_INSTALL_CACHE_DIR: /opt/local-ci-cache/bun
+      OPENAI_API_KEY: ""
+      ANTHROPIC_API_KEY: ""
+      OPENROUTER_API_KEY: ""
+      GEMINI_API_KEY: ""
+      GOOGLE_API_KEY: ""
+      XAI_API_KEY: ""
+      GROQ_API_KEY: ""
+      MISTRAL_API_KEY: ""
+      DEEPSEEK_API_KEY: ""
+      TOGETHER_API_KEY: ""
+      LITELLM_API_KEY: ""
+      LITELLM_MASTER_KEY: ""
+      # commit identity for throwaway commits in temp repos (env vars only; no git config written)
+      GIT_AUTHOR_NAME: "forgejo-pytest"
+      GIT_AUTHOR_EMAIL: "forgejo-pytest@localhost"
+      GIT_COMMITTER_NAME: "forgejo-pytest"
+      GIT_COMMITTER_EMAIL: "forgejo-pytest@localhost"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install the host runner's tools (same versions as the Mac)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCH="$(uname -m)"
+          case "$ARCH" in
+            x86_64) UV_ARCH="x86_64"; GL_ARCH="x64"; AL_ARCH="amd64"; SC_ARCH="x86_64"; BUN_ARCH="x64" ;;
+            aarch64) UV_ARCH="aarch64"; GL_ARCH="arm64"; AL_ARCH="arm64"; SC_ARCH="aarch64"; BUN_ARCH="aarch64" ;;
+            *) echo "unsupported arch $ARCH"; exit 1 ;;
+          esac
+          mkdir -p /opt/local-ci-cache/tools /usr/local/bin
+
+          DIR="/opt/local-ci-cache/tools/uv-${UV_VERSION}"
+          if [ ! -d "$DIR" ]; then
+            mkdir -p "$DIR"
+            curl -fsSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ARCH}-unknown-linux-gnu.tar.gz" | tar -xz --strip-components=1 -C "$DIR"
+          fi
+          ln -sf "$DIR/uv" /usr/local/bin/uv
+          ln -sf "$DIR/uvx" /usr/local/bin/uvx
+
+          DIR="/opt/local-ci-cache/tools/gitleaks-${GITLEAKS_VERSION}"
+          if [ ! -d "$DIR" ]; then
+            mkdir -p "$DIR"
+            curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GL_ARCH}.tar.gz" | tar -xz -C "$DIR"
+          fi
+          ln -sf "$DIR/gitleaks" /usr/local/bin/gitleaks
+
+          DIR="/opt/local-ci-cache/tools/actionlint-${ACTIONLINT_VERSION}"
+          if [ ! -d "$DIR" ]; then
+            mkdir -p "$DIR"
+            curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${AL_ARCH}.tar.gz" | tar -xz -C "$DIR"
+          fi
+          ln -sf "$DIR/actionlint" /usr/local/bin/actionlint
+
+          DIR="/opt/local-ci-cache/tools/shellcheck-${SHELLCHECK_VERSION}"
+          if [ ! -d "$DIR" ]; then
+            mkdir -p "$DIR"
+            curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.${SC_ARCH}.tar.xz" | tar -xJ -C "$DIR" --strip-components=1
+          fi
+          ln -sf "$DIR/shellcheck" /usr/local/bin/shellcheck
+
+          DIR="/opt/local-ci-cache/tools/bun-${BUN_VERSION}"
+          if [ ! -d "$DIR" ]; then
+            mkdir -p "$DIR"
+            curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-${BUN_ARCH}.zip" -o /tmp/bun.zip
+            unzip -q /tmp/bun.zip -d "$DIR"
+            rm -f /tmp/bun.zip
+          fi
+          ln -sf "$DIR/bun-linux-${BUN_ARCH}/bun" /usr/local/bin/bun
+          mkdir -p /root/.bun/bin
+          ln -sf "$DIR/bun-linux-${BUN_ARCH}/bun" /root/.bun/bin/bun
+
+          uv python install 3.12
+          PYBIN="$(uv python find 3.12)"
+          ln -sf "$PYBIN" /usr/local/bin/python3
+
+          echo "=== tool versions ==="
+          uv --version
+          gitleaks version
+          actionlint --version
+          shellcheck --version
+          bun --version
+          python3 --version
+      - name: Sync dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --frozen --all-packages --all-extras
+      - name: Run pytest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ctypes, os, signal, subprocess, sys
+          # PID 1 in the container does not reap orphans, so a killed pytest
+          # leaves grandchild zombies that read as "alive" to tests. Become a
+          # child subreaper and reap every descendant until pytest exits.
+          PR_SET_CHILD_SUBREAPER = 36
+          libc = ctypes.CDLL("libc.so.6", use_errno=True)
+          if libc.prctl(PR_SET_CHILD_SUBREAPER, 1) != 0:
+              raise SystemExit("prctl(PR_SET_CHILD_SUBREAPER) failed")
+          cmd = [
+              "uv", "run", "--frozen", "--no-sync", "pytest",
+              "tests/scripts/", "tests/config/", "tests/agents/",
+              "tests/integration/test_request_id_hops.py", "tests/baseline/",
+              "tests/provider_review/",
+              "-m", "unit or baseline",
+              "--tb=short", "-p", "no:cacheprovider",
+              "--ignore=tests/baseline/test_cli.py",
+              "-rfE", "--durations=15",
+              "--junitxml=/tmp/pytest-junit.xml",
+          ]
+          proc = subprocess.Popen(cmd)
+          rc = None
+          while True:
+              try:
+                  pid, status = os.wait()
+              except ChildProcessError:
+                  break
+              if pid == proc.pid:
+                  if os.WIFEXITED(status):
+                      rc = os.WEXITSTATUS(status)
+                  elif os.WIFSIGNALED(status):
+                      rc = 128 + os.WTERMSIG(status)
+                  else:
+                      rc = 1
+                  break
+          # Reap any stragglers that exited after pytest.
+          while True:
+              try:
+                  pid, _ = os.waitpid(-1, os.WNOHANG)
+              except ChildProcessError:
+                  break
+              if pid == 0:
+                  break
+          if rc is None:
+              rc = 1
+          sys.exit(rc)
+          PY

@@ -38,7 +38,7 @@ const OPEN_ISSUE_ITEMS = [
   {
     number: 3445,
     title: "website: progressively enhance repository section with live GitHub data",
-    html_url: "https://github.com/digithings-ai/digithings/issues/3445",
+    html_url: "#3445",
     updated_at: "2026-09-02T19:57:46Z",
   },
 ];

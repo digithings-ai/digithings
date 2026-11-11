@@ -7,14 +7,20 @@
     "url": "git+https://github.com/digithings-ai/digithings.git",
     "directory": "packages/hero-banner"
   },
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "One banner definition, rendered to a terminal (half-blocks, OpenTUI) and to the web (canvas). Spec: docs/architecture/hero-banner-spec.md.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./definitions": "./src/definitions/index.ts",
     "./web": "./src/web.tsx"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "test": "bun test",

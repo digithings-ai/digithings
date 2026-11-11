@@ -1,6 +1,6 @@
 # Nautilus Strategy Wrappers
 
-Short reference. Full catalog: [NAUTILUS_STRATEGIES.md](../../../docs/NAUTILUS_STRATEGIES.md). Full navigation: [NAUTILUS_NAVIGATION.md](../../../docs/NAUTILUS_NAVIGATION.md).
+Short reference. Full catalog: [NAUTILUS_STRATEGIES.md](../../../docs/NAUTILUS_STRATEGIES.md). Full navigation: the Nautilus navigation guide.
 
 | digiquant name      | Nautilus strategy          | Data type |
 |---------------------|---------------------------|-----------|

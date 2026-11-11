@@ -1530,8 +1530,8 @@ env:
     compose_files: []
     env_example_files: []
     compose_literal: []
-  # Placeholder: the operator sets SUPABASE_URL for the target project at
-  # deploy time. No live project ref belongs in the public tree.
+  # Placeholder: the operator sets the project URL for the target deployment
+  # at deploy time. No live project ref belongs in the public tree.
   wrangler_values:
     dashboard-api: https://example.supabase.co
     digithings-stack: https://example.supabase.co
@@ -1637,7 +1637,11 @@ secrets:
 - name: CRON_KICK_SECRET
   worker: digithings-cron
   required: false
-  note: enables POST /kick and GET /runs/:id
+  note: enables POST /kick, GET /runs/:id, GET /run/backfill/status, and POST /backfill
+- name: OPERATOR_KICK_SECRET
+  worker: digithings-cron
+  required: false
+  note: optional alternative bearer for the same operator routes; does not rotate CRON_KICK_SECRET
 - name: AUTH_SECRET
   worker: digithings-digichat, digithings-stack
   required: true

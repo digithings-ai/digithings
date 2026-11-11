@@ -8,7 +8,7 @@ the research BFF / dashboard calls before rendering — the upstream pipeline st
 writes one canonical row per day to ``daily_snapshots`` (Phase 7), and this
 function adapts that row for the calling user.
 
-Issue: `#312 <https://github.com/digithings-ai/digithings/issues/312>`_.
+Issue: `#312 <#312>`_.
 
 Return shape — a sibling dataclass, not a v2 envelope
 -----------------------------------------------------

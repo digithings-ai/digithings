@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""The box's `gh` shim. Put this directory first on PATH.
+
+It runs `gh-app-token gh`: GH_TOKEN comes from the App token file, the real
+`gh` gets an empty config directory, and with no valid token it refuses
+(exit 69). It never falls back to a stored `gh` login.
+
+GH_APP_TOKEN_ROLE (author, reviewer or queue) must be set: there is no default
+role, and with it unset or empty the shim refuses. Only calls that go through
+this shim are covered: a direct `/usr/bin/gh` call, or a `gh` that finds a
+login in `~/.config/gh/hosts.yml`, bypasses it, so remove that login first.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+_SELF = Path(os.path.abspath(__file__))
+_ROOT = _SELF.parents[2]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from scripts.dt_broker.boxtoken import main  # noqa: E402  (the path is set above)
+
+if __name__ == "__main__":
+    raise SystemExit(main(["gh", *sys.argv[1:]], shims=(_SELF.resolve(),)))

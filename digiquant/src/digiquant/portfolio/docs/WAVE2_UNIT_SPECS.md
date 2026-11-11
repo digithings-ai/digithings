@@ -1,6 +1,6 @@
 # Wave 2 Unit Specs — portfolio implementation
 
-> **Superseded for implementation:** [#930](https://github.com/digithings-ai/digithings/issues/930) shipped thesis–commit.
+> **Superseded for implementation:** [#930](#930) shipped thesis–commit.
 > **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13.2.
 > **Live topology:** [`ARCHITECTURE.md`](ARCHITECTURE.md). H-path name mapping: W2-C/D/E/F/G → thesis/market/vehicle_map/analyst/deliberation/direction; sizing = `phase7e_risk_sizing`; commit = `commit`.
 

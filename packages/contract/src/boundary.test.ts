@@ -23,7 +23,7 @@ function position(ticker: string, weightActual: number): Position {
 }
 
 describe("@digiquant/contract boundary", () => {
-  it("keeps shared modules free of app-relative imports", () => {
+  it("keeps shared modules free of app-relative imports and React", () => {
     const dir = new URL(".", import.meta.url).pathname;
     const sources = readdirSync(dir).filter(
       (name) => name.endsWith(".ts") && !name.endsWith(".test.ts"),
@@ -33,6 +33,10 @@ describe("@digiquant/contract boundary", () => {
       const text = readFileSync(join(dir, name), "utf8");
       expect(text, name).not.toMatch(/apps\/dashboard/);
       expect(text, name).not.toMatch(/\.\.\/\.\.\/dashboard/);
+      // Framework-free: the R5 Worker bundle imports this package, so a React
+      // or @digithings/ui edge here would drag the component layer in.
+      expect(text, name).not.toMatch(/from\s+["']react(-dom)?["']/);
+      expect(text, name).not.toMatch(/@digithings\/ui/);
     }
   });
 

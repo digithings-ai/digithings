@@ -2,8 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-04-29
-- **Related issue:** [#492](https://github.com/digithings-ai/digithings/issues/492)
-- **Related fix:** [#490](https://github.com/digithings-ai/digithings/issues/490) (bias Literal failures that motivated this ADR)
+- **Related issue:** [#492](#492)
+- **Related fix:** [#490](#490) (bias Literal failures that motivated this ADR)
 
 ## Context
 

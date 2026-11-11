@@ -11,7 +11,7 @@ like any hand-authored skill.
 Design decision record: [ADR-0023](../docs/adr/0023-digiskills-agent-skill-compiler.md).
 Phase plan (P0 ADR → P1 compiler core → P2 dogfood → P3 external pilot → P4
 hosted platform, explicitly deferred): tracking epic
-[#1453](https://github.com/digithings-ai/digithings/issues/1453).
+[#1453](#1453).
 
 **Status:** P1 (skill compiler core) + P2 (dogfood) shipped. P3 pre-flight
 hardening (SSRF, memory cap, secret redaction, untrusted-content flagging on

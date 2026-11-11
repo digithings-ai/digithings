@@ -4,7 +4,7 @@
 
 Authoritative voice, CTA, and section-map reference for all public surfaces. Implements Layer D of the design evolution spec. Competitor copy scans that used to sit beside this guide were removed with the old design reference.
 
-**Related:** [`EVOLUTION.md`](EVOLUTION.md) (strategy) · [`README.md`](README.md) (tokens) · [Epic #1200](https://github.com/digithings-ai/digithings/issues/1200)
+**Related:** [`EVOLUTION.md`](EVOLUTION.md) (strategy) · [`README.md`](README.md) (tokens) · [Epic #1200](#1200)
 
 ---
 

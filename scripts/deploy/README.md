@@ -11,7 +11,6 @@ install a launchd job.
 | `digichat` | `digichat-vX.Y.Z` | `apps/digichat-cloudflare` | `digithings-digichat` |
 | `cron` | `cron-vX.Y.Z` | `apps/digithings-cron` | `digithings-cron` |
 | `runner` | `runner-vX.Y.Z` | `apps/digiquant-runner` | `digiquant-runner` |
-| `dashboard-api` | `dashboard-api-vX.Y.Z` | `apps/dashboard-api` | `dashboard-api` |
 | `corpus-index` | `corpus-index-vX.Y.Z` | none (job disarmed; source is `apps/corpus-index`) | `corpus-index` |
 
 `corpus-index` source has been on `develop` since #5853 (`apps/corpus-index`),
@@ -24,9 +23,16 @@ Cloudflare setting. Arming it is a separate change.
 Every job refuses unless all of these hold:
 
 1. The tag name is `<job>-vX.Y.Z`.
-2. `git verify-tag` passes against `scripts/deploy/allowed_signers`.
-3. That file contains at least one public key. It ships with none, so
-   every tag is refused until the maintainer adds his signing key.
+2. `git verify-tag` passes against `scripts/deploy/allowed_signers`, the
+   signature also verifies for exactly `promotion@local.invalid`
+   (`ssh-keygen -Y verify -I`), and the tagger email is that principal.
+   On a real run (not the test suite), `allowed_signers` must hold exactly one
+   line of the form `promotion@local.invalid namespaces="git" ssh-ed25519 <key>`,
+   and its fingerprint must equal `PROMOTION_FP` pinned in `run-job.sh`. Rotating
+   the key changes both in one reviewed PR.
+3. That file contains at least one public key. It holds only the
+   promotion identity's key (private half in the Mac keychain), so only
+   promotion-signed tags pass; an empty file refuses every tag.
 4. The checkout is clean and `HEAD` is the tagged commit.
 
 A live `wrangler deploy` is not in these scripts. `--live` exits 2.

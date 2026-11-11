@@ -20,7 +20,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "./ui/collapsible";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../lib/utils";
 import { useExportKeepMounted } from "../../../replay/export-mount";
 import { toolRowTitle } from "./tool-display";
 import { Button } from "./ui/button";

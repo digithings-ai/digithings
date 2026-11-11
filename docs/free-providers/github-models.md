@@ -22,7 +22,7 @@ source_urls:
 > shut down for everyone on 2026-07-30 (confirmed dead by probe 2026-08-30).
 > Do not configure. See the setup tombstone:
 > [`../providers/github_models.md`](../providers/github_models.md) and tracker
-> [#1589](https://github.com/digithings-ai/digithings/issues/1589).
+> [#1589](#1589).
 >
 > Prefer Groq / Gemini Flash / Cerebras for free eval, GitHub Copilot for PR
 > review, or Microsoft Foundry for Azure-backed production.

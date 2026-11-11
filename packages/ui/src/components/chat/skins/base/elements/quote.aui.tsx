@@ -7,7 +7,7 @@ import {
   SelectionToolbarPrimitive,
 } from "@assistant-ui/react";
 import { QuoteIcon, XIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../../../lib/utils";
 
 function QuoteBlockRoot({ className, ...props }: ComponentProps<"div">) {
   return (

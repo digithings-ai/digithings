@@ -2,7 +2,7 @@
 
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "@/lib/utils"
+import { cn } from "../../../../lib/utils"
 import { useStockShape } from "../stock-shape"
 
 const buttonVariants = cva(

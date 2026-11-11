@@ -15,7 +15,7 @@ Jun 17–19 production delta runs cost **147 LLM calls / 726s / $11.95** each, p
 
 ### 2026-06-20 amendment trigger
 
-Jun-20 design review ([#930](https://github.com/digithings-ai/digithings/issues/930), absorbing [#924](https://github.com/digithings-ai/digithings/issues/924)) concluded that **graph forks cannot solve continuity or cost**. Even "delta" runs re-generated full documents and re-ran the entire Hermes fan-out. The fix is **artifact-layer continuity** (`resolve_edit_mode` → `DocumentPatch` → programmatic merge) plus **one thesis-aware Hermes graph** (H1–H9) — not `OLYMPUS_HERMES_LITE`, not baseline-vs-delta workflow shapes, and not a second graph builder per cost tier.
+Jun-20 design review ([#930](#930), absorbing [#924](#924)) concluded that **graph forks cannot solve continuity or cost**. Even "delta" runs re-generated full documents and re-ran the entire Hermes fan-out. The fix is **artifact-layer continuity** (`resolve_edit_mode` → `DocumentPatch` → programmatic merge) plus **one thesis-aware Hermes graph** (H1–H9) — not `OLYMPUS_HERMES_LITE`, not baseline-vs-delta workflow shapes, and not a second graph builder per cost tier.
 
 ## Decision
 
@@ -26,7 +26,7 @@ Adopt a **single daily Olympus graph** for `digiquant.olympus`: Atlas A0–A4 �
 3. **Thesis-aware Hermes (H1–H9).** Replace the legacy 4-axis 7C fan-out, bull/bear 7CD stack, and post-PM thesis derivation with: market thesis review/exploration (H1–H2) → vehicle map (H3) → opportunity screener (H4) → unified `AnalystPayload` per ticker (H5) → PM↔analyst deliberation (H6) → PM direction memo (H7) → deterministic 7E sizer (H8) → `commit_run` (H9). Debate is convergence-based (H6), not anonymous bull/bear personas.
 4. **PM direction-only + 7E as the deterministic feasible-set sizer** *(unchanged intent from 2026-06-19).* The PM emits direction + conviction ranks + rationale (no weights). 7E owns all magnitudes via a decompose-and-shrink recipe: EWMA vols + Ledoit-Wolf shrinkage-to-constant-correlation (with PSD repair and a thin-history asset-class-bucket fallback), inverse-vol base + bounded conviction tilt + vol-target lever + caps, and no-trade bands. **Cash is a residual of the constraints, not an LLM choice.**
 5. **`commit_run` terminal phase** *(unchanged intent from 2026-06-19).* A single phase after 7E upserts `positions`/`nav_history`/`theses` and publishes the operator brief from the **same final post-7E weights**, with an idempotent `decision_log` append and fail-closed coherence checks — so the brief always matches the book. Phase-9 evolution LLM (9A–9C) is **not** on the daily path; beliefs distillation is on-demand only.
-6. **Cost control = model tier only.** `OLYMPUS_MODEL_TIER` (`cheap` \| `balanced` \| `quality`) routes LLM nodes via `config/olympus_models.yaml`. Validate cheap-tier JSON reliability ([#926](https://github.com/digithings-ai/digithings/issues/926)) before defaulting edit-mode schemas to `cheap`. Target **≤20 LLM calls** on a quiet day — re-baselined after thesis-first wiring.
+6. **Cost control = model tier only.** `OLYMPUS_MODEL_TIER` (`cheap` \| `balanced` \| `quality`) routes LLM nodes via `config/olympus_models.yaml`. Validate cheap-tier JSON reliability ([#926](#926)) before defaulting edit-mode schemas to `cheap`. Target **≤20 LLM calls** on a quiet day — re-baselined after thesis-first wiring.
 
 This boundary preserves [ADR-0015](0015-atlas-vs-hermes.md): Atlas stays research-only; Hermes owns analysis/allocation; the sizer is deterministic code.
 
@@ -48,7 +48,7 @@ This boundary preserves [ADR-0015](0015-atlas-vs-hermes.md): Atlas stays researc
 
 ## Links
 
-- Epic: [#930](https://github.com/digithings-ai/digithings/issues/930) (absorbs #924); child issues #925, #927–#929, #932, #934–#937; benchmark #926; **abandoned:** #931 lite graph.
+- Epic: [#930](#930) (absorbs #924); child issues #925, #927–#929, #932, #934–#937; benchmark #926; **abandoned:** #931 lite graph.
 - **Canonical spec:** `docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`; **plan:** `2026-06-20-olympus-daily-thesis.md` (removed DIG-3399; git history keeps it).
 - **Historical (forensics only):** `docs/superpowers/specs/2026-06-19-olympus-mvp-delta-design.md`; `2026-06-19-olympus-mvp-delta.md` (removed DIG-3399; git history keeps it).
 - Supersedes (in part): [ADR-0019](0019-unified-atlas-workflow.md) — its "Hermes always re-runs, it's cheap" delta premise.

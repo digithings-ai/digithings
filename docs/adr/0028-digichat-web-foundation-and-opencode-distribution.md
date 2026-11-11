@@ -15,7 +15,7 @@ ship as **1.5** on `develop`. Do not merge the 2.0 UI/stream migration into
 `develop` until a 2.0 release is intended — release-please on `develop` would
 otherwise fold it into 1.5 or force a major too early. Do not add 1.x UI
 features that 2.0 will replace (composer/palette/overlays/chrome; hold
-[#3565](https://github.com/digithings-ai/digithings/issues/3565)). Agents
+[#3565](#3565)). Agents
 must not ship UI nits on the 1.4/1.5 line.
 
 ## Context
@@ -275,15 +275,15 @@ right architecture.
 
 - Implement assistant-ui + AI SDK v7 + standard UI parts as **digichat 2.0**
   on a draft PR that must **not** merge to `develop` until the 2.0 cut:
-  [#3626](https://github.com/digithings-ai/digithings/issues/3626). Use
+  [#3626](#3626). Use
   `feat(digichat)!:` / `BREAKING CHANGE` so release-please treats it as 2.0
   when it lands.
 - 1.5 on `develop` stays **non-UI** (BFF, auth, persistence, tenant/embed
   policy, adapters). Do not land composer/palette/overlay/chrome on 1.x.
-- Hold [#3565](https://github.com/digithings-ai/digithings/issues/3565)
+- Hold [#3565](#3565)
   permanently on the 1.x chrome. Its product semantics remain useful on 2.0,
   but overlay/palette work on `digichat-ui` would be throwaway.
-- Continue [#3602](https://github.com/digithings-ai/digithings/issues/3602);
+- Continue [#3602](#3602);
   structural DOM sanitization for dashboard-to-digichat page context is
   renderer-independent.
 - AG-UI is out of scope. ACP remains optional editor/workspace gateway only.
@@ -294,8 +294,8 @@ therefore never advanced beyond proposed and is superseded rather than adopted.
 
 ## Links
 
-- Decision issue: [#3623](https://github.com/digithings-ai/digithings/issues/3623)
-- Implementation follow-up: [#3626](https://github.com/digithings-ai/digithings/issues/3626)
+- Decision issue: [#3623](#3623)
+- Implementation follow-up: [#3626](#3626)
 - Superseded ADR: [ADR-0027](0027-opencode-digichat-cli-foundation.md)
 - Superseded research plan:
   [OpenCode as digichat CLI/TUI foundation](../architecture/opencode-digichat-adoption.md)

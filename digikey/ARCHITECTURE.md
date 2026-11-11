@@ -211,7 +211,7 @@ Rules:
 
 - Claims are looked up from `digikey_user_profile_pointers` at mint time (`grant_type=bff_session` only). `api_key` grants never carry them (machine principals, not users).
 - Updating a profile bumps `profile_version`; the next token exchange embeds the new value. Already-issued JWTs keep the old version until expiry (short TTL).
-- digikey stores only the **pointer** (id + version + subject). Full investment-profile / asset-preferences payload CRUD is [#307](https://github.com/digithings-ai/digithings/issues/307); this table is the interim identity seam until digistore (#172).
+- digikey stores only the **pointer** (id + version + subject). Full investment-profile / asset-preferences payload CRUD is [#307](#307); this table is the interim identity seam until digistore (#172).
 
 ### License claims (`digichat-license`)
 
@@ -518,6 +518,8 @@ At high exchange rates, bcrypt is the bottleneck. digikey does not cache exchang
 ### Multi-instance considerations
 
 Each digikey instance generates its own ephemeral key when `DIGIKEY_ALLOW_EPHEMERAL_KEY=1`. Multiple instances would publish different JWKS documents, causing cross-instance token verification failures. In any multi-instance deployment, `DIGIKEY_PRIVATE_KEY_PEM` must be identical across instances (e.g., injected from a shared secret store).
+
+The ephemeral key lives in one process's memory, so ephemeral mode needs a single digikey process: no uvicorn `--workers` (the loader refuses when `WEB_CONCURRENCY` is above 1), and every `--reload` restart means a new key.
 
 ---
 

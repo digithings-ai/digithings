@@ -11,7 +11,7 @@
 import {
   computeLivePerformanceKpis,
   sinceInceptionPctFromNav,
-} from '@digithings/ui';
+} from '@digithings/perf-math';
 import {
   chainNavContinuity,
   currentNavRun,

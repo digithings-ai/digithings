@@ -17,7 +17,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "./ui/collapsible";
-import { cn } from "@/lib/utils";
+import { cn } from "../../../lib/utils";
 import { useExportKeepMounted } from "../../../replay/export-mount";
 import { useTraceT } from "../trace-i18n";
 import { stockRadius, useStockShape } from "./stock-shape";

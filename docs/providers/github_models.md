@@ -29,5 +29,5 @@ longer works after the retirement cutover. Brownouts ran 2026-07-16 and
 
 - Snapshot: [`snapshots/github_models.yaml`](snapshots/github_models.yaml)
   (notes the 2026-07-30 retirement)
-- Tracker: [#1589](https://github.com/digithings-ai/digithings/issues/1589)
+- Tracker: [#1589](#1589)
 - Changelog: https://github.blog/changelog/ (GitHub Models retirement)
