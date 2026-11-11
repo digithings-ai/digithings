@@ -32,7 +32,7 @@ import { useMotionSafe } from "../../motion/primitives";
  * card content.
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/deck.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/deck.css";
  *                 @source "<path-to>/packages/ui/src/components/deck";
  */
 

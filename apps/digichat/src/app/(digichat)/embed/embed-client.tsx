@@ -28,7 +28,7 @@ import { isWebSearchEnabled } from "@/lib/web-search-pref";
 import { Key, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
-import { ContactMailto } from "@digithings/ui";
+import { ContactMailto } from "@digithings-ai/ui";
 import { ProductStockShell } from "@/components/stock/product-shell";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
@@ -46,7 +46,7 @@ import {
   type EmbedChatPrefs,
   type EmbedChatPrefsApi,
   isStockComposerMenuKind,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import { EmbedComposerMenu, type ComposerMenuKind } from "@/components/stock/embed-composer-menu";
 import { replaceMcpConfig, connectedMcpConfigs, mcpSessionOverlayHeaderValue } from "@/components/stock/embed-mcp-flow";
 import { useAui, useAuiEvent } from "@assistant-ui/react";
@@ -59,7 +59,7 @@ import {
   showModelPicker,
 } from "@/lib/session-model-seed";
 import { toolControlFor } from "@/lib/tool-control";
-import { skinOwnsPageChrome } from "@digithings/ui/chat/skins";
+import { skinOwnsPageChrome } from "@digithings-ai/ui/chat/skins";
 import {
   useBYOKKey,
   type BYOKProvider,
@@ -129,7 +129,7 @@ import {
   READY_EVENT,
   resolveReadyTargetOrigin,
 } from "@/lib/embed-seed-messages";
-import { signalDigichatBootStep } from "@digithings/ui/chat/boot-signal";
+import { signalDigichatBootStep } from "@digithings-ai/ui/chat/boot-signal";
 import { startWarmup } from "@/lib/warmup-gate";
 import {
   formatParentErrorLine,
@@ -152,7 +152,7 @@ import {
   type EmbedTheme,
   type EmbedUserTheme,
 } from "@/lib/embed-theme-messages";
-import { applyDocumentTheme, readPaintedTheme, readThemeState, type PaletteName } from "@digithings/ui/theme";
+import { applyDocumentTheme, readPaintedTheme, readThemeState, type PaletteName } from "@digithings-ai/ui/theme";
 import {
   pageContextCreateAttachment,
   parsePageContextMessage,

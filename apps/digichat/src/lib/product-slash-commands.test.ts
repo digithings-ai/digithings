@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SLASH_COMMANDS, slashHelpText } from "@digithings/digichat-ui";
+import { SLASH_COMMANDS, slashHelpText } from "@digithings-ai/digichat-ui";
 import {
   DEFAULT_EMBED_CHAT_PREFS,
   type EmbedChatPrefsApi,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import { emptyMcpConfig } from "@/components/stock/embed-mcp-flow";
 import {
   buildProductSlashCommands,

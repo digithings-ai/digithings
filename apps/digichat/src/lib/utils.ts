@@ -1,1 +1,1 @@
-export { cn } from "@digithings/ui/cn";
+export { cn } from "@digithings-ai/ui/cn";

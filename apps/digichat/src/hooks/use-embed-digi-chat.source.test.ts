@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
  * without going through `handleSubmit`, and each one used to leave the phone
  * keyboard up over the streaming answer. Those paths meet in this hook, so the
  * dismissal belongs at the entry points asserted here. The helper is unit
- * tested next door in `@digithings/ui`; this file pins that it is actually
+ * tested next door in `@digithings-ai/ui`; this file pins that it is actually
  * called.
  */
 const here = dirname(fileURLToPath(import.meta.url));
@@ -41,6 +41,6 @@ describe("keyboard dismissal on every send path", () => {
   });
 
   it("imports the dismissal from the shared kit rather than re-implementing it", () => {
-    expect(source).toContain('from "@digithings/ui/chat/composer-keyboard"');
+    expect(source).toContain('from "@digithings-ai/ui/chat/composer-keyboard"');
   });
 });

@@ -7,7 +7,7 @@ import { buildProductRuntimeAdapters } from "@/components/stock/product-shell";
 import type { DigichatClientFeatures } from "@/lib/deploy-config";
 import type { AssistantRuntime } from "@assistant-ui/react";
 import type { UIMessage } from "ai";
-import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
+import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings-ai/digichat-ui";
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { type BYOKProvider } from "@/hooks/use-byok-key";
 import { p } from "@/lib/base-path";
@@ -20,7 +20,7 @@ import {
   messageActivities,
 } from "@/lib/chat-activity";
 import { conversationIdFromParts } from "@/lib/ui-stream-parts";
-import { dismissKeyboardIfCoarse } from "@digithings/ui/chat/composer-keyboard";
+import { dismissKeyboardIfCoarse } from "@digithings-ai/ui/chat/composer-keyboard";
 import {
   setPendingForceTool,
   setPendingTurnMode,

@@ -1,8 +1,8 @@
-// Thin adapter over the canonical kit Card family (@digithings/ui/ui). The
+// Thin adapter over the canonical kit Card family (@digithings-ai/ui/ui). The
 // root pins dress="chat" so the rendered look stays exactly digichat's current
 // shadcn-derived dress (size "default" | "sm", data-slot/data-size hooks
 // preserved); the parts inherit the dress through the kit's Card context. The
-// chat tone lives in @digithings/ui/styles/controls-core.css (.ctl-card-chat*).
+// chat tone lives in @digithings-ai/ui/styles/controls-core.css (.ctl-card-chat*).
 
 import {
   Card as KitCard,
@@ -12,7 +12,7 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@digithings/ui/ui"
+} from "@digithings-ai/ui/ui"
 import type { ComponentProps } from "react"
 
 type CardProps = Omit<ComponentProps<typeof KitCard>, "dress">

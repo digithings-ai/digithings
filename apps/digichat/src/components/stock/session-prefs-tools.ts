@@ -6,9 +6,9 @@
 import {
   isEffortCode,
   isSearchEngine,
-} from "@digithings/digichat-ui";
-import { asRecord } from "@digithings/ui/lib/record";
-import type { EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
+} from "@digithings-ai/digichat-ui";
+import { asRecord } from "@digithings-ai/ui/lib/record";
+import type { EmbedChatPrefsApi } from "@digithings-ai/ui/chat/stock";
 import {
   MCP_ID_RE,
   connectedMcpConfigs,
@@ -25,8 +25,8 @@ import {
 } from "@/lib/view-modes";
 import { applyThemePick, currentThemeState } from "@/lib/product-slash-commands";
 import { applyThemeModeKeepingPalette } from "@/lib/palette-prefs";
-import { isTraceDensity } from "@digithings/ui/chat/trace-spacing";
-import { isPaletteId, isThemePreference } from "@digithings/ui/theme";
+import { isTraceDensity } from "@digithings-ai/ui/chat/trace-spacing";
+import { isPaletteId, isThemePreference } from "@digithings-ai/ui/theme";
 
 export const SESSION_TOOL_NAMES = [
   "session_set_language",

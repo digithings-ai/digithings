@@ -34,11 +34,11 @@ scope here; the audit step below covers it when it changes.
 
 | Package | Version | License | Relationship | Shipped in |
 |---|---|---|---|---|
-| [`beautiful-mermaid`](https://www.npmjs.com/package/beautiful-mermaid/v/1.1.3) | 1.1.3 | MIT | direct dependency of `@digithings/ui` | client bundle |
+| [`beautiful-mermaid`](https://www.npmjs.com/package/beautiful-mermaid/v/1.1.3) | 1.1.3 | MIT | direct dependency of `@digithings-ai/ui` | client bundle |
 | [`elkjs`](https://www.npmjs.com/package/elkjs/v/0.11.1) | 0.11.1 | **EPL-2.0** | transitive via `beautiful-mermaid` | client bundle |
-| [`dompurify`](https://www.npmjs.com/package/dompurify/v/3.4.15) | 3.4.15 | MPL-2.0 OR Apache-2.0 | direct dependency of `@digithings/ui` | client bundle |
+| [`dompurify`](https://www.npmjs.com/package/dompurify/v/3.4.15) | 3.4.15 | MPL-2.0 OR Apache-2.0 | direct dependency of `@digithings-ai/ui` | client bundle |
 
-`@digithings/ui` is [`packages/ui`](../packages/ui/package.json);
+`@digithings-ai/ui` is [`packages/ui`](../packages/ui/package.json);
 its consumer is the digithings.ai static export
 (`apps/digithings-web`, built by `scripts/build-digithings.sh`).
 
@@ -46,7 +46,7 @@ its consumer is the digithings.ai static export
 
 **Status:** accepted 2026-09-13. This closes the accept/replace question in #3964.
 
-`@digithings/ui` depends on `beautiful-mermaid@^1.1.3`, whose `dist/index.js`
+`@digithings-ai/ui` depends on `beautiful-mermaid@^1.1.3`, whose `dist/index.js`
 imports `elkjs/lib/elk.bundled.js`. The resolved transitive version is
 **`elkjs@0.11.1`**, licensed EPL-2.0 (weak, file-level copyleft). It is bundled
 into the client output of every app that uses the assistant-ui mermaid element —
@@ -83,7 +83,7 @@ way, or its version/license changes.
 
 `dompurify@3.4.15` declares `MPL-2.0 OR Apache-2.0`. digithings relies on the
 **Apache-2.0** option — a permissive license, so no weak-copyleft obligations
-arise — and consumes it unmodified as a direct dependency of `@digithings/ui`,
+arise — and consumes it unmodified as a direct dependency of `@digithings-ai/ui`,
 used for SVG sanitization
 ([`sanitize-mermaid-svg.ts`](../packages/ui/src/components/chat/sanitize-mermaid-svg.ts)).
 

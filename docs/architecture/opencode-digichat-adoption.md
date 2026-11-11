@@ -16,7 +16,7 @@ This document is the agent-facing plan for adopting **OpenCode** as the CLI/TUI 
 
 ## 1. Problem
 
-digichat’s product surface is a **Next.js BFF + shared web UI** (`@digithings/digichat-ui` `DigiChatSession`). The UX is terminal-*styled* in the browser (slash palette, help as transcript notes, force-tool headers for digisearch / digivault), but digithings does **not** yet ship a first-class coding-agent-style CLI/TUI.
+digichat’s product surface is a **Next.js BFF + shared web UI** (`@digithings-ai/digichat-ui` `DigiChatSession`). The UX is terminal-*styled* in the browser (slash palette, help as transcript notes, force-tool headers for digisearch / digivault), but digithings does **not** yet ship a first-class coding-agent-style CLI/TUI.
 
 Rebuilding CLI dogfood from scratch (overlays above the prompt, dismissible help, arrow-key command palette, streaming tool rows, settings dialogs) duplicates years of OpenCode UX investment. Product intent:
 

@@ -1,5 +1,5 @@
 {
-  "name": "@digithings/perf-math",
+  "name": "@digithings-ai/perf-math",
   "version": "0.1.0",
   "description": "Framework-free portfolio performance math: live KPIs, base-100 continuity, beta/alpha/IR. No React, no DOM, no I/O.",
   "license": "MIT",

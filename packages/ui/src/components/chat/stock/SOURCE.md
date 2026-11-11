@@ -11,7 +11,7 @@ The only edits here are:
   registry `IconPlaceholder` (that module is not in this app)
 - `tool-fallback.aui.tsx` adds the Gloomberb attribution footer
   (`ToolFallbackAttribution`, reading `readGloomberbAttribution` from
-  `@digithings/ui`) under the Result pane — the same line the first-party
+  `@digithings-ai/ui`) under the Result pane — the same line the first-party
   gallery thread renders (#4098). No other styling changes.
 
 ## Shape: the base skin's radii

@@ -1,7 +1,7 @@
 /**
  * One digiquant chart scale. Candles, volume, and price moves use the
  * design-canon pair already declared as `--up` and `--down` in
- * `@digithings/design/tokens.css` (dark teal `#3DD6C4` / red `#E5533E`,
+ * `@digithings-ai/design/tokens.css` (dark teal `#3DD6C4` / red `#E5533E`,
  * light `#0C7C71` / `#B2452E`).
  *
  * Studies use a teal-led palette — spring, cyan, yellow, lime, orange,
@@ -13,7 +13,7 @@
  * `readDigiquantChartScale` when a document is available so a theme flip
  * resolves the live custom properties.
  *
- * Import path: `@digithings/ui/chart-scale`.
+ * Import path: `@digithings-ai/ui/chart-scale`.
  */
 
 export type DigiquantChartScale = {

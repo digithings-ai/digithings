@@ -18,7 +18,7 @@
     },
     {
       "id": "claim_c21cfce1a0ce448687a30e66c100cde8",
-      "statement": "Styling consumes the shared design system via @digithings/design canon tokens plus the Tailwind v4 bridge from @digithings/ui (web-theme.css, the @theme inline bridge), layered in app/globals.css; the dashboard declares no @theme bridge of its own.",
+      "statement": "Styling consumes the shared design system via @digithings-ai/design canon tokens plus the Tailwind v4 bridge from @digithings-ai/ui (web-theme.css, the @theme inline bridge), layered in app/globals.css; the dashboard declares no @theme bridge of its own.",
       "evidence": [
         {
           "resource": "repo://apps/dashboard/README.md#L6-L19",

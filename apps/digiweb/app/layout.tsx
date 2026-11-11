@@ -12,7 +12,7 @@ import {
   JetBrains_Mono,
   Newsreader,
 } from "next/font/google";
-import { ThemeProvider, MotionProvider, themeInitScript } from "@digithings/ui";
+import { ThemeProvider, MotionProvider, themeInitScript } from "@digithings-ai/ui";
 import { SiteNav } from "@/components/site-nav";
 import { liveryInitScript } from "@/components/livery-store";
 import { typeInitScript } from "@/components/type-store";

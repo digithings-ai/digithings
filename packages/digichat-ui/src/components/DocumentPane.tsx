@@ -1,9 +1,9 @@
 "use client";
 
-import { IconButton } from "@digithings/ui/ui";
+import { IconButton } from "@digithings-ai/ui/ui";
 
 import { MiniMarkdown } from "./MiniMarkdown";
-import { readableSnippet, type VaultHitSummary } from "@digithings/ui/chat/transcript";
+import { readableSnippet, type VaultHitSummary } from "@digithings-ai/ui/chat/transcript";
 
 function isHttpUrl(path: string): boolean {
   return /^https?:\/\//i.test(path);

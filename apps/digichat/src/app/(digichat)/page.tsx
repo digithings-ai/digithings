@@ -10,7 +10,7 @@ import {
 import {
   isFramedPresentation,
   skinOwnsPageChrome,
-} from "@digithings/ui/chat/skins";
+} from "@digithings-ai/ui/chat/skins";
 import { HomeStockClient } from "./home-stock-client";
 import { BaselineClient } from "../(baseline)/baseline/baseline-client";
 import EmbedRouteShell from "./embed-route-shell";

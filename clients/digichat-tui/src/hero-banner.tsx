@@ -7,7 +7,7 @@ import type { BannerDefinition } from "../../../packages/hero-banner/src/types";
 import { reducedMotion } from "./motion";
 
 /**
- * OpenTUI renderer for @digithings/hero-banner. Any banner definition, drawn
+ * OpenTUI renderer for @digithings-ai/hero-banner. Any banner definition, drawn
  * in half-blocks. LOADING plays once per process: a remount keeps the clock.
  * NO_MOTION / HERO_BANNER_MOTION=reduce / DIGI_REDUCED_MOTION draw the
  * settled mark with no timer;

@@ -21,7 +21,7 @@ describe("gallery Thread is the product digichat skin", () => {
     expect(adapter).not.toMatch(/from ["']\.\/ChatMarkdown["']/);
     expect(adapter).not.toMatch(/from ["']\.\/ChatThinking["']/);
     expect(adapter).not.toMatch(/from ["']\.\/ChatToolCall["']/);
-    expect(adapter).not.toMatch(/from ["']@digithings\/ui["']/);
+    expect(adapter).not.toMatch(/from ["']@digithings-ai\/ui["']/);
   });
 
   it("gallery Thread mounts registry slots and cube glyphs", () => {

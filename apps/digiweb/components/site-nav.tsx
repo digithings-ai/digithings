@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
-import { ThemeToggle } from "@digithings/ui";
+import { ThemeToggle } from "@digithings-ai/ui";
 import {
   Button,
   Select,
@@ -14,7 +14,7 @@ import {
   Sheet,
   SheetContent,
   SheetTrigger,
-} from "@digithings/ui/ui";
+} from "@digithings-ai/ui/ui";
 import {
   applyLivery,
   getLiverySnapshot,
@@ -43,13 +43,13 @@ import { LAB_NAV, PRIMARY_NAV } from "@/lib/nav";
  *  map rides inline; the reference-only lab group and both choosers stay in
  *  the kit Sheet behind the hamburger. At ≥1600px the lab group and pickers
  *  join the row and the hamburger retires. Below 1080px the hamburger is the
- *  only way in, opening the full menu in the kit Sheet (`@digithings/ui/ui`,
+ *  only way in, opening the full menu in the kit Sheet (`@digithings-ai/ui/ui`,
  *  Base UI dialog: focus trap, document scroll lock, Escape/backdrop close,
  *  focus returned to the trigger).
  *
  *  Wave 1 (T6): the hand-built `.site-nav-sheet*`/`.site-nav-scrim*` overlays
  *  and the four native `<select>` pickers are gone. Wave 4: the pickers moved
- *  onto the stock kit `Select` (`@digithings/ui/ui`) now that it carries the
+ *  onto the stock kit `Select` (`@digithings-ai/ui/ui`) now that it carries the
  *  non-portal `SelectPopup` the controls layer used; the sheet and the
  *  hamburger trigger are the stock kit too (`Sheet`, `Button`). */
 export function SiteNav() {

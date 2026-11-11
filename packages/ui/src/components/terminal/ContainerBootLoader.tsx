@@ -28,7 +28,7 @@ import { TerminalStepCaret } from "./TerminalStepCaret";
  * `prefers-reduced-motion` shows the active step's label whole with the caret
  * still — which for an uncontrolled loader is the first, since its clock never
  * starts; see <TerminalStepCaret>. Frame styles: `.tl-boot*` in
- * `@digithings/ui/styles/terminal-loaders.css`.
+ * `@digithings-ai/ui/styles/terminal-loaders.css`.
  */
 export type ContainerBootLoaderProps = {
   /** Boot phases, in order. Defaults to an ordinary cold start. */

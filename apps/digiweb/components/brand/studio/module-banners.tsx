@@ -1,8 +1,8 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { BANNERS } from "@digithings/hero-banner/definitions";
-import { HeroBanner } from "@digithings/hero-banner/web";
+import { BANNERS } from "@digithings-ai/hero-banner/definitions";
+import { HeroBanner } from "@digithings-ai/hero-banner/web";
 
 const BANNER_LIST = Object.values(BANNERS);
 

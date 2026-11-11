@@ -1,7 +1,7 @@
 /**
  * Skin-support primitives (WS4): catalog primitives, prefs shell, skin
  * chrome, Thread and tool UI. Hosts import ThreadSkinView from
- * `@digithings/ui/chat/skins` and the prefs host from here.
+ * `@digithings-ai/ui/chat/skins` and the prefs host from here.
  */
 
 export {
@@ -50,7 +50,7 @@ export {
   type SkinRuntimeValue,
 } from "./skin-runtime";
 // WS4: catalog primitives + prefs shell moved from the app. Hosts import
-// ThreadSkinView from `@digithings/ui/chat/skins` and the prefs host from here.
+// ThreadSkinView from `@digithings-ai/ui/chat/skins` and the prefs host from here.
 export { MessageError } from "./message-error.aui";
 export {
   EmbedChatPrefsProvider,

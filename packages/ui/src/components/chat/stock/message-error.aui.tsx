@@ -8,7 +8,7 @@ import {
 } from "@assistant-ui/react";
 import type { FC } from "react";
 import { ChatNoticeContent, ChatNoticeDetail, chatNoticeRootProps } from "./chat-notice";
-import { Button } from "@digithings/ui/ui";
+import { Button } from "@digithings-ai/ui/ui";
 import { useSkinRuntime, type SkinErrorParsers } from "./skin-runtime";
 import { useStockShape } from "./stock-shape";
 

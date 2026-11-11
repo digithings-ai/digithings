@@ -8,7 +8,7 @@ import {
   TRACE_DENSITIES,
   TRACE_DENSITY_LABELS,
   type TraceDensity,
-} from "@digithings/ui/chat/trace-spacing";
+} from "@digithings-ai/ui/chat/trace-spacing";
 
 export const LANG_CODES = ["en", "nl", "it", "es", "fr"] as const;
 export type LangCode = (typeof LANG_CODES)[number];

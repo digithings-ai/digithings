@@ -12,7 +12,7 @@ import {
   DEFAULT_EMBED_CHAT_PREFS,
   EmbedChatPrefsProvider,
   type EmbedChatPrefsApi,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 import { toDigichatClientConfig } from "@/lib/deploy-config/client-projection";
 import { expandDigichatDocument } from "@/lib/deploy-config/loader";
 import { parseDigichatConfig } from "@/lib/deploy-config/schema";

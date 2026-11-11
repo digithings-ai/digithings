@@ -22,7 +22,7 @@ import {
   SelectValue,
   Switch,
   Textarea,
-} from "@digithings/ui/ui";
+} from "@digithings-ai/ui/ui";
 import { FEATURED_LANGUAGE_CODES } from "@/lib/languages";
 import { VIEW_MODES } from "@/lib/view-modes";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";

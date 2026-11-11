@@ -17,7 +17,7 @@ import { Button } from "../../ui";
  * the accent for `running` and fades `queued`, per the reference grammar.
  *
  * Client component (selection state). Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/effects-chrome.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/effects-chrome.css";
  *                 @source "<path-to>/packages/ui/src/components/effects-chrome";
  */
 export type PipelineStatus = "done" | "running" | "queued";

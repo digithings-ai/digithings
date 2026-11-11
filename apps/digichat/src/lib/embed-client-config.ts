@@ -35,7 +35,7 @@ import {
 import {
   defaultThreadSkinForTenant,
   type ThreadSkin,
-} from "@digithings/ui/chat/skins";
+} from "@digithings-ai/ui/chat/skins";
 
 export type EmbedTenantClientConfig = {
   slug: string;

@@ -16,8 +16,8 @@
  * Spec: docs/superpowers/specs/2026-08-01-digichat-activity-protocol-design.md
  */
 
-import { isRecord } from "@digithings/ui/lib/record";
-import type { DigiChatActivity } from "@digithings/digichat-ui";
+import { isRecord } from "@digithings-ai/ui/lib/record";
+import type { DigiChatActivity } from "@digithings-ai/digichat-ui";
 import type { UIMessage } from "ai";
 
 /** @deprecated 1.4 wire type — 2.0 does not emit this. Kept to hydrate old transcripts. */

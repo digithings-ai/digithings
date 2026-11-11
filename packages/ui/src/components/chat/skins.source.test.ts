@@ -71,7 +71,7 @@ describe("skins land in the package under components/chat", () => {
       ).not.toMatch(
         /from "@\/(components|app|lib\/(thread-skins|embed-|product-|pending-|baseline-))/,
       );
-      expect(src, f).not.toMatch(/from "@digithings\/digichat-ui"/);
+      expect(src, f).not.toMatch(/from "@digithings-ai\/digichat-ui"/);
     }
   });
 });

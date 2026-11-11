@@ -10,7 +10,7 @@ import {
   getDigichatWarmupPhase,
   setDigichatWarmupPhase,
   signalDigichatBootStep,
-} from "@digithings/ui/chat/boot-signal";
+} from "@digithings-ai/ui/chat/boot-signal";
 
 /** Services sleep after ~3 min idle; re-check a bit before that. */
 const IDLE_RECHECK_MS = 150_000;

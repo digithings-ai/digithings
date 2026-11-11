@@ -1,5 +1,5 @@
-import { LayoutLines } from "@digithings/ui";
-import { skinShowsSiteRails } from "@digithings/ui/chat/skins";
+import { LayoutLines } from "@digithings-ai/ui";
+import { skinShowsSiteRails } from "@digithings-ai/ui/chat/skins";
 
 /**
  * The website's vertical rails (`LayoutLines`) on the product chat.

@@ -24,7 +24,7 @@ describe("devkit route isolation", () => {
     // which imports the token bridge + kit sheets (order pinned there).
     expect(layout).toMatch(/devkit-controls\.css/);
     const css = read("devkit-controls.css");
-    expect(css).toMatch(/@digithings\/design\/tokens\.css/);
+    expect(css).toMatch(/@digithings-ai\/design\/tokens\.css/);
     expect(css).toMatch(/styles\/web-theme\.css/);
     expect(css).toMatch(/styles\/controls-core\.css/);
     expect(css).toMatch(/styles\/controls-overlay\.css/);

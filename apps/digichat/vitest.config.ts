@@ -11,7 +11,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       // Prefer the sibling package sources in this checkout / worktree (#3556).
-      "@digithings/digichat-ui": path.resolve(__dirname, "../../packages/digichat-ui/src/index.ts"),
+      "@digithings-ai/digichat-ui": path.resolve(__dirname, "../../packages/digichat-ui/src/index.ts"),
     },
   },
 });

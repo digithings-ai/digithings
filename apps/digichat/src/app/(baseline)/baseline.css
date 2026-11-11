@@ -7,11 +7,11 @@
    bg-surface, ease-brand, …) silently never generate and borders/text
    fall back to currentColor. Only classes already present in scanned
    sources gain working rules; no other surface's CSS changes. */
-@reference "@digithings/ui/styles/web-theme.css";
+@reference "@digithings-ai/ui/styles/web-theme.css";
 /* Shared digichat app theme bridge (WS1) — variants, keyframes, dark
    variant, shadcn @theme, :root, .dark, @layer base. Byte-identical to the
    blocks this file and (digichat)/globals.css used to duplicate. */
-@import "@digithings/ui/styles/digichat-app-theme.css";
+@import "@digithings-ai/ui/styles/digichat-app-theme.css";
 
 /* Official assistant-ui template CSS (templates/default/app/globals.css). */
 

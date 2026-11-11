@@ -42,7 +42,7 @@ const packageBoundaryRules = {
             "../../../../packages/*/src",
             "../../../../packages/*/src/**",
           ],
-          message: "Import via the package exports instead (e.g. `@digithings/ui/chat/stock`), not `packages/*/src` — see DIG-3695.",
+          message: "Import via the package exports instead (e.g. `@digithings-ai/ui/chat/stock`), not `packages/*/src` — see DIG-3695.",
         },
         {
           group: ["../../../clients/*", "../../../../clients/*", "../../../../../clients/*"],

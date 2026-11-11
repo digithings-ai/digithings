@@ -11,8 +11,8 @@ Canon: [`BLEND.md`](BLEND.md) · [`packages/ui/DESIGN.md`](../ui/DESIGN.md) · r
 | Surface | Path | Follows digiweb tokens + grammar |
 |---------|------|----------------------------------|
 | design-reference | `apps/digiweb/` | **Phase 0 — now** |
-| `@digithings/design` tokens | `packages/design/tokens.css` | **Phase 0 — now** |
-| `@digithings/ui` shared sheets | `packages/ui/src/styles/` | Phase 1 |
+| `@digithings-ai/design` tokens | `packages/design/tokens.css` | **Phase 0 — now** |
+| `@digithings-ai/ui` shared sheets | `packages/ui/src/styles/` | Phase 1 |
 | digithings.ai | `apps/digithings-web/` | **Phase 2 — this branch** |
 | digiquant.io | `apps/digiquant-web/` | **Phase 2 — this branch** |
 | digichat | `apps/digichat/` | Phase 3 |
@@ -24,10 +24,10 @@ Same atoms everywhere: **radius 0 · mono voice · white/ink loud CTA · tonal s
 
 digiweb is a **shared library**, not a screenshot to copy. Live surfaces wire:
 
-1. `@digithings/design/tokens.css` — palette, type, radius, section rhythm
-2. `@digithings/ui` React primitives + family CSS — NavShell, Button, Card, TabStrip, chat, finance, …
+1. `@digithings-ai/design/tokens.css` — palette, type, radius, section rhythm
+2. `@digithings-ai/ui` React primitives + family CSS — NavShell, Button, Card, TabStrip, chat, finance, …
 
-So the design-reference + `@digithings/ui` restyle **is** the product restyle for every import. Phases 2–3 exist only to **strip product-local fights** that still override the library: Fraunces/`--serif` in marketing `globals.css` (Phase 2, stripped), digichat shadcn `--radius-*` / local `@theme`, dashboard `.glass-card`, page-level `rounded-*` that never went through a shared component.
+So the design-reference + `@digithings-ai/ui` restyle **is** the product restyle for every import. Phases 2–3 exist only to **strip product-local fights** that still override the library: Fraunces/`--serif` in marketing `globals.css` (Phase 2, stripped), digichat shadcn `--radius-*` / local `@theme`, dashboard `.glass-card`, page-level `rounded-*` that never went through a shared component.
 
 Do not invent a second design system per product. If a landing needs a new block, add it to the reference first, then import it.
 
@@ -40,7 +40,7 @@ Do not invent a second design system per product. If a landing needs a new block
 
 ## Phase 1 — Shared React/CSS layer ✅ (this branch)
 
-Sweep `@digithings/ui` hardcoded pills and shadcn `--radius-*` fallbacks on chrome (buttons, chips, tabs, cards, toasts). **Keep** true circles (spinners, live dots, avatars, radios, slider thumbs). Align every dress axis (reference *and* chat) with fill-vs-outline, not pills. Loud primary → ink/paper fill in `.ctl-btn-ref--primary`, `.ctl-btn-chat--default`, reference `.btn-primary`, `.cw-btn--primary`, composer send, and `design/site/site.css` `.btn-primary`.
+Sweep `@digithings-ai/ui` hardcoded pills and shadcn `--radius-*` fallbacks on chrome (buttons, chips, tabs, cards, toasts). **Keep** true circles (spinners, live dots, avatars, radios, slider thumbs). Align every dress axis (reference *and* chat) with fill-vs-outline, not pills. Loud primary → ink/paper fill in `.ctl-btn-ref--primary`, `.ctl-btn-chat--default`, reference `.btn-primary`, `.cw-btn--primary`, composer send, and `design/site/site.css` `.btn-primary`.
 
 Product-local `--radius-*` in digichat no longer wins on shared classes — shared sheets pin `border-radius: 0`. Native nav `<select>` in the design-reference uses appearance:none + opaque canvas fill so the UA does not paint a pill track.
 

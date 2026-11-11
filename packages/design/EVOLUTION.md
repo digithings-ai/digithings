@@ -25,7 +25,7 @@ utilitarian set Herdr, AgentMail, Omarchy, plus Langfuse
 is two layers: `tokens.css` + `site/site.css` (shared CSS foundation — brand,
 buttons, terminal block, sections, and the CSS-only primitives built here in
 Phase B) consumed directly by the v7 landings (`apps/digithings-web`,
-`apps/digiquant-web`), plus `@digithings/ui` (the React component layer —
+`apps/digiquant-web`), plus `@digithings-ai/ui` (the React component layer —
 nav, hero layout, `Reveal` motion, connected graph) that those same apps import
 for everything with real interaction/state. Vanilla-JS equivalents of the
 latter (`site/theme.js`, `ui.js`, `reveal.js`, `terminal.js`, `graph.js`) were
@@ -239,7 +239,7 @@ Add to `tokens.css` when implementing primitives:
 |-----------|---------|------------|
 | `BentoGrid` / `.bento` ✅ | 2×2 feature cells ([`site/README.md`](site/README.md#bentogrid-css-only-evolutionmd-phase-b)) | Cursor |
 | `ProductFrame` ✅ | CQ-scaled 800px UI embed ([`site/README.md`](site/README.md#productframe-css-only-evolutionmd-phase-b)) | Graphite, Cursor |
-| `ScrollyFeatures` ✅ | Pinned section + progress rail + N slides — React hook `useScrollyFeatures` in `@digithings/ui` (`packages/ui/src/motion/scrolly.tsx`); live `PipelineScene` adoption deferred (see below) | Graphite |
+| `ScrollyFeatures` ✅ | Pinned section + progress rail + N slides — React hook `useScrollyFeatures` in `@digithings-ai/ui` (`packages/ui/src/motion/scrolly.tsx`); live `PipelineScene` adoption deferred (see below) | Graphite |
 | `TrustStrip` ✅ | Logo / proof row ([`site/README.md`](site/README.md#truststrip-css-only-evolutionmd-phase-b)) | Cursor, Graphite |
 | `StatCounter` ✅ | Scroll-triggered metrics ([`site/README.md`](site/README.md#statcounter-css--stat-counterjs-evolutionmd-phase-b)) | xAI |
 | `CapabilityCard` ✅ | Mini UI + “Explore →” ([`site/README.md`](site/README.md#capabilitycard-css-only-evolutionmd-phase-b)) | xAI |
@@ -255,9 +255,9 @@ Add to `tokens.css` when implementing primitives:
 > `scroll-trigger.js`") predated the finding that the vanilla `packages/design/site/*.js`
 > layer + `scroll-trigger.js` are dead (removed in #1240; zero importers) and both live
 > marketing sites are React. The only two hand-rolled scrollies —
-> `ScrollyGraph` (`@digithings/ui`) and digiquant-web's `PipelineScene` — are React, so
+> `ScrollyGraph` (`@digithings-ai/ui`) and digiquant-web's `PipelineScene` — are React, so
 > the primitive is a React hook `useScrollyFeatures` (+ `ScrollyRail`, pure math in
-> `scrolly-core.ts`) in `@digithings/ui`. **Refactoring the live `PipelineScene` to consume
+> `scrolly-core.ts`) in `@digithings-ai/ui`. **Refactoring the live `PipelineScene` to consume
 > it is deferred to a follow-up** — its acceptance criterion is "no visual regression" via
 > manual scroll QA at 100%/125% zoom, which needs a working in-browser preview (unavailable
 > when the primitive was built). See [#1205](#1205).
@@ -308,7 +308,7 @@ Add to `tokens.css` when implementing primitives:
 - [x] `ChangelogBand` component + CSS
 - [x] `CodeSampleBand` component + CSS
 - [x] `CapabilityCard` component + CSS
-- [x] `ScrollyFeatures` primitive (`useScrollyFeatures` hook in `@digithings/ui`); live `PipelineScene` adoption deferred to a browser-QA follow-up (#1205)
+- [x] `ScrollyFeatures` primitive (`useScrollyFeatures` hook in `@digithings-ai/ui`); live `PipelineScene` adoption deferred to a browser-QA follow-up (#1205)
 
 ### Phase C — Landing realignment
 

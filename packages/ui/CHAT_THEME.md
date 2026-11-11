@@ -21,7 +21,7 @@ recolour that document. The palette sheet is `packages/design/palettes.css`.
 
 assistant-ui has no theme CDN. Custom look is:
 
-1. **One Thread module** — `@digithings/ui/chat/thread` (`gallery-thread/thread.aui.tsx`
+1. **One Thread module** — `@digithings-ai/ui/chat/thread` (`gallery-thread/thread.aui.tsx`
    + slots). Product `/embed` and this `/chatbot` page import that subpath.
    Do not keep a second registry copy under `reference/components/assistant-ui/`.
    The **composer-trigger-popover is the one deliberate exemption**: the digichat
@@ -94,7 +94,7 @@ Keep defaults. Prefer a CSS-variable change over a slot override; prefer a
    `50% 50%` when open (`transform: none` when collapsed). No
    `active:scale-[0.98]` / `origin-left` on reasoning or tool triggers.
    `scrollbar-gutter: stable` on the thread viewport.
-6. **Loader** — `DotMatrix` lives in `@digithings/ui/chat/dot-matrix`
+6. **Loader** — `DotMatrix` lives in `@digithings-ai/ui/chat/dot-matrix`
    (re-exported from `components/ui/dot-matrix.tsx`). Cubes snap on/off (no
    opacity ease). Unlit cells are omitted — only lit cubes show; no hairline
    grid. Motion states: `loading` (thick rim arc), `thinking` (rings in/out),
@@ -144,9 +144,9 @@ Keep defaults. Prefer a CSS-variable change over a slot override; prefer a
 ## Product
 
 `chrome.skin: digichat` is the only first-party look. It **renders this
-gallery Thread** — the same `@digithings/ui/chat/thread` subpath the isolated
-`/chatbot` page imports (never the `@digithings/ui` main barrel). CSS is
-`@digithings/ui/styles/chat-digichat.css`. Welcome in `ViewportFooter`, radius 0,
+gallery Thread** — the same `@digithings-ai/ui/chat/thread` subpath the isolated
+`/chatbot` page imports (never the `@digithings-ai/ui` main barrel). CSS is
+`@digithings-ai/ui/styles/chat-digichat.css`. Welcome in `ViewportFooter`, radius 0,
 Geist Mono, both roles left, cube status/action glyphs, no assistant role
 arrow, hover hints a hairline box with no rotated-square arrow (same as
 `/chatbot`), tools collapsed when settled. Catalog / third-party default remains

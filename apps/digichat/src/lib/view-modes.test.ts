@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { VIEW_CODES, VIEW_LABELS } from "@digithings/digichat-ui";
-import { normalizeViewPref, PREFS_LEGACY_VIEW_MODE_ALIASES } from "@digithings/ui/chat/stock";
+import { VIEW_CODES, VIEW_LABELS } from "@digithings-ai/digichat-ui";
+import { normalizeViewPref, PREFS_LEGACY_VIEW_MODE_ALIASES } from "@digithings-ai/ui/chat/stock";
 
 import {
   DEFAULT_THINKING_MODE,
@@ -35,7 +35,7 @@ describe("view-modes", () => {
   });
 
   it("keeps the prefs twin on the same levels", () => {
-    // The third id twin: the prefs host in `@digithings/ui/chat/stock` types
+    // The third id twin: the prefs host in `@digithings-ai/ui/chat/stock` types
     // `api.prefs.view` and normalises what it is given. It must name the
     // app's levels and fold the retired ids to the same targets, or a pref
     // the app cannot read lands on the default.

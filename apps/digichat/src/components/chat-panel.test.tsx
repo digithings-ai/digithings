@@ -112,17 +112,17 @@ vi.mock("@/hooks/use-byok-key", async (importOriginal) => {
 
 // Mocked away entirely — this test only needs the transport config ChatPanel
 // builds, not real markdown/echarts/quant-strip rendering.
-vi.mock("@digithings/digichat-ui", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@digithings/digichat-ui")>();
+vi.mock("@digithings-ai/digichat-ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@digithings-ai/digichat-ui")>();
   return {
     ...actual,
   };
 });
 
-vi.mock("@digithings/ui/chat/skins", async (importOriginal) => {
+vi.mock("@digithings-ai/ui/chat/skins", async (importOriginal) => {
   // Keep the real registry exports (WS4 barrel) — only stub the dispatch.
   const actual =
-    await importOriginal<typeof import("@digithings/ui/chat/skins")>();
+    await importOriginal<typeof import("@digithings-ai/ui/chat/skins")>();
   return {
     ...actual,
     ThreadSkinView: () => <div data-testid="stock-thread">stock thread</div>,

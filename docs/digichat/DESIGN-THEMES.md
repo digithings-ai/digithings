@@ -15,8 +15,8 @@ Live: the digichat product app at `/chatbot` (port 3005). Source of look: copied
 
 `chrome.skin: digichat` is the 12th id next to the 11 official catalog
 templates. It **mounts the gallery `/chatbot` Thread** via the
-`@digithings/ui/chat/thread` subpath (same module as isolated `/chatbot`;
-never the `@digithings/ui` main barrel). Catalog / third-party default remains
+`@digithings-ai/ui/chat/thread` subpath (same module as isolated `/chatbot`;
+never the `@digithings-ai/ui` main barrel). Catalog / third-party default remains
 `base`. First-party hosts (digithings.ai / tenantb) default unset `skin` to
 `digichat`. There is no third custom theme — extra chrome.skin ids are not
 allowed.

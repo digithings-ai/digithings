@@ -1,13 +1,13 @@
 /* ==========================================================================
-   @digithings/ui — finance-composites family structural CSS
+   @digithings-ai/ui — finance-composites family structural CSS
    (components/finance-composites/*: <StockTicker/>, <OrderBook/>,
    <SortableTable/>, <PerformanceDashboard/>, <SyncedTearsheet/>).
    Import PLAINLY (no layer(…) wrapper) AFTER the token bridge, in the app's
    globals.css:
      @import "tailwindcss";
-     @import "@digithings/design/tokens.css";
-     @import "@digithings/ui/styles/web-theme.css";
-     @import "@digithings/ui/styles/finance-composites.css";
+     @import "@digithings-ai/design/tokens.css";
+     @import "@digithings-ai/ui/styles/web-theme.css";
+     @import "@digithings-ai/ui/styles/finance-composites.css";
      @source "<path-to>/packages/ui/src/components/finance-composites";
    The @source line is load-bearing (path relative to the app's globals.css):
    the components carry token-backed utilities, and Tailwind does not scan

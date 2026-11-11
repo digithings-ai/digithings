@@ -9,7 +9,7 @@ import {
   DEFAULT_EMBED_CHAT_PREFS,
   EmbedChatPrefsProvider,
   type EmbedChatPrefsApi,
-} from "@digithings/ui/chat/stock";
+} from "@digithings-ai/ui/chat/stock";
 
 function prefs(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
   return {

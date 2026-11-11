@@ -43,7 +43,7 @@ import {
   isThreadSkin,
   defaultThreadSkinForTenant,
   threadSkinChoices,
-} from "@digithings/ui/chat/skins";
+} from "@digithings-ai/ui/chat/skins";
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
 
 export const DEFAULT_CONFIG_PATH = "/app/config/digichat.yaml";

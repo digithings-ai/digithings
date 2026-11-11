@@ -1,14 +1,14 @@
 /**
  * Host-provided wiring for the first-party digichat skin (WS4).
  *
- * The skin lives in `@digithings/ui` and cannot import product modules, so
+ * The skin lives in `@digithings-ai/ui` and cannot import product modules, so
  * the app builds its option object once at module scope (every entry is a
  * static constant or a module function) and passes it as `ThreadSkinView`'s
  * `digichat` prop. Values mirror what `skins/digichat.tsx` consumed directly
  * before WS4: baseline copy fallbacks, the page-context protocol name, and
  * the product slash-command + pending-header functions.
  */
-import type { DigichatSkinOptions } from "@digithings/ui/chat/skins";
+import type { DigichatSkinOptions } from "@digithings-ai/ui/chat/skins";
 import {
   BASELINE_EMBED_PLACEHOLDER,
   BASELINE_EMBED_SUGGESTIONS,
@@ -20,7 +20,7 @@ import {
   setPendingForceTool,
   setPendingWebSearchForce,
 } from "@/lib/pending-chat-headers";
-import { applyPaletteFrame, paletteFrame, paneDraftForId } from "@digithings/digichat-ui";
+import { applyPaletteFrame, paletteFrame, paneDraftForId } from "@digithings-ai/digichat-ui";
 import {
   buildProductSlashCommands,
   executeSlashDef,

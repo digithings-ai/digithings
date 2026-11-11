@@ -5,7 +5,7 @@
 
 ## Context
 
-digichat’s primary product surface is a web BFF + `@digithings/digichat-ui` (`DigiChatSession`), oriented toward RAG / knowledge (digisearch and digivault via digigraph tools, Foundry for some client embeds). Rebuilding a first-class CLI/TUI (command palette, dismissible help, prompt overlays, streaming tool chrome) from scratch would duplicate work already solved by **OpenCode** ([anomalyco/opencode](https://github.com/anomalyco/opencode), MIT, TypeScript/Bun, OpenTUI).
+digichat’s primary product surface is a web BFF + `@digithings-ai/digichat-ui` (`DigiChatSession`), oriented toward RAG / knowledge (digisearch and digivault via digigraph tools, Foundry for some client embeds). Rebuilding a first-class CLI/TUI (command palette, dismissible help, prompt overlays, streaming tool chrome) from scratch would duplicate work already solved by **OpenCode** ([anomalyco/opencode](https://github.com/anomalyco/opencode), MIT, TypeScript/Bun, OpenTUI).
 
 Product intent is to **adapt OpenCode** for digichat CLI look and interaction, keep coding/edit capabilities as a **future feature path**, and **not** replace the web digichat surface in the near term.
 

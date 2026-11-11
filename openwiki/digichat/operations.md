@@ -202,7 +202,7 @@ signature server-side — client-asserted tier headers are never trusted.
 ## Container
 
 Multi-stage Node 22 build from the repo root (workspace lockfile +
-`@digithings/design` link required for the `deps` stage `npm ci`), standalone
+`@digithings-ai/design` link required for the `deps` stage `npm ci`), standalone
 output run as non-root `nextjs` via `trusted-proxy-server.mjs` on port 3000.
 
 Three build stages:

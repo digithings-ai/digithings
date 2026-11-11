@@ -3,7 +3,7 @@
  *
  * The house identity reads as a terminal line caught mid-prompt: the module
  * name followed by a filled block cursor. The cursor is not a new shape — it is
- * the `.term-cursor` geometry from @digithings/design (site.css), 0.6em wide by
+ * the `.term-cursor` geometry from @digithings-ai/design (site.css), 0.6em wide by
  * 1.05em tall sitting at vertical-align -0.16em. 0.6em is exactly one Geist Mono
  * advance, so the cursor occupies one character cell and the lockup sits on the
  * mono grid without fudging.
@@ -61,7 +61,7 @@ import type { ReactNode } from "react";
 /** Cursor geometry, in em.
  *
  * `w: 0.6` is one Geist Mono advance — exactly one character cell — and is taken
- * straight from `.term-cursor` (@digithings/design site.css).
+ * straight from `.term-cursor` (@digithings-ai/design site.css).
  *
  * `h` deliberately DIVERGES from `.term-cursor`, which is 1.05em. That is the
  * full line height, correct for a caret sitting in running terminal text, but

@@ -102,7 +102,7 @@ Where names legitimately still appear in code, and why:
 
 | Place | Why it is allowed |
 |-------|-------------------|
-| `packages/ui/src/components/chat/skins/**` | `@digithings/ui` is a workspace package consumed as TypeScript source, so it is not *technically* prevented from reaching root `config/` — a relative import would resolve. This is a recorded judgement, not a technical wall: a chat skin *is* a provider binding, existing to present one provider's model, and it ships to consumers who never see this repo's `config/`. |
+| `packages/ui/src/components/chat/skins/**` | `@digithings-ai/ui` is a workspace package consumed as TypeScript source, so it is not *technically* prevented from reaching root `config/` — a relative import would resolve. This is a recorded judgement, not a technical wall: a chat skin *is* a provider binding, existing to present one provider's model, and it ships to consumers who never see this repo's `config/`. |
 | `apps/digichat/src/lib/model-catalog.generated.ts` | Generated output — and the file must say so on its first line, so a hand-written file cannot claim the exemption by filename alone. |
 | `apps/digichat/reference/**` | Vendored third-party templates (excluded from `tsconfig.json`, provenance in `reference/assistant-ui-templates/SOURCE.md`). |
 | `scripts/check_model_name_literals.py` | This file. It holds `MODEL_ID_PATTERN`, which necessarily spells out the families it looks for. |

@@ -3,7 +3,7 @@
  *
  * `DigiChatActivity` is the wire vocabulary every backend provider emits (see
  * digichat's `lib/chat-activity.ts`); the shared chat family in
- * `@digithings/ui` is the *rendering* vocabulary — collapsible `ChatToolCall`
+ * `@digithings-ai/ui` is the *rendering* vocabulary — collapsible `ChatToolCall`
  * rows, a `ChatThinking` disclosure, `ChatWidgetFrame` cards. The two do not
  * line up field-for-field, so this module is the boundary adapter between
  * them: one pure function, no JSX, no DOM. Session UI in digichat 2.0 reads
@@ -31,7 +31,7 @@
  *    `ChatThinking`'s `children` disclosure rather than its railed `steps`
  *    list. See `ChatThinking`'s own docstring, which prescribes exactly this.
  */
-import type { ChatToolCallStatus } from "@digithings/ui";
+import type { ChatToolCallStatus } from "@digithings-ai/ui";
 import type { DigiChatActivity, VaultHitSummary } from "./types";
 
 /**

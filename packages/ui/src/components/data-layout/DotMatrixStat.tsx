@@ -8,7 +8,7 @@
  * the value is real text. Server component — no state, no effects.
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/data-layout.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/data-layout.css";
  *                 @source "<path-to>/packages/ui/src/components/data-layout";
  */
 export type DotMatrixStatProps = {

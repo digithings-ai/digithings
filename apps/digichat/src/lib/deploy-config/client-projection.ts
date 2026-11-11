@@ -56,7 +56,7 @@ export const SEARCH_ENGINE_ALLOWLIST: ReadonlySet<string> = new Set([
 import {
   DEFAULT_THREAD_SKIN,
   type ThreadSkin,
-} from "@digithings/ui/chat/skins";
+} from "@digithings-ai/ui/chat/skins";
 
 export type DigichatClientFeatures = {
   attachments: boolean;

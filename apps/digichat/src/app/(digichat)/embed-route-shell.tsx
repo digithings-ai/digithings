@@ -23,8 +23,8 @@ import {
   embedPalettePinScript,
   themePinScript,
 } from "@/lib/embed-site-theme";
-import { LayoutLines } from "@digithings/ui";
-import { skinShowsSiteRails } from "@digithings/ui/chat/skins";
+import { LayoutLines } from "@digithings-ai/ui";
+import { skinShowsSiteRails } from "@digithings-ai/ui/chat/skins";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import EmbedClient from "./embed/embed-client";

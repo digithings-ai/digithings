@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Repo root — the narrowest dir that holds both apps/digiweb and the shared
-// packages (@digithings/ui, @digithings/design, @digithings/hero-banner) it
+// packages (@digithings-ai/ui, @digithings-ai/design, @digithings-ai/hero-banner) it
 // transpiles.
 const monorepoRoot = join(here, "..", "..");
 
@@ -18,10 +18,10 @@ const nextConfig = {
   // shared document. `output: "export"` emits out/404.html from it.
   trailingSlash: true,
   transpilePackages: [
-    "@digithings/ui",
-    "@digithings/perf-math",
-    "@digithings/design",
-    "@digithings/hero-banner",
+    "@digithings-ai/ui",
+    "@digithings-ai/perf-math",
+    "@digithings-ai/design",
+    "@digithings-ai/hero-banner",
   ],
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   turbopack: {

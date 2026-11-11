@@ -5,8 +5,8 @@
 // unpositioned at the top of the page with the wordmark clipped.
 import "../../styles/digichat-boot-loader.css";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { DIGICHAT } from "@digithings/hero-banner/definitions";
-import { HeroBanner } from "@digithings/hero-banner/web";
+import { DIGICHAT } from "@digithings-ai/hero-banner/definitions";
+import { HeroBanner } from "@digithings-ai/hero-banner/web";
 import { DisclosureChevron } from "./disclosure-chevron";
 import { DotMatrix } from "./DotMatrix";
 import {

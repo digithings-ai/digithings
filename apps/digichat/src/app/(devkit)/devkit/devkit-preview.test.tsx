@@ -7,9 +7,9 @@ import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 // ThreadSkinView renders nothing under happy-dom, so stand in a probe that
 // reads the chrome context — this pins the preview's provider wiring (the
 // live-reflection fix), not skin rendering.
-vi.mock("@digithings/ui/chat/skins", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@digithings/ui/chat/skins")>();
-  const { useSkinChrome } = await import("@digithings/ui/chat/stock");
+vi.mock("@digithings-ai/ui/chat/skins", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@digithings-ai/ui/chat/skins")>();
+  const { useSkinChrome } = await import("@digithings-ai/ui/chat/stock");
   const React = await import("react");
   return {
     ...actual,

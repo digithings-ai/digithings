@@ -10,7 +10,7 @@ import * as React from "react";
 /** Every set of props the banner branch handed the hero banner. */
 const handed = vi.hoisted(() => [] as Array<{ replayLoading?: boolean }>);
 
-vi.mock("@digithings/hero-banner/web", () => ({
+vi.mock("@digithings-ai/hero-banner/web", () => ({
   HeroBanner: (props: { replayLoading?: boolean }) => {
     handed.push(props);
     return <div data-testid="hero-banner" />;

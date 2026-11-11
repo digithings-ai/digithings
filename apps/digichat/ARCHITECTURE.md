@@ -13,7 +13,7 @@
 > (`src/components/chat-shell.tsx:458`); it does not
 > read `DIGICHAT_VERSION`. The Ink CLI is a
 > **separate package** that versions on its own line —
-> `@digithings/digichat-cli` is **1.4.0** (`apps/digichat/cli/package.json`).
+> `@digithings-ai/digichat-cli` is **1.4.0** (`apps/digichat/cli/package.json`).
 > Do not read the CLI version as the web app's. See
 > [ADR-0028](../../docs/adr/0028-digichat-web-foundation-and-opencode-distribution.md)
 > and [#3626](#3626).
@@ -34,7 +34,7 @@ selected per **deployment config** (`digichat.yaml` / env overlay;
 [`docs/architecture/digichat-renderer-contract.md`](../../docs/architecture/digichat-renderer-contract.md),
 and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
-**Turn / thread markdown export (#3465).** Shared serializer lives in `@digithings/digichat-ui` (`serializeAssistantMarkdown` / `serializeThreadMarkdown` / `copyMarkdownWithFallback`). `ChatPanel` and embed session both use it — clipboard first, embed falls back to `.md` download (never a silent no-op). Citations prefer `source-*` parts (`citationHits` from `@digithings/digichat-ui`).
+**Turn / thread markdown export (#3465).** Shared serializer lives in `@digithings-ai/digichat-ui` (`serializeAssistantMarkdown` / `serializeThreadMarkdown` / `copyMarkdownWithFallback`). `ChatPanel` and embed session both use it — clipboard first, embed falls back to `.md` download (never a silent no-op). Citations prefer `source-*` parts (`citationHits` from `@digithings-ai/digichat-ui`).
 
 **Last-turn regen + edit (#3466 / #3475).** Digigraph and Foundry surfaces expose **regen** on the last settled assistant and **edit** on the last user turn. Clients send `X-Digi-Turn-Mode: send | regenerate | edit_last_user` and optional `X-Digi-Run-Id` on `POST /api/chat`. Digigraph replays the **full workflow** on the same session from the truncated client transcript (tools re-run; digistore may accumulate — not “as if it never happened”). Foundry mutates conversation items (delete trailing assistant / user+assistant, then `responses.create` with no new input) via `@azure/ai-projects` OpenAI client; without an item API the BFF returns **501 `not_supported`**. Concurrent runs on the same session → **409 `run_in_progress`**; duplicate run ids → **409 `run_id_replay`**. Edit that shortens a persisted thread must set `allowTruncate: true` on the next PUT. `X-Digi-Force-Tool` is send-only.
 
@@ -155,8 +155,8 @@ connection pool. Six tables: `tenants`, `user_tenants`, `api_keys`, `conversatio
 
 **Design-canon theming** (`src/app/(digichat)/globals.css`, `src/app/(digichat)/layout.tsx`,
 `src/components/providers.tsx` — #1403, Phase 3 utilitarian-terminal v0.1):
-the app runs on the shared digithings token canon. `@digithings/design/tokens.css`
-defines `[data-theme="dark"|"light"]` semantic tokens; `@digithings/ui/styles/web-theme.css`
+the app runs on the shared digithings token canon. `@digithings-ai/design/tokens.css`
+defines `[data-theme="dark"|"light"]` semantic tokens; `@digithings-ai/ui/styles/web-theme.css`
 is the single Tailwind `@theme inline` bridge for token-named utilities;
 digichat's `globals.css` derives the shadcn variable set from those tokens under
 `:root[data-theme]` scopes (`--background: var(--bg)`, `--border: var(--hair)`,
@@ -174,7 +174,7 @@ fallback when the deployment is missing or not `light`) and the matching
 `themeInitScript` re-points both pre-paint (`dt-theme` localStorage key, shared
 with the marketing sites) and a `MutationObserver` (`ThemeClassSync` in
 `providers.tsx`) mirrors every later `[data-theme]` flip onto the `.dark`/`.light`
-classes for the Tailwind `dark:` variant. The old `@digithings/digichat-ui`
+classes for the Tailwind `dark:` variant. The old `@digithings-ai/digichat-ui`
 `tokens-shadcn-bridge.css` (shadcn vars → token names, the reverse direction) was
 deleted in WS5 (export + file removed — it was imported nowhere); `/embed` sets
 `[data-theme]` on the root from the effective
@@ -188,26 +188,26 @@ theme with a `MutationObserver` on `html[data-theme]` (guarded write, so the
 observer never loops), so a mid-session OS light↔dark flip can't silently
 override a parent- or tenant-forced theme (#1434). Composer send (imported
 `.dc-send` plus the authenticated ↵ kbd) is overridden locally to an ink/paper
-rect because `@digithings/digichat-ui` session.css still ships an 8px
+rect because `@digithings-ai/digichat-ui` session.css still ships an 8px
 accent-tinted pill.
 
 **Shared controls layer** (`src/components/ui/*` — #1419, wave-3 re-point,
 wave-4 cleanup): the directory now holds exactly **four** thin adapters over
-the canonical kit (`@digithings/ui/ui`) — `button.tsx` and `card.tsx` pin
+the canonical kit (`@digithings-ai/ui/ui`) — `button.tsx` and `card.tsx` pin
 `dress="chat"` over the kit (the kit's wave-3 `dress` axis emits the
 `ctl-*-chat` classes), `collapsible.tsx` re-exports the kit `Collapsible`
 bare, and `dropdown-menu.tsx` re-exports the `DropdownMenu` family bare (the
 shared default skin is digichat's dress). There are **no** local
 `badge` / `input` / `label` / `sheet` / `tooltip` wrappers — those files were
 deleted in wave 4. App call sites for the parts that remain import
-`@digithings/ui/ui` directly (`Input` and `Label` in `chat-shell.tsx`,
+`@digithings-ai/ui/ui` directly (`Input` and `Label` in `chat-shell.tsx`,
 `byok-cli-flow.tsx`, and `embed-composer-menu.tsx`; `TooltipProvider` in
 `src/components/providers.tsx`). They do **not** import `@/components/ui/<x>`.
 The four adapters that are still local (`button`, `card`, `collapsible`,
 `dropdown-menu`) are the ones whose call sites stay on `@/components/ui/<x>`.
 There are also no local `scroll-area` / `separator` / `sidebar` / `skeleton` /
 `textarea` files. `globals.css` imports
-`@digithings/ui/styles/controls-core.css` + `controls-overlay.css` before
+`@digithings-ai/ui/styles/controls-core.css` + `controls-overlay.css` before
 the digichat-ui sheets and `@source`s the shared controls directory
 (load-bearing — the behavioral controls carry token-backed utilities).
 Full swap/kept ledger, cascade contract, and
@@ -1303,7 +1303,7 @@ enforces the directive its own way:
   the outgoing input text, resent on every turn since Foundry (not this
   adapter) holds conversation history.
 
-**Embed slash commands (#3418 / #3511 / #3556 / #3733 / #3736).** `@digithings/digichat-ui` `slash-commands.ts`
+**Embed slash commands (#3418 / #3511 / #3556 / #3733 / #3736).** `@digithings-ai/digichat-ui` `slash-commands.ts`
 owns the public palette. The first-party `digichat` Thread mounts assistant-ui
 `ComposerTriggerPopover` + `unstable_useSlashCommandAdapter` whenever session prefs
 are present (embed, modal popup, and full-app). The product host does not
@@ -1411,7 +1411,7 @@ opened on another page. Coming back from a provider form lands on the provider
 row the user opened, not on the connected one.
 
 **View-level wording has one home (DIG-4665).** Decision: the view-level **wording**
-is owned by `@digithings/digichat-ui` `slash-commands.ts` (`VIEW_LABELS`, exported,
+is owned by `@digithings-ai/digichat-ui` `slash-commands.ts` (`VIEW_LABELS`, exported,
 and re-exported from the package index). The composer menu's `/view` page reads
 that shared map for the wording it prints beside each level, and the shared
 package builds the palette's `/view` choice options from the same map
@@ -1441,10 +1441,10 @@ same three levels: the app contract `src/lib/view-modes.ts` (`VIEW_MODES`, plus
 the retired `hidden` → `quiet`, `compact` → `quiet` and `detailed` → `verbose`
 aliases folded forward on read, kept dependency-free so server config code can
 use it), the palette's own `VIEW_CODES` in the same shared package, and the
-prefs twin `ViewMode` / `normalizeViewPref` in `@digithings/ui/chat/stock`
+prefs twin `ViewMode` / `normalizeViewPref` in `@digithings-ai/ui/chat/stock`
 (`skin-types.ts`), which is what types `api.prefs.view`; the palette ids are
-exported from the `@digithings/digichat-ui` index and the prefs twin from the
-`@digithings/ui/chat/stock` index, so a host can compare the twin with its
+exported from the `@digithings-ai/digichat-ui` index and the prefs twin from the
+`@digithings-ai/ui/chat/stock` index, so a host can compare the twin with its
 own contract — the normaliser and the alias map — instead of trusting that
 they agree. The label map is keyed
 by the palette's id union and the menu indexes it with the app's union, so the
@@ -2030,7 +2030,7 @@ completes mid-stream with its args + JSON Result pane (no per-tool UI;
 `mcp_call` item. `toolResult` passes the `labels` detail gate
 untouched (tenant's own tool output for the tenant's own user). Vault search `rag_sources` traces map through `mapDigivaultSearchNotes` (not the digisearch retrieve-with-no-docs path). A failed vault invoke is `execute_tool`/`failed`, never `{ hitCount: 0 }`. The website-like dogfood host
 (`config/examples/digithings-ai-embed.yaml`) sets `gate.activityDetail: full` and `backend.vaultPathPrefix: clients/digithings` so D1 FTS is scoped and chunks are
-not replaced by `{ documentsWithheld: true }`. Stable `toolName` values remain the exact MCP / backend tool ids, and tool rows render those ids verbatim — `toolRowTitle(toolName)` in `@digithings/ui/chat/stock` is the one identity helper for both surfaces by owner decision (raw backend names with underscores, one-to-one with the backend). The streamed `tool-input-start` title is dropped by the assistant-stream / assistant-ui converters before render, so both fallback surfaces derive the row label client-side from the exact id; provider span labels such as the Foundry `Searching knowledge base…` progress row still reach the wire but are not displayed. Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are settled at
+not replaced by `{ documentsWithheld: true }`. Stable `toolName` values remain the exact MCP / backend tool ids, and tool rows render those ids verbatim — `toolRowTitle(toolName)` in `@digithings-ai/ui/chat/stock` is the one identity helper for both surfaces by owner decision (raw backend names with underscores, one-to-one with the backend). The streamed `tool-input-start` title is dropped by the assistant-stream / assistant-ui converters before render, so both fallback surfaces derive the row label client-side from the exact id; provider span labels such as the Foundry `Searching knowledge base…` progress row still reach the wire but are not displayed. Each reasoning burst between tool rounds gets its own `reasoning-start` id so later thinking is not appended into the first block. `reasoning_content` maps to reasoning parts when the model emits it (house flash models often emit none). Leftover started rows are settled at
 stream end as errors (`tool-output-error`, error text `Tool did not return a
 result before the stream ended.`) so ordinary retrieve / get_note / search_notes
 never sit on Allow/Deny *and* a call whose result never arrived is not reported
@@ -2163,9 +2163,9 @@ The trial, tenantb and digithings.ai configs omit the new keys, so they stay on 
 
 `chrome.skin` selects one of the 11 official assistant-ui catalog templates
 vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`
-(`DigichatThread` from `@digithings/ui/chat/thread` **is** the first-party
+(`DigichatThread` from `@digithings-ai/ui/chat/thread` **is** the first-party
 Thread — `gallery-thread/thread.aui.tsx` + slots + cube glyphs — plus
-`@digithings/ui/styles/chat-digichat.css`. Design-reference `/chatbot` mounts that
+`@digithings-ai/ui/styles/chat-digichat.css`. Design-reference `/chatbot` mounts that
 same subpath with a fixture runtime. Contract:
 [`packages/ui/CHAT_THEME.md`](../../packages/ui/CHAT_THEME.md)).
 
@@ -2232,7 +2232,7 @@ string still means title-only.
 
 ### digichat CLI (Ink) — separate Node package
 
-TTY client lives in `apps/digichat/cli` (`@digithings/digichat-cli`). UI is
+TTY client lives in `apps/digichat/cli` (`@digithings-ai/digichat-cli`). UI is
 the official assistant-ui React Ink starter (`examples/with-react-ink`: status
 bar, reasoning, `DiffView` / `apply_patch`, `LiveChecklist`). Live traffic uses
 `useChatRuntime` + `AssistantChatTransport` against the **same** `POST /api/chat`
@@ -2373,7 +2373,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 ### Dockerfile stages
 
 Three-stage build:
-1. `deps` (node:22-alpine): `npm ci` from the root lockfile. `@digithings/design`, `@digithings/ui` and `@digithings/digichat-ui` are unpacked from tarballs (`scripts/package_r5_image_inputs.py`), not copied as sibling trees.
+1. `deps` (node:22-alpine): `npm ci` from the root lockfile. `@digithings-ai/design`, `@digithings-ai/ui` and `@digithings-ai/digichat-ui` are unpacked from tarballs (`scripts/package_r5_image_inputs.py`), not copied as sibling trees.
 2. `builder` (node:22-alpine): copies deps, unpacks those tarballs, copies `apps/digichat` and `config/byok-providers.json`, runs `next build`. `NEXT_TELEMETRY_DISABLED=1`. The product `chrome.skin: digichat` sheet lives in the package (`packages/ui/src/styles/chat-digichat.css`), so no gallery COPY is needed — the old `apps/reference/…/chatbot.css` COPY closed with WS1 (#3717).
 3. `runner` (node:22-alpine): copies only `public/`, `.next/standalone/`, `.next/static/`. Adds `curl` for the Compose healthcheck. Runs as non-root `nextjs` user (uid 1001). `next.config.ts` sets `output: "standalone"` to enable this. Both this Dockerfile and `infra/docker/Dockerfile.digichat-cloudflare` write `/etc/digichat-version` from `package.json` (or `ARG DIGICHAT_VERSION`) and set `ENV DIGICHAT_VERSION`. The default push host is `registry.cloudflare.com`.
 

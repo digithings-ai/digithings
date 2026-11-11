@@ -28,7 +28,7 @@ export const PRIMARY_NAV: readonly NavItem[] = [
   {
     href: "/components",
     label: "Components",
-    blurb: "Every kit part, indexed from @digithings/ui — primitives and composites.",
+    blurb: "Every kit part, indexed from @digithings-ai/ui — primitives and composites.",
   },
   {
     href: "/rtl",

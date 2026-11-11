@@ -45,13 +45,13 @@ The remaining two — [#240](#240)
 
 Unify all digithings web frontends under a single `cloudflare/` umbrella
 in the existing monorepo, backed by an npm workspace and a
-`@digithings/design` package.
+`@digithings-ai/design` package.
 
 ```
 digithings-ai/digithings/
 ├── digigraph/ digiquant/ digisearch/ digibot/ digismith/ digikey/ digibase/
 ├── cloudflare/
-│   ├── design/             # @digithings/design workspace package
+│   ├── design/             # @digithings-ai/design workspace package
 │   ├── website/                   # digithings.ai
 │   ├── digiquant-web/             # digiquant.io
 │   └── digichat/                  # chat.digithings.ai (Next.js)
@@ -108,7 +108,7 @@ a web frontend. Only its `cloudflare/` subpackage joins the workspace.
   implementation at `/tmp/embed-unit-241/` is reusable as-is against
   `apps/digichat/src/app/embed/`.
 - Atlas adopting the design. Scope only wires the workspace
-  reference (`@digithings/design: "*"`); token adoption is a
+  reference (`@digithings-ai/design: "*"`); token adoption is a
   follow-up against `apps/digiquant-atlas/cloudflare/`.
 - Physical relocation of Atlas frontend to `cloudflare/atlas/`. Keeping
   it nested under the research project is fine for now.
@@ -138,7 +138,7 @@ a web frontend. Only its `cloudflare/` subpackage joins the workspace.
   relative paths. Published via a `dist/` assembly step in `static.yml`
   that copies both `cloudflare/digithings/` and `packages/design/`
   into the Pages artifact.
-- `apps/digichat/package.json` declares `@digithings/design`
+- `apps/digichat/package.json` declares `@digithings-ai/design`
   as a workspace dependency, but `globals.css` does not yet `@import` it
   (see "Deferred").
 - `apps/digiquant-atlas/cloudflare/package.json` same — reference only.

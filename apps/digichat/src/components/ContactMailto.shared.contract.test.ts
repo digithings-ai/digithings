@@ -18,6 +18,6 @@ describe("embed paywall contact", () => {
     const src = readFileSync(path, "utf8");
     expect(src).not.toContain("mailto:");
     expect(src).toContain("<ContactMailto");
-    expect(src).toContain('from "@digithings/ui"');
+    expect(src).toContain('from "@digithings-ai/ui"');
   });
 });

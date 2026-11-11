@@ -25,7 +25,7 @@ digithings' core, truthful differentiator: an **open-core, self-hostable stack**
 
 ## Operating Context
 
-- Two live frontend deployments consume digiweb's packages by name: `@digithings/design` (tokens) and `@digithings/ui` (shared React components) — not by on-disk path, so digiweb can move without breaking consumers.
+- Two live frontend deployments consume digiweb's packages by name: `@digithings-ai/design` (tokens) and `@digithings-ai/ui` (shared React components) — not by on-disk path, so digiweb can move without breaking consumers.
 - The reference app (`apps/digiweb/`) is a live catalogue, not the canon: no product
   surface imports it, and that is deliberate — products import the packages. The
   current language is `docs/design/CURRENT_UI_LANGUAGE.md`.
@@ -36,7 +36,7 @@ digithings' core, truthful differentiator: an **open-core, self-hostable stack**
 
 ## Capabilities and Constraints
 
-- **Tokens, never literals** — all colour comes from `@digithings/design/tokens.css`; no ad-hoc hex/rgb in surface code.
+- **Tokens, never literals** — all colour comes from `@digithings-ai/design/tokens.css`; no ad-hoc hex/rgb in surface code.
 - **Monochrome is the default livery** — colour is opt-in per product, not a baseline choice.
 - **Money colours** (`--up` / `--down`) are P&L-only and never follow a livery override.
 - **Motion is deliberate, not one moment per surface** — the landing runs a hero-rise stagger, a continuous pixel field, per-cell build/glint and scroll reveals; every animation honors `prefers-reduced-motion`.

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Chat math (@digithings/ui) — KaTeX layout + the token palette over it.
+   Chat math (@digithings-ai/ui) — KaTeX layout + the token palette over it.
    ==========================================================================
 
    Split out of chat-core.css deliberately. The @import below pulls KaTeX's
@@ -18,7 +18,7 @@
    token palette laid over KaTeX's metric-accurate layout, and @import is only
    legal before other rules, so it has to head its own file.
 
-   katex is a dependency of @digithings/ui and hoists to the workspace root,
+   katex is a dependency of @digithings-ai/ui and hoists to the workspace root,
    so the bare specifier resolves from every consumer.
    ========================================================================== */
 @import "katex/dist/katex.min.css";

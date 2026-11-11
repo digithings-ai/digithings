@@ -1,7 +1,7 @@
 "use client";
 
 import { lazy, Suspense, type FC, type LazyExoticComponent } from "react";
-import type { ComposerLayout } from "@digithings/ui/chat/thread";
+import type { ComposerLayout } from "@digithings-ai/ui/chat/thread";
 import { isCloneSkin, type CloneSkin, type ThreadSkin } from "./thread-skins";
 import type { DigichatSkinOptions } from "./digichat";
 import { ChatPrivateModeProvider } from "../stock/chat-private-mode";

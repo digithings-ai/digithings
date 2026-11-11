@@ -1,12 +1,12 @@
 /* ==========================================================================
-   @digithings/ui — command-palette family structural CSS
+   @digithings-ai/ui — command-palette family structural CSS
    (components/command-palette/<CommandPalette/>: the ⌘K command bar shell).
 
    Import AFTER the token bridge, in the app's globals.css:
      @import "tailwindcss";
-     @import "@digithings/design/tokens.css";
-     @import "@digithings/ui/styles/web-theme.css";
-     @import "@digithings/ui/styles/command-palette.css";
+     @import "@digithings-ai/design/tokens.css";
+     @import "@digithings-ai/ui/styles/web-theme.css";
+     @import "@digithings-ai/ui/styles/command-palette.css";
      @source "<path-to>/packages/ui/src/components/command-palette";
    Import this sheet PLAINLY (no layer(...)) — it manages its own layering:
 

@@ -5,7 +5,7 @@
  * light/dark literal. Nothing from the request is concatenated in. The
  * scripts read `location` and `window.top` themselves.
  */
-import { PALETTE_IDS } from "@digithings/ui/theme";
+import { PALETTE_IDS } from "@digithings-ai/ui/theme";
 
 const THEME_LOCK = "/[?&]theme=(?:light|dark)(?:&|$)/";
 

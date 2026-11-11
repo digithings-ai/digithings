@@ -20,14 +20,14 @@ vi.mock("@/lib/warmup-gate", () => ({
 }));
 
 // The chips come from skinChrome, which is what every non-stock skin renders.
-vi.mock("@digithings/ui/chat/stock/thread", () => ({
+vi.mock("@digithings-ai/ui/chat/stock/thread", () => ({
   Thread: () => <div data-testid="stock-thread">stock thread</div>,
 }));
 
-vi.mock("@digithings/ui/chat/skins", async (importOriginal) => {
+vi.mock("@digithings-ai/ui/chat/skins", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@digithings/ui/chat/skins")>();
-  const { useSkinChrome } = await import("@digithings/ui/chat/stock");
+    await importOriginal<typeof import("@digithings-ai/ui/chat/skins")>();
+  const { useSkinChrome } = await import("@digithings-ai/ui/chat/stock");
   return {
     ...actual,
     ThreadSkinView: ({ skin }: { skin: string }) => {

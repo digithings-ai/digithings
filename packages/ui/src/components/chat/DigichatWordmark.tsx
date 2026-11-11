@@ -1,7 +1,7 @@
 "use client";
 
-import { DIGICHAT } from "@digithings/hero-banner/definitions";
-import { HeroBanner } from "@digithings/hero-banner/web";
+import { DIGICHAT } from "@digithings-ai/hero-banner/definitions";
+import { HeroBanner } from "@digithings-ai/hero-banner/web";
 
 /** Square-pixel DIGICHAT mark, drawn from the shared hero-banner definition
  *  (`packages/hero-banner`, `DIGICHAT`: scramble 80/240/180 with a 960 hold,

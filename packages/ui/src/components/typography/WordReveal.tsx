@@ -23,7 +23,7 @@ import { useMotionSafe } from "../../motion/primitives";
  *
  * Client component — scroll progress + per-word transforms. Motion via `m`
  * under a MotionProvider (LazyMotion). Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/word-reveal.css";
+ *   globals.css   @import "@digithings-ai/ui/styles/word-reveal.css";
  *                 @source "<path-to>/packages/ui/src/components/typography";
  */
 

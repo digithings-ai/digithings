@@ -1,10 +1,10 @@
 /* ==========================================================================
-   @digithings/ui — docs family structural CSS (components/docs/*).
+   @digithings-ai/ui — docs family structural CSS (components/docs/*).
    Import AFTER the token bridge, in the app's globals.css:
      @import "tailwindcss";
-     @import "@digithings/design/tokens.css";
-     @import "@digithings/ui/styles/web-theme.css";
-     @import "@digithings/ui/styles/docs.css";
+     @import "@digithings-ai/design/tokens.css";
+     @import "@digithings-ai/ui/styles/web-theme.css";
+     @import "@digithings-ai/ui/styles/docs.css";
      @source "<path-to>/packages/ui/src/components/docs";
    The @source line is load-bearing (path relative to the app's globals.css):
    the docs components carry token-backed utilities, and Tailwind does not

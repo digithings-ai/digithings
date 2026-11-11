@@ -65,10 +65,10 @@ describe("skin host contract matches the sources", () => {
 
   it("the contract names the package stylesheets (WS1)", () => {
     expect(contract.stylesheets).toContain(
-      "@digithings/ui/styles/digichat-app-theme.css",
+      "@digithings-ai/ui/styles/digichat-app-theme.css",
     );
     expect(contract.stylesheets).toContain(
-      "@digithings/ui/styles/chat-digichat.css",
+      "@digithings-ai/ui/styles/chat-digichat.css",
     );
   });
 });

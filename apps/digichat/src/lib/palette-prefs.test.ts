@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { THEME_CHANGE_EVENT } from "@digithings/ui/theme";
+import { THEME_CHANGE_EVENT } from "@digithings-ai/ui/theme";
 
 import {
   applyDeployedPalette,

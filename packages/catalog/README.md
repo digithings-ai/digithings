@@ -1,17 +1,17 @@
-# @digithings/catalog
+# @digithings-ai/catalog
 
 Framework-neutral shared catalogs — no React, no Next.js, no app aliases, so
 any runtime can import them.
 
 | Entry | What it is |
 |---|---|
-| `@digithings/catalog` | Every catalog, re-exported |
-| `@digithings/catalog/byok-providers` | The BYOK provider catalog (ids, labels, key hints) |
-| `@digithings/catalog/openapi` | The OpenAPI service registry |
-| `@digithings/catalog/page-context-sanitize` | The page-context sanitiser shared by the surfaces that ship it |
+| `@digithings-ai/catalog` | Every catalog, re-exported |
+| `@digithings-ai/catalog/byok-providers` | The BYOK provider catalog (ids, labels, key hints) |
+| `@digithings-ai/catalog/openapi` | The OpenAPI service registry |
+| `@digithings-ai/catalog/page-context-sanitize` | The page-context sanitiser shared by the surfaces that ship it |
 
 ```ts
-import { BYOK_PROVIDERS } from "@digithings/catalog/byok-providers";
+import { BYOK_PROVIDERS } from "@digithings-ai/catalog/byok-providers";
 ```
 
 ## Publishing
@@ -25,11 +25,11 @@ A Next.js consumer must therefore transpile it — add the package to
 
 ```js
 const nextConfig = {
-  transpilePackages: ["@digithings/catalog"],
+  transpilePackages: ["@digithings-ai/catalog"],
 };
 ```
 
 A bundler that already compiles TS (Vite, tsup, Bun) resolves the source
 directly and needs no extra configuration.
 
-Tests: `npm test --workspace @digithings/catalog`.
+Tests: `npm test --workspace @digithings-ai/catalog`.

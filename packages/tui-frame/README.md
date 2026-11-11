@@ -1,4 +1,4 @@
-# @digithings/tui-frame
+# @digithings-ai/tui-frame
 
 One declaration of a recorded TUI frame, shared by the TUI exporters and the
 dashboard (DIG-2698, ADR D7).

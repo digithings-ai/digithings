@@ -37,7 +37,7 @@ vi.mock("@assistant-ui/react", async () => {
   };
 });
 
-vi.mock("@digithings/ui/chat/thread", () => ({
+vi.mock("@digithings-ai/ui/chat/thread", () => ({
   DigichatThread: ({
     composerLayout,
     hiddenAttachmentNames,
@@ -53,7 +53,7 @@ vi.mock("@digithings/ui/chat/thread", () => ({
   ),
 }));
 
-vi.mock("@digithings/digichat-ui", () => ({
+vi.mock("@digithings-ai/digichat-ui", () => ({
   copyMarkdownWithFallback: vi.fn(),
   downloadMarkdown: vi.fn(),
   serializeAssistantMarkdown: () => "",

@@ -1,10 +1,10 @@
-// Contract for DigiChatActivity, which lives in @digithings/ui/chat/transcript.
+// Contract for DigiChatActivity, which lives in @digithings-ai/ui/chat/transcript.
 // ChatActivities the component is gone; this file only pins the wire union.
 import { describe, it, expect } from "vitest";
 import type {
   DigiChatActivity,
   VaultHitSummary,
-} from "@digithings/ui/chat/transcript";
+} from "@digithings-ai/ui/chat/transcript";
 
 function assertNever(x: never): never {
   throw new Error(`unexpected: ${JSON.stringify(x)}`);

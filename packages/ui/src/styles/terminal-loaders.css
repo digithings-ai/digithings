@@ -1,6 +1,6 @@
 
 /* ==========================================================================
-   Terminal loaders (@digithings/ui) — the `.tl-*` family behind
+   Terminal loaders (@digithings-ai/ui) — the `.tl-*` family behind
    <TerminalStepCaret>, <ContainerBootLoader> and <ChatResponseLoader>.
 
    Promoted here from the reference's `terminal.css` so product apps can ship
@@ -14,7 +14,7 @@
 
    Nothing here animates or transitions; the one motion moment is the caret.
    Import once in the app shell:
-     @import "@digithings/ui/styles/terminal-loaders.css";
+     @import "@digithings-ai/ui/styles/terminal-loaders.css";
    ========================================================================== */
 
 /* ── the typed line ───────────────────────────────────────────────────── */

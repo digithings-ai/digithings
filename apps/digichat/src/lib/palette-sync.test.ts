@@ -8,9 +8,9 @@ import {
   paneDraftForId,
   parseSlashInput,
   SLASH_COMMANDS,
-} from "@digithings/digichat-ui";
+} from "@digithings-ai/digichat-ui";
 import { extraSlashDefs, slashSubmitAction } from "./product-slash-commands";
-import { DEFAULT_EMBED_CHAT_PREFS, type EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
+import { DEFAULT_EMBED_CHAT_PREFS, type EmbedChatPrefsApi } from "@digithings-ai/ui/chat/stock";
 
 function api(): EmbedChatPrefsApi {
   return {

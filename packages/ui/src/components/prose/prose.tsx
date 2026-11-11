@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
  * living app-locally.
  *
  * **Utilities only.** These emit no site/app CSS class — the reference canon
- * imports neither `@digithings/design/site/site.css` nor an app sheet — so the
+ * imports neither `@digithings-ai/design/site/site.css` nor an app sheet — so the
  * exact values of the legacy `.section` / `.wrap` / `.kicker` / `.hero-title`
  * grammar are reproduced with token-backed utilities (source: `site.css`):
  *

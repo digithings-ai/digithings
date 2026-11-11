@@ -91,12 +91,12 @@ export const DIGICHAT_SKIN_HOST_CONTRACT: SkinHostContract = {
     hostClient: "src/app/(baseline)/baseline/baseline-client.tsx",
   },
   prefsHost: {
-    module: "@digithings/ui/chat/stock",
+    module: "@digithings-ai/ui/chat/stock",
     hook: "useStockChatPrefs",
     hostClient: "src/app/(baseline)/baseline/baseline-client.tsx",
   },
   stylesheets: [
-    "@digithings/ui/styles/digichat-app-theme.css",
-    "@digithings/ui/styles/chat-digichat.css",
+    "@digithings-ai/ui/styles/digichat-app-theme.css",
+    "@digithings-ai/ui/styles/chat-digichat.css",
   ],
 };

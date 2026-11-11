@@ -26,7 +26,7 @@ describe("BootLabOverlay — banner", () => {
   it("renders the digichat hero banner inside the sized cover", () => {
     const html = markup();
     expect(html).toContain('data-variant="banner"');
-    // The canvas comes from @digithings/hero-banner, not a reimplementation.
+    // The canvas comes from @digithings-ai/hero-banner, not a reimplementation.
     expect(html).toContain('aria-label="digichat"');
     expect(html).toContain("min(560px, 72vw)");
   });

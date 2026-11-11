@@ -9,8 +9,8 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { DigichatComposerToolbar } from "@digithings/ui/chat/composer-toolbar";
-import { DEFAULT_EMBED_CHAT_PREFS, type EmbedChatPrefsApi } from "@digithings/ui/chat/stock";
+import { DigichatComposerToolbar } from "@digithings-ai/ui/chat/composer-toolbar";
+import { DEFAULT_EMBED_CHAT_PREFS, type EmbedChatPrefsApi } from "@digithings-ai/ui/chat/stock";
 import { deploymentToEmbedTenant, loadDigichatConfig } from "./deploy-config/loader";
 import {
   allowlistModelId,

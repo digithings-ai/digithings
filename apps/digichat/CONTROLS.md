@@ -2,24 +2,24 @@
 
 State of `src/components/ui/*` after the E4 adoption, the wave-3 kit
 re-point, and the wave-4 dead-wrapper removal: which wrappers are thin
-adapters over the canonical kit (`@digithings/ui/ui`), which stayed local,
+adapters over the canonical kit (`@digithings-ai/ui/ui`), which stayed local,
 and every known rendered-look delta for browser QA. Companion to the E3
 ledger pattern; the chat dress CSS
 lives in `packages/ui/src/styles/controls-core.css` (static atoms)
 and `controls-overlay.css` (behavioral controls). The kit parts carry the
 `dress="chat"` axis (wave-3 Important 1) that emits exactly those classes.
 
-## Swapped — thin adapters over the kit (`@digithings/ui/ui`)
+## Swapped — thin adapters over the kit (`@digithings-ai/ui/ui`)
 
 | ui/ file | Kit part | Pin | Notes |
 |---|---|---|---|
 | `button.tsx` | `ui/button` | `dress="chat"` | digichat variant/size enums verbatim (`ButtonChatVariant`/`ButtonChatSize`) — identical to the kit's. `buttonVariants` cva export dropped — zero importers (grep-verified). |
 | `card.tsx` | `ui/card` + parts | `dress="chat"` on root | Full 7-part shape, `size` `"default" \| "sm"`, `data-slot`/`data-size` hooks. Parts inherit the dress through the kit's Card context. |
-| `collapsible.tsx` | `ui/collapsible` | none (unstyled passthrough) | Re-exports the kit `Collapsible` (re-pointed to `@digithings/ui/ui` in wave 4); byte-identical to the deleted controls copy. |
+| `collapsible.tsx` | `ui/collapsible` | none (unstyled passthrough) | Re-exports the kit `Collapsible` (re-pointed to `@digithings-ai/ui/ui` in wave 4); byte-identical to the deleted controls copy. |
 | `dropdown-menu.tsx` | `DropdownMenu` family (15 names) | none — default skin IS the chat dress | `skin="reference"` stays available on `DropdownMenuContent`. |
 
 There is **no** local `tooltip.tsx` adapter: `Tooltip` and its provider come
-straight from `@digithings/ui/ui` (`TooltipProvider` is imported that way in
+straight from `@digithings-ai/ui/ui` (`TooltipProvider` is imported that way in
 `src/components/providers.tsx`), so tooltip behavior follows the kit directly.
 
 Import sites for the four adapters above are unchanged: those consumers
@@ -29,10 +29,10 @@ and `tooltip` are not in that set — see Removed below.
 ## Removed in wave 4 — dead wrappers
 
 `badge.tsx`, `input.tsx`, `label.tsx`, and `sheet.tsx` were deleted.
-Remaining app call sites import the kit (`@digithings/ui/ui`), not
+Remaining app call sites import the kit (`@digithings-ai/ui/ui`), not
 `@/components/ui/<x>`: `Input` and `Label` in `chat-shell.tsx`,
 `byok-cli-flow.tsx`, and `embed-composer-menu.tsx`. `tooltip.tsx` was never a
-local wrapper; `TooltipProvider` is imported from `@digithings/ui/ui` in
+local wrapper; `TooltipProvider` is imported from `@digithings-ai/ui/ui` in
 `src/components/providers.tsx`. `src/components/ui/` now holds only the four
 thin adapters above — `button.tsx`, `card.tsx`, `collapsible.tsx`,
 `dropdown-menu.tsx` — and no local-only wrappers remain.

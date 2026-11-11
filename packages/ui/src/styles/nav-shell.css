@@ -1,7 +1,7 @@
 /* ==========================================================================
    nav-shell.css — state machinery for <NavShell/> (components/NavShell.tsx).
    Import once in an app's globals.css, after web-theme.css:
-     @import "@digithings/ui/styles/nav-shell.css";
+     @import "@digithings-ai/ui/styles/nav-shell.css";
 
    Static layout (row, lead, brand, links strip, tail cluster) is token-backed
    Tailwind utilities in the component. Everything here is what utilities can't
