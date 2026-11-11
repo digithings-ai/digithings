@@ -1,6 +1,8 @@
 # CI Conventions
 
-Conventions and inventory for `.github/workflows/` in the digithings monorepo.
+Conventions and inventory for the platform CI that ran in the digithings monorepo
+and now lives in the split repositories (R5 `digithings-ai/digithings-stack` for the
+platform lanes). This repository (R0) runs `.github/workflows/public-ci.yml` only.
 
 Tracked in issue [#292](#292).
 

@@ -2,6 +2,21 @@
 
 How to run digithings for a small firm or single-operator deployment. For the security posture, see [SECURITY.md](../SECURITY.md). For strategy/vision, see [VISION.md](VISION.md). For local-stack specifics, see [LOCAL_STACK.md](LOCAL_STACK.md).
 
+## Where the deployables live (repo split)
+
+This repository (R0, `digithings-ai/digithings`) carries the public stack and the
+self-host path. The deployables described below live in their own repositories:
+
+| Deployable | Repo | Path |
+|---|---|---|
+| digithings.ai site, digibook, brand | R4 `digithings-ai/digithings-web` | `apps/digithings-web/` |
+| digiquant.io and the desk | R3 `digithings-ai/digiquant-web` | `apps/digiquant-web/`, `apps/app/` |
+| digichat Worker + Container, stack Worker, cron | R5 `digithings-ai/digithings-stack` | `apps/digichat-cloudflare/`, `apps/digithings-stack-cloudflare/`, `apps/digithings-cron/` |
+
+A path below that names one of those directories is that repo's, not this one's:
+`scripts/build-digithings.sh` runs in R4, `scripts/build-digiquant.sh` in R3, and
+`.github/workflows/` here holds `public-ci.yml` only.
+
 ## One-command run (Docker)
 
 From the repo root, with Docker Desktop (or Docker Engine + Compose) running:
@@ -136,7 +151,7 @@ For a week-long unattended run:
 
 One public domain serves marketing + chat shell:
 
-- **Marketing shell:** `digithings.ai` — Cloudflare Pages (`apps/digithings-web/`).
+- **Marketing shell:** `digithings.ai` — Cloudflare Pages (R4 `digithings-ai/digithings-web`, `apps/digithings-web/`).
 - **Visitor chat:** `digithings.ai/chat` — today a Pages iframe → digichat Node `/embed`
   (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, e.g. Tunnel hostname `digichat.digithings.ai`); after the
   DIG-5121 cutover the digichat **app** answers `/chat` itself, served by the digichat Worker under
@@ -156,7 +171,7 @@ Containers scaffold was removed on 2026-08-06 and never had a deploy path. It wa
 written — the Cloudflare account was on Workers Free then, and Containers need Workers Paid
 (`docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md` records the gate) —
 and it stopped being true when the account moved. It was not kept with a caveat: the claim was
-simply removed. `apps/digichat-cloudflare/` (Worker `digithings-digichat` + Container) is live in
+simply removed. R5 `digithings-ai/digithings-stack`: `apps/digichat-cloudflare/` (Worker `digithings-digichat` + Container) is live in
 the tree, requires Workers Paid, declares twelve `digithings.ai` route patterns in its
 `wrangler.toml`, and is covered by the CI build matrix. What was missing was not the app but its
 **deploy lane**, re-derived on 2026-10-22 (DIG-5120) — see
@@ -165,7 +180,7 @@ the tree, requires Workers Paid, declares twelve `digithings.ai` route patterns 
 digichat Node for digithings still runs on operator Compose + Cloudflare Tunnel; that is a
 different surface from the `digichat-cloudflare` Worker.
 
-The Worker fronts the `DigiChatContainer` Container (`apps/digichat-cloudflare/wrangler.toml`,
+The Worker fronts the `DigiChatContainer` Container, both in R5 `digithings-ai/digithings-stack` (`apps/digichat-cloudflare/wrangler.toml`,
 `infra/docker/Dockerfile.digichat-cloudflare`); deploying a specific tree by hand is
 `npx wrangler deploy` from `apps/digichat-cloudflare/` with the build context at the monorepo
 root, per
@@ -175,8 +190,8 @@ deploys it — `deploy-digichat-cloudflare-container.yml`, on a manual dispatch 
 
 ### digithings.ai — static landing page
 
-- **Source:** `apps/digithings-web/` (Next.js static export; and shared `packages/design/`, `packages/ui/`, `packages/digichat-ui/` assets). Those four are the app's transitive workspace closure, and `tests/scripts/test_deploy_build_inputs.py` asserts the deploy build check watches all of them.
-- **Deployment:** **Cloudflare Pages** via `scripts/build-digithings.sh` (CI: Cloudflare Pages project `digithings-ai`).
+- **Source:** R4 `digithings-ai/digithings-web` — `apps/digithings-web/` (Next.js static export; and shared `packages/design/`, `packages/ui/`, `packages/digichat-ui/` assets). Those four are the app's transitive workspace closure, and `tests/scripts/test_deploy_build_inputs.py` asserts the deploy build check watches all of them.
+- **Deployment:** **Cloudflare Pages** via R4's `scripts/build-digithings.sh` (CI: Cloudflare Pages project `digithings-ai`).
 - **Legacy:** the `static.yml` GitHub Pages workflow and the pre-migration `cloudflare/digithings/` static HTML tree were both **removed** — the former in the 2026-06 workflow cleanup, the latter in #1240 once `apps/digithings-web` (Next.js) fully replaced it as the build source; do not use GitHub Pages for this domain.
 - **Nav link:** the landing page links to `/chat` (today the Pages shell that iframes digichat `/embed`; after the cutover, the app).
 - **Deploy freshness (#1759):** `scripts/build-digithings.sh` writes `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) via `scripts/write-build-info.sh`, and hard-fails the build if it is absent. A Pages project that stops producing deployments keeps serving the last good build with a `200` and no `last-modified` header, so the asset probes below pass throughout a freeze; `scripts/check_deploy_freshness.py` is what fails a missing or >7-day stamp. The daily `freshness-digithings` job lived in `smoke-site.yml`, removed in #4919; the remaining callers are the build-stamp asserts in `deploy-digithings-cloudflare.yml` and `deploy-digiquant-cloudflare.yml`. This is **detection only** — *why* a Pages project stopped building is visible only in the Cloudflare dashboard (deployment list, build log, production branch, watch paths).
@@ -279,7 +294,7 @@ If any check fails, roll back per the deployment target's standard procedure (st
 
 digithings.ai is served by **Cloudflare Pages, which natively supports a `_redirects` file** for server-side 301/302 redirects — this is a first-class Pages feature, not a Netlify-only one. There is no `404.html` JavaScript shim and no Jekyll plugin: legacy paths are redirected at the edge, and `website/` no longer exists.
 
-**Source of truth:** `apps/digithings-web/public/_redirects`. Next.js copies everything under `public/` into the static export (`out/`), and `scripts/build-digithings.sh` assembles `dist/` from `out/`, so the file lands at the deploy root where Cloudflare Pages reads it. Current contents:
+**Source of truth:** R4 `digithings-ai/digithings-web` `apps/digithings-web/public/_redirects`. Next.js copies everything under `public/` into the static export (`out/`), and `scripts/build-digithings.sh` assembles `dist/` from `out/`, so the file lands at the deploy root where Cloudflare Pages reads it. Current contents:
 
 ```
 # Back-compat for the legacy static digithings.ai URLs.
@@ -291,7 +306,7 @@ Format is `<from> <to> <status>`, one rule per line, first match wins (`#` start
 
 ### Adding a redirect
 
-1. Add a `<from> <to> <status>` line to `apps/digithings-web/public/_redirects`.
+1. Add a `<from> <to> <status>` line to `apps/digithings-web/public/_redirects` in R4.
 2. Push to the connected deploy branch; Cloudflare Pages rebuilds via `scripts/build-digithings.sh` and picks up the new rule (no other code changes).
 3. Verify: `curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://digithings.ai/<from>` prints the `301`/`302` and the target `Location`.
 
@@ -343,7 +358,7 @@ fail a PR before it merges.
 | App | Worker name | Declared routes | Deploy lane |
 |---|---|---|---|
 | `apps/digithings-stack-cloudflare` | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (all `custom_domain = true`) | `deploy-digithings-stack-cloudflare.yml` — a push to `main` and a `workflow_dispatch`, both behind `environment: production` |
-| `apps/digichat-cloudflare` | `digithings-digichat` | `digithings.ai` `/chat*` (the app), `/chat/tenantb*` (the invite-gated Pages shell), `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*` (11 of the 12 patterns; the full list is in `apps/digichat-cloudflare/wrangler.toml`) | `deploy-digichat-cloudflare-container.yml` — `workflow_dispatch` behind `environment: production` |
+| R5 `digithings-ai/digithings-stack` `apps/digichat-cloudflare` | `digithings-digichat` | `digithings.ai` `/chat*` (the app), `/chat/tenantb*` (the invite-gated Pages shell), `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*`, `/_digichat/meta`, `/_digichat-admin*` (11 of the 12 patterns; the full list is in `apps/digichat-cloudflare/wrangler.toml`) | `deploy-digichat-cloudflare-container.yml` — `workflow_dispatch` behind `environment: production` |
 
 Read the routes column as "what `wrangler.toml` declares", not as a claim about what is
 currently serving. Both are Workers **Containers**: both need **Workers Paid**, and both need
@@ -429,13 +444,13 @@ does not create them.
 npx wrangler deploy -c apps/digithings-stack-cloudflare/wrangler.toml
 
 # digichat-cloudflare
-cd apps/digichat-cloudflare && npx wrangler deploy
+cd apps/digichat-cloudflare && npx wrangler deploy   # from an R5 checkout
 ```
 
 The full secret-by-secret bring-up for the standalone digichat Worker is
-`apps/digichat-cloudflare/README.md` § Deploy;
+R5 `digithings-ai/digithings-stack` `apps/digichat-cloudflare/README.md` § Deploy;
 the stack's operator notes are
-`apps/digithings-stack-cloudflare/README.md` § Deploy.
+R5 `digithings-ai/digithings-stack` `apps/digithings-stack-cloudflare/README.md` § Deploy.
 
 **What no CI check covers:** that the live deployment is the built one. The dry-run matrix
 builds both; nothing records a version of the live Worker and compares it. If you deploy by

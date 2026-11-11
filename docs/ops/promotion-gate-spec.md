@@ -2,7 +2,7 @@
 
 Status: draft for review by One · Owner: QA (W3/W5) · 29 Oct 2026
 Applies to: digithings promotion PRs from the local Forgejo (digiforge) into GitHub `develop`
-Related: dev-flow upgrade plan (W1, W3, W4, W5, W7), [MERGE_QUEUE.md](../MERGE_QUEUE.md), [BRANCH_PROTECTION.md](../BRANCH_PROTECTION.md), [`scripts/local-ci/README.md`](../../scripts/local-ci/README.md)
+Related: dev-flow upgrade plan (W1, W3, W4, W5, W7), `MERGE_QUEUE.md`, `BRANCH_PROTECTION.md` and `scripts/local-ci/README.md` — all three live in R5 `digithings-ai/digithings-stack`; this repository (R0) carries `public-ci.yml` only.
 
 ## 1. Scope and model
 
