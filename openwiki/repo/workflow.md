@@ -1,7 +1,7 @@
 ---
 type: repo-guide
 title: Repo Workflow
-description: Branching model, make targets, and review/merge policy pointers for the digithings monorepo.
+description: Branching model, make targets, and review/merge policy pointers for this repository.
 tags: [repo, branching, make, review-policy]
 sources:
   - id: openwiki-source-4b2266e051b2270b6ec5aa4f

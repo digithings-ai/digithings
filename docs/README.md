@@ -8,6 +8,7 @@ Paperclip is the live work tracker. Do not add new task lists here.
 
 | File | What it is |
 | --- | --- |
+| [REPO_MAP.md](REPO_MAP.md) | The eight repositories, and why there is no monorepo |
 | [VISION.md](VISION.md) | Product direction |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | How a release is deployed |
 | [LOCAL_STACK.md](LOCAL_STACK.md) | Local stack |

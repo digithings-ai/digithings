@@ -2,7 +2,7 @@
 
 ## Scope: full repository
 
-Document every component in the monorepo. One section per component,
+Document every component in this repository. One section per component,
 each with its own quickstart (where applicable), architecture / module
 map, behavior guides, and API + operations reference — mirroring the
 established `digitrace/` pilot structure.

@@ -66,8 +66,8 @@ test-e2e:
 doc-check:
 	python3 scripts/check_doc_links.py
 
-# moved-paths-guard is the monorepo's extraction guard: it is not part of
-# this repository and there is no target for it here.
+# moved-paths-guard was the extraction guard for the pre-split monorepo: it is
+# not part of this repository and there is no target for it here.
 
 
 # docs/adr/NNNN-*.md must be zero-padded, unique and gap-free. Same check as CI docs job (#3524).
@@ -133,7 +133,7 @@ down-observability:
 
 # ---------------------------------------------------------------------------
 # digichat targets
-#   make up-digichat / down-digichat          — local build from monorepo (dev/ops)
+#   make up-digichat / down-digichat          — local build from this repository (dev/ops)
 #   make digichat-release-up VERSION=…       — pull pinned digichat GHCR (full stack overlay)
 #   make digichat-release-down VERSION=…
 #   make digichat-profile-a-up / down        — Profile A pull (digichat + digikey + digigraph + digivault)
@@ -151,7 +151,7 @@ up-digichat:
 down-digichat:
 	docker compose --profile digichat down
 
-# Pull published digichat from GHCR (requires VERSION=0.9.3). Does not build from the monorepo.
+# Pull published digichat from GHCR (requires VERSION=0.9.3). Does not build from this repository.
 # Example: make digichat-release-up VERSION=0.9.3
 digichat-release-up:
 	@test -n "$(VERSION)" || (echo "Usage: make digichat-release-up VERSION=0.9.3"; exit 1)
@@ -178,7 +178,7 @@ digichat-profile-a-down:
 	docker compose $(PROFILE_A_COMPOSE) down
 
 # Profile A bundle — one supervisord image (same as CF Containers) + digichat + Postgres.
-# Prefer for website digichat local work; stop monorepo `make up` containers first (port clash).
+# Prefer for website digichat local work; stop this repository's `make up` containers first (port clash).
 PROFILE_A_BUNDLE_COMPOSE := -f infra/digichat-release/compose.profile-a-bundle.yml \
 	$(if $(wildcard infra/digichat-release/compose.profile-a-bundle.override.yml),-f infra/digichat-release/compose.profile-a-bundle.override.yml,) \
 	--env-file infra/digichat-release/.env.profile-a-bundle
