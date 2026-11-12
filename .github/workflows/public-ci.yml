@@ -1,9 +1,11 @@
 # Public CI for the open-source repository (#6751, D-G4).
 #
-# This file ships in the public repo, where it is the whole CI. The monorepo
-# also carries it (the public tree is exported from the monorepo blob for
-# blob), but there the `scope` job sees the split manifest and every other job
-# is skipped: the monorepo runs its own CI.
+# This file is the whole of this repository's CI. The public R0 core used to be
+# exported from a private monorepo, and this same file ran there against the
+# full tree; that export is retired and the split repositories (R1-R7, see
+# docs/REPO_MAP.md) each carry their own lanes. There is no upstream copy of
+# this workflow to stay in step with, and nothing here is skipped on the
+# grounds that "the monorepo runs its own CI".
 #
 # Fork-safe by construction: the trigger is `pull_request`, never
 # `pull_request_target`, so a fork's code runs with a read-only token and no
@@ -36,8 +38,11 @@ jobs:
           sparse-checkout: scripts/split
       - id: scope
         run: |
+          # Retained guard for the retired export tree, which carried
+          # scripts/split/manifest.py. R0 has no such file, so this repository
+          # always takes the `public=true` branch and runs every job below.
           if [ -f scripts/split/manifest.py ]; then
-            echo "Monorepo checkout: public CI is skipped here."
+            echo "Export tree checkout: public CI is skipped here."
             echo "public=false" >> "$GITHUB_OUTPUT"
           else
             echo "public=true" >> "$GITHUB_OUTPUT"

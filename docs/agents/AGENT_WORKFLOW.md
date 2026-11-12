@@ -1,6 +1,6 @@
 # Autonomous Agent Development Workflow
 
-Protocol for agents working in the digithings monorepo. Canonical rules: [AGENTS.md](../../AGENTS.md) — including [How to work](../../AGENTS.md#how-to-work) (skills, not a numbered ritual) and [Merge-when-ready](../../AGENTS.md#merge-when-ready).
+Protocol for agents working in this repository (the R0 open-source core). Canonical rules: [AGENTS.md](../../AGENTS.md) — including [How to work](../../AGENTS.md#how-to-work) (skills, not a numbered ritual) and [Merge-when-ready](../../AGENTS.md#merge-when-ready).
 
 **Pick skills.** Do not treat this file as a 12-step checklist. Use the session's available skills to structure the work: `/spec`, test-driven-development / `test-first-implementer`, `fix-ci`, `make-pr-easy-to-review`, `finishing-a-development-branch`, `deslop`, `review-and-ship`. Skip any that do not apply.
 

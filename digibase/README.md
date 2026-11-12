@@ -12,7 +12,7 @@ Shared **digithings** building blocks for HTTP services:
   OTLP auth headers via `DIGI_OTEL_HEADERS` or `OTEL_EXPORTER_OTLP_HEADERS`
   (comma-separated `key=value`, see `resolve_otel_headers`).
 
-Install (monorepo):
+Install (from this repository):
 
 ```bash
 pip install -e "./digibase"

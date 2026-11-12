@@ -673,8 +673,10 @@ Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced b
 
 ## Deployments (static sites)
 
-- **digithings.ai** — Cloudflare Pages via `scripts/build-digithings.sh` in R4 `digithings-ai/digithings-web`. The legacy `static.yml` GitHub Pages workflow was **removed** in the 2026-06 workflow cleanup; do not use GitHub Pages for this domain.
-- **digiquant.io** — Cloudflare Pages git-integration on R3 `digithings-ai/digiquant-web`, building `dist/` via `scripts/build-digiquant.sh` from `main` (per `deploy-digiquant-cloudflare.yml`'s header; the Cloudflare dashboard is authoritative). That is the sole delivery path — the split publish repo in [docs/adr/0012-digiquant-io-split-repo.md](docs/adr/0012-digiquant-io-split-repo.md) was never created, and `.github/workflows/deploy-digiquant-cloudflare.yml` is a PR build check, not the deploy.
+Neither site is built or deployed from this repository. Each is owned by the split repo that produces its static export, and `.github/workflows/` here holds `public-ci.yml` only. The full repository split is in [docs/REPO_MAP.md](docs/REPO_MAP.md).
+
+- **digithings.ai** — built by R4 `digithings-ai/digithings-web` (`scripts/build-digithings.sh` there) and published to Cloudflare Pages. The legacy `static.yml` GitHub Pages workflow was **removed** in the 2026-06 workflow cleanup; do not use GitHub Pages for this domain.
+- **digiquant.io** — built by R3 `digithings-ai/digiquant-web`, which produces the static export for the landing site and the `/app` desk. Publication is a **direct upload** to Cloudflare Pages run by the maintainer who holds the Pages credentials: no Pages git integration watches this repository, and there is no deploy workflow in it. That supersedes the publish-repo sync in [docs/adr/0012-digiquant-io-split-repo.md](docs/adr/0012-digiquant-io-split-repo.md), which was never created.
 
 ---
 

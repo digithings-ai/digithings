@@ -1,6 +1,6 @@
 # Onboarding — Developing on digithings
 
-Welcome. This guide is how the maintainer develops on this monorepo with Claude Code. It's the companion to [AGENTS.md](AGENTS.md) (canonical repo-wide agent rules). [CLAUDE.md](CLAUDE.md) is a Claude Code loader stub that points at AGENTS.md — read AGENTS.md once, then come back here to see how the pieces connect day-to-day.
+Welcome. This guide is how the maintainer develops on this repository — the R0 open-source core — with Claude Code. It's the companion to [AGENTS.md](AGENTS.md) (canonical repo-wide agent rules). [CLAUDE.md](CLAUDE.md) is a Claude Code loader stub that points at AGENTS.md — read AGENTS.md once, then come back here to see how the pieces connect day-to-day.
 
 If you're a new human contributor, skim this front-to-back and run the one-time setup.
 If you're a Claude Code session picking this up fresh, the later sections are the playbook.
@@ -200,7 +200,7 @@ make find-stale                     # find stale branches / artifacts
 
 ## 8. Gotchas
 
-- **Nested git repos under the monorepo root** (e.g. a cloned `digichat/` alongside `apps/digichat/`) will trip cleanup scripts and pollute `git status`. If you see one, check whether it's stranded work before deleting. Everything that ships lives inside the monorepo tree — clones outside `apps/` or `packages/` are almost always stale.
+- **Nested git repos under the repository root** (e.g. a cloned `digichat/` alongside `apps/digichat/`) will trip cleanup scripts and pollute `git status`. If you see one, check whether it's stranded work before deleting. Everything this repository ships lives inside its own tree — clones outside `apps/` or `packages/` are almost always stale. A sibling component is a separate repository now, not a directory here; see [docs/REPO_MAP.md](docs/REPO_MAP.md).
 - **Stray `node_modules/` at the repo root** means you ran `npm install` in the wrong directory. Workspace installs must happen at the repo root (npm workspaces: `apps/*`, `packages/*`) or a specific app dir.
 - **Next.js regeneration**: each Next app's `next-env.d.ts` and `tsconfig.json` are rewritten by Next.js / your IDE. Discard those diffs unless the change is deliberate.
 - **Task branches are worktrees** — `make task ISSUE=N` creates a worktree under `.worktrees/task/N-slug/` (gitignored). Don't `cd` out of it mid-task; close with `git worktree remove .worktrees/task/N-slug/` after the PR merges.
